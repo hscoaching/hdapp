@@ -1,0 +1,503 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0c">
+<title>HS Coaching — Programmes</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0b0c; --surface:#16171a; --surface-2:#1f2024; --line:#2c2c30;
+    --ink:#f5f5f5; --ink-muted:#9a9a9e; --accent:#ffffff; --accent-ink:#0b0b0c;
+    --ok:#ffffff; --radius:14px; box-sizing:border-box;
+  }
+  *{box-sizing:inherit; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{background:var(--bg); color:var(--ink); font-family:'Inter',system-ui,sans-serif;
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); -webkit-font-smoothing:antialiased;}
+  html{scroll-padding-top:env(safe-area-inset-top,0px);}
+  h1,h2,h3,.display{font-family:'Bebas Neue',sans-serif; letter-spacing:.02em; line-height:.95;}
+  a{color:inherit; text-decoration:none;}
+  button{font-family:inherit;}
+  .wrap{max-width:900px; margin:0 auto; padding:0 20px;}
+
+  header.top{position:sticky; top:0; z-index:20; background:rgba(11,11,12,.9); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line); padding-top:env(safe-area-inset-top,0px);}
+  .top-inner{display:flex; align-items:center; gap:14px; padding:14px 20px; max-width:900px; margin:0 auto;}
+  .mark{width:40px; height:40px; border-radius:10px; background:var(--accent); display:flex; align-items:center; justify-content:center;
+    flex:none; font-family:'Bebas Neue'; font-size:19px; color:var(--accent-ink);}
+  .brand{flex:1; min-width:0;}
+  .brand .b1{font-size:15px; font-weight:700;}
+  .brand .b2{font-size:12px; color:var(--ink-muted);}
+  .nav-link{font-size:14px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:8px 14px; border-radius:999px; white-space:nowrap;}
+  .nav-link:hover{color:var(--ink); border-color:var(--accent);}
+
+  main{padding:32px 0 90px;}
+  .eyebrow{color:var(--accent); font-weight:700; font-size:13px; margin-bottom:6px;}
+  h1.page{font-size:clamp(34px,7vw,52px); margin-bottom:6px;}
+  .subtitle{color:var(--ink-muted); font-size:14px; max-width:56ch;}
+
+  .section{margin-top:34px;}
+  .section h2{font-size:22px; margin-bottom:14px;}
+
+  .prog-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(240px,1fr)); gap:14px;}
+  .prog-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px; text-align:left; cursor:pointer;}
+  .prog-card:hover{border-color:var(--accent);}
+  .prog-card .tag{font-size:11px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.08em;}
+  .prog-card h3{font-size:22px; margin-top:6px; font-family:'Inter'; font-weight:700; letter-spacing:0;}
+  .prog-card p{color:var(--ink-muted); font-size:13px; margin-top:8px; line-height:1.4;}
+
+  .btn{display:inline-flex; align-items:center; gap:8px; font-size:14px; font-weight:700; padding:12px 20px; border-radius:999px; border:none; cursor:pointer;}
+  .btn-accent{background:var(--accent); color:var(--accent-ink);}
+  .btn-ghost{background:none; border:1px solid var(--line); color:var(--ink);}
+  .btn-ghost:hover{border-color:var(--accent);}
+  .btn-sm{padding:8px 14px; font-size:13px;}
+  .btn:disabled{opacity:.5; cursor:default;}
+
+  .actions-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;}
+
+  .empty{color:var(--ink-muted); font-size:13.5px; padding:16px 0;}
+
+  /* Détail programme / séance */
+  .backlink{font-size:13px; color:var(--ink-muted); display:inline-block; margin-bottom:16px;}
+  .backlink:hover{color:var(--accent);}
+  .ex-row{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px; margin-top:10px;}
+  .ex-row-top{display:flex; justify-content:space-between; align-items:flex-start; gap:10px;}
+  .ex-name{font-size:17px; font-weight:700; cursor:pointer;}
+  .ex-name:hover{color:var(--accent);}
+  .ex-meta{color:var(--ink-muted); font-size:12.5px; margin-top:2px;}
+  .set-grid{margin-top:12px; display:flex; flex-direction:column; gap:8px;}
+  .set-line{display:flex; align-items:center; gap:8px; font-size:13px;}
+  .set-line .setnum{width:26px; color:var(--ink-muted); flex:none;}
+  .set-line input{
+    width:64px; background:var(--surface-2); border:1px solid var(--line); border-radius:8px; color:var(--ink);
+    padding:8px; font-size:14px; font-family:inherit; text-align:center;
+  }
+  .set-line .unit{color:var(--ink-muted); font-size:12px;}
+  .set-line .valid{
+    margin-left:auto; width:32px; height:32px; border-radius:8px; border:1px solid var(--line); background:var(--surface-2);
+    color:var(--ink-muted); cursor:pointer; flex:none;
+  }
+  .set-line .valid.done{background:var(--ok); border-color:var(--ok); color:#04170c;}
+
+  .session-bar{position:sticky; bottom:0; padding:14px 0; padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));
+    background:linear-gradient(0deg, var(--bg) 60%, transparent); margin-top:10px;}
+
+  /* Formulaire création programme */
+  .field{margin-top:14px;}
+  .field label{font-size:12.5px; color:var(--ink-muted); display:block; margin-bottom:6px; font-weight:600;}
+  .field input, .field textarea{
+    width:100%; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink);
+    padding:12px 14px; font-size:14px; font-family:inherit;
+  }
+  .field textarea{min-height:70px; resize:vertical;}
+  .picker{display:flex; gap:8px; margin-top:10px;}
+  .picker select{flex:1; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;}
+  .draft-row{display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin-top:8px; font-size:13.5px;}
+  .draft-row .rm{margin-left:auto; color:var(--ink-muted); cursor:pointer; background:none; border:none; font-size:16px;}
+
+  /* Overlay générique (fiche exo / contact / création) */
+  .overlay{position:fixed; inset:0; z-index:50; background:rgba(0,0,0,.72); display:none; align-items:flex-end; justify-content:center;}
+  .overlay.open{display:flex;}
+  .sheet{width:100%; max-width:620px; max-height:92vh; overflow-y:auto; background:var(--surface); border:1px solid var(--line);
+    border-top-left-radius:22px; border-top-right-radius:22px; padding:26px 24px calc(28px + env(safe-area-inset-bottom,0px));}
+  @media(min-width:700px){.overlay{align-items:center;} .sheet{border-radius:22px; max-height:86vh;}}
+  .sheet-top{display:flex; justify-content:space-between; align-items:flex-start; gap:12px;}
+  .closeBtn{flex:none; width:34px; height:34px; border-radius:50%; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); font-size:16px; cursor:pointer;}
+  .cat{font-size:12px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.08em;}
+  .sheet h2{font-size:34px; margin-top:6px;}
+  .sheet p.lede{color:var(--ink-muted); margin-top:10px; font-size:14px;}
+  .block{margin-top:20px;}
+  .block h4{font-size:12px; text-transform:uppercase; letter-spacing:.08em; color:var(--ink-muted); font-weight:700; margin-bottom:8px;}
+  .points{list-style:none;}
+  .points li{font-size:14px; padding:9px 0; border-top:1px solid var(--line); display:flex; gap:10px; align-items:flex-start;}
+  .points li:before{content:"→"; color:var(--accent); font-weight:700;}
+
+  .toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--surface-2); border:1px solid var(--line);
+    padding:12px 20px; border-radius:999px; font-size:13.5px; z-index:80; display:none;}
+
+  footer{border-top:1px solid var(--line); padding:26px 0; text-align:center; color:var(--ink-muted); font-size:12.5px; margin-top:40px;}
+
+  .navrow{display:flex; gap:8px; max-width:960px; margin:0 auto; padding:0 20px 12px; overflow-x:auto; scrollbar-width:none;}
+  .navrow::-webkit-scrollbar{display:none;}
+  .navrow a{flex:1; text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:10px 14px; border-radius:999px; white-space:nowrap; text-decoration:none;}
+  .navrow a.active{background:var(--ink); border-color:var(--ink); color:var(--bg);}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="mark">HS</div>
+    <div class="brand"><div class="b1">HS COACHING</div><div class="b2">Programmes</div></div>
+  </div>
+  <nav class="navrow">
+    <a href="index.html">Bibliothèque</a>
+    <a href="programmes.html" class="active">Programmes</a>
+    <a href="compte.html">Mon compte</a>
+  </nav>
+</header>
+<script>
+(function(){
+  var n=document.querySelector('.navrow');
+  if(n && localStorage.getItem('hs_role')==='admin' && !n.querySelector('[href="admin.html"]')){
+    n.insertAdjacentHTML('beforeend','<a href="admin.html">Espace coach</a>');
+  }
+})();
+</script>
+
+
+<main class="wrap" id="app"></main>
+
+<footer>HS Coaching · Régularité &amp; dépassement de soi · v3</footer>
+
+<div class="overlay" id="exOverlay"><div class="sheet" id="exSheet"></div></div>
+<div class="overlay" id="modalOverlay"><div class="sheet" id="modalSheet"></div></div>
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2ZnRxZGJkaWJmeWxhdWFydGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MjEzMjIsImV4cCI6MjEwNjA5NzMyMn0._WLJkWncu1fwMnlakuPFuJr_I-uvgr_TwvMect8E-a0";
+
+function getToken(){
+  let t = localStorage.getItem('hs_device_token');
+  if(!t){ t = crypto.randomUUID(); localStorage.setItem('hs_device_token', t); }
+  return t;
+}
+async function rpc(fn, params){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fn}`, {
+    method:'POST',
+    headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type':'application/json' },
+    body: JSON.stringify(params)
+  });
+  if(!res.ok){ console.error(await res.text()); throw new Error('rpc_failed:'+fn); }
+  return res.json();
+}
+async function restGet(table, query){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}?${query}`, {
+    headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${SUPABASE_ANON_KEY}` }
+  });
+  return res.json();
+}
+async function restInsert(table, body){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/${table}`, {
+    method:'POST',
+    headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type':'application/json', Prefer:'return=representation' },
+    body: JSON.stringify(body)
+  });
+  return res.json();
+}
+function toast(msg){
+  const t = document.getElementById('toast'); t.textContent = msg; t.style.display='block';
+  clearTimeout(window._toastTimer); window._toastTimer = setTimeout(()=> t.style.display='none', 2200);
+}
+
+// ---------- Bascule invité / compte connecté ----------
+function getUserSession(){ try{ return JSON.parse(localStorage.getItem('hs_session')||'null'); }catch(e){ return null; } }
+function isLoggedIn(){ const s = getUserSession(); return !!(s && s.access_token); }
+async function refreshIfNeeded(){
+  const s = getUserSession();
+  if(!s || !s.refresh_token) return;
+  const exp = (s.expires_at || 0) * 1000;
+  if(exp && Date.now() < exp - 60000) return;
+  try{
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, { method:'POST', headers:{ apikey:SUPABASE_ANON_KEY, 'Content-Type':'application/json' }, body: JSON.stringify({ refresh_token: s.refresh_token }) });
+    const data = await res.json();
+    if(res.ok && data.access_token) localStorage.setItem('hs_session', JSON.stringify(data)); else localStorage.removeItem('hs_session');
+  }catch(e){}
+}
+async function authedFetch(path, opts={}){
+  await refreshIfNeeded();
+  const s = getUserSession();
+  return fetch(`${SUPABASE_URL}${path}`, { ...opts, headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s.access_token}`, 'Content-Type':'application/json', ...(opts.headers||{}) } });
+}
+async function listPrograms(){
+  if(isLoggedIn()) return (await authedFetch('/rest/v1/programs?select=*&order=is_official.desc,created_at.desc')).json();
+  return rpc('guest_list_programs', { p_token: TOKEN });
+}
+async function programExercisesFor(programId){
+  if(isLoggedIn()) return (await authedFetch(`/rest/v1/program_exercises?select=*&program_id=eq.${programId}&order=order_index`)).json();
+  return rpc('guest_program_exercises', { p_token: TOKEN, p_program_id: programId });
+}
+async function startSessionFor(programId){
+  if(isLoggedIn()){
+    const res = await authedFetch('/rest/v1/sessions', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ program_id: programId }) });
+    const data = await res.json(); return data[0].id;
+  }
+  return rpc('guest_start_session', { p_token: TOKEN, p_program_id: programId });
+}
+async function lastLogsFor(programId){
+  if(isLoggedIn()){
+    const s = getUserSession();
+    const sessions = await (await authedFetch(`/rest/v1/sessions?select=id&program_id=eq.${programId}&user_id=eq.${s.user.id}&order=started_at.desc&limit=1`)).json();
+    if(!sessions.length) return [];
+    return (await authedFetch(`/rest/v1/session_logs?select=exercise_id,set_number,reps,charge&session_id=eq.${sessions[0].id}`)).json();
+  }
+  return rpc('guest_last_session_logs', { p_token: TOKEN, p_program_id: programId });
+}
+async function logSetFor(sessionId, exId, setNum, reps, charge){
+  if(isLoggedIn()) return authedFetch('/rest/v1/session_logs', { method:'POST', body: JSON.stringify({ session_id: sessionId, exercise_id: exId, set_number: setNum, reps, charge }) });
+  return rpc('guest_log_set', { p_token: TOKEN, p_session_id: sessionId, p_exercise_id: exId, p_set_number: setNum, p_reps: reps, p_charge: charge });
+}
+async function completeSessionFor(sessionId){
+  if(isLoggedIn()) return authedFetch(`/rest/v1/sessions?id=eq.${sessionId}`, { method:'PATCH', body: JSON.stringify({ completed_at: new Date().toISOString() }) });
+  return rpc('guest_complete_session', { p_token: TOKEN, p_session_id: sessionId });
+}
+async function createProgramFor(name, desc){
+  if(isLoggedIn()){
+    const res = await authedFetch('/rest/v1/programs', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ name, description:desc, is_official:false }) });
+    const data = await res.json(); return data[0].id;
+  }
+  return rpc('guest_create_program', { p_token: TOKEN, p_name: name, p_description: desc });
+}
+async function addProgramExerciseFor(programId, exId, orderIdx, sets, reps, rest, notes){
+  if(isLoggedIn()) return authedFetch('/rest/v1/program_exercises', { method:'POST', body: JSON.stringify({ program_id: programId, exercise_id: exId, order_index: orderIdx, sets, reps, rest_seconds: rest, notes }) });
+  return rpc('guest_add_program_exercise', { p_token: TOKEN, p_program_id: programId, p_exercise_id: exId, p_order_index: orderIdx, p_sets: sets, p_reps: reps, p_rest_seconds: rest, p_notes: notes });
+}
+
+let exercises = [];
+let exercisesById = {};
+const app = document.getElementById('app');
+const TOKEN = getToken();
+
+function openExFiche(exId){
+  const ex = exercisesById[exId];
+  if(!ex) return;
+  const points = (ex.technique_points||[]).map(p=>`<li>${p}</li>`).join('');
+  document.getElementById('exSheet').innerHTML = `
+    <div class="sheet-top">
+      <div><div class="cat">${ex.category}</div><h2>${ex.name}</h2></div>
+      <button class="closeBtn" onclick="document.getElementById('exOverlay').classList.remove('open')">✕</button>
+    </div>
+    <p class="lede">${ex.short_description||''}</p>
+    <div class="block"><h4>Consigne</h4><p>${ex.instructions||'—'}</p></div>
+    <div class="block"><h4>Points techniques</h4><ul class="points">${points}</ul></div>
+  `;
+  document.getElementById('exOverlay').classList.add('open');
+}
+
+function openContactModal(){
+  document.getElementById('modalSheet').innerHTML = `
+    <div class="sheet-top">
+      <div><div class="cat">SANS ENGAGEMENT</div><h2>Contacter un coach</h2></div>
+      <button class="closeBtn" onclick="document.getElementById('modalOverlay').classList.remove('open')">✕</button>
+    </div>
+    <p class="lede">Laisse tes coordonnées, un coach te recontacte pour un programme personnalisé — aucun compte requis.</p>
+    <div class="field"><label>Nom</label><input id="cName" type="text" placeholder="Ton prénom"></div>
+    <div class="field"><label>Téléphone ou email</label><input id="cContact" type="text" placeholder="06 12 34 56 78 ou email"></div>
+    <div class="field"><label>Message (optionnel)</label><textarea id="cMsg" placeholder="Ton objectif, tes dispos..."></textarea></div>
+    <div class="actions-row"><button class="btn btn-accent" onclick="submitContact()">Envoyer la demande</button></div>
+  `;
+  document.getElementById('modalOverlay').classList.add('open');
+}
+async function submitContact(){
+  const name = document.getElementById('cName').value.trim();
+  const contact = document.getElementById('cContact').value.trim();
+  const msg = document.getElementById('cMsg').value.trim();
+  if(!name || !contact){ toast('Nom et contact requis'); return; }
+  const isEmail = contact.includes('@');
+  await restInsert('coach_contact_requests', { name, email: isEmail?contact:null, phone: isEmail?null:contact, message: msg||null });
+  document.getElementById('modalOverlay').classList.remove('open');
+  toast('Demande envoyée, le coach te recontacte bientôt 💪');
+}
+
+// ---------- Routing ----------
+window.addEventListener('hashchange', route);
+async function boot(){
+  exercises = await restGet('exercises','select=*');
+  exercisesById = Object.fromEntries(exercises.map(e=>[e.id,e]));
+  route();
+}
+function route(){
+  const hash = location.hash.replace('#','');
+  const parts = hash.split('/').filter(Boolean);
+  if(parts[0]==='creer') renderCreate();
+  else if(parts[0]==='programme' && parts[1] && parts[2]==='seance') renderSession(parts[1]);
+  else if(parts[0]==='programme' && parts[1]) renderProgramDetail(parts[1]);
+  else renderList();
+}
+
+// ---------- Vue liste ----------
+async function renderList(){
+  app.innerHTML = `
+    <div class="eyebrow">PROGRAMMES</div>
+    <h1 class="page">Suis ton parcours.</h1>
+    <p class="subtitle">Programmes construits par ton coach, ou crée le tien. Tes séries et charges sont sauvegardées automatiquement d'une séance à l'autre.</p>
+    <div class="actions-row">
+      <button class="btn btn-accent" onclick="location.hash='#creer'">+ Créer mon programme</button>
+      <button class="btn btn-ghost" onclick="openContactModal()">Contacter un coach</button>
+    </div>
+    <div class="section"><h2>Programmes du coach</h2><div class="prog-grid" id="officialGrid"><div class="empty">Chargement…</div></div></div>
+    <div class="section"><h2>Mes programmes</h2><div class="prog-grid" id="mineGrid"><div class="empty">Chargement…</div></div></div>
+  `;
+  let programs = [];
+  try{ programs = await listPrograms(); }catch(e){ console.error(e); }
+  const official = programs.filter(p=>p.is_official);
+  const mine = programs.filter(p=>!p.is_official);
+  document.getElementById('officialGrid').innerHTML = official.length ? official.map(cardHtml).join('') :
+    '<div class="empty">Aucun programme du coach pour le moment.</div>';
+  document.getElementById('mineGrid').innerHTML = mine.length ? mine.map(cardHtml).join('') :
+    '<div class="empty">Tu n\'as pas encore créé de programme perso.</div>';
+}
+function cardHtml(p){
+  return `<button class="prog-card" onclick="location.hash='#programme/${p.id}'">
+    <div class="tag">${p.is_official?'Coach':'Perso'}</div>
+    <h3>${p.name}</h3>
+    <p>${p.description||''}</p>
+  </button>`;
+}
+
+// ---------- Détail programme ----------
+async function renderProgramDetail(programId){
+  app.innerHTML = `<a class="backlink" href="#">← Tous les programmes</a><div id="progBody"><div class="empty">Chargement…</div></div>`;
+  let items = [];
+  try{ items = await programExercisesFor(programId); }
+  catch(e){ document.getElementById('progBody').innerHTML = '<div class="empty">Programme introuvable.</div>'; return; }
+  let progName = '';
+  try{ const all = await listPrograms(); progName = (all.find(x=>x.id===programId)||{}).name || ''; }catch(e){}
+  const rows = items.map(it=>{
+    const ex = exercisesById[it.exercise_id];
+    if(!ex) return '';
+    return `<div class="ex-row">
+      <div class="ex-row-top">
+        <div><div class="ex-name" onclick="openExFiche('${ex.id}')">${ex.name}</div>
+        <div class="ex-meta">${it.sets||'-'} séries × ${it.reps||'-'} · repos ${it.rest_seconds||'-'}s</div></div>
+      </div>
+    </div>`;
+  }).join('');
+  document.getElementById('progBody').innerHTML = `
+    <div class="eyebrow">PROGRAMME</div>
+    <h1 class="page">${progName}</h1>
+    <div id="progExList">${rows || '<div class="empty">Aucun exercice dans ce programme.</div>'}</div>
+    <div class="session-bar"><button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}/seance'">Démarrer la séance</button></div>
+  `;
+}
+
+// ---------- Séance en temps réel ----------
+let activeSession = null;
+async function renderSession(programId){
+  app.innerHTML = `<a class="backlink" href="#programme/${programId}">← Retour au programme</a><div id="sessBody"><div class="empty">Préparation de la séance…</div></div>`;
+  const [items, lastLogs, sessionId] = await Promise.all([
+    programExercisesFor(programId),
+    lastLogsFor(programId),
+    startSessionFor(programId)
+  ]);
+  activeSession = sessionId;
+  const lastByKey = {};
+  (lastLogs||[]).forEach(l=>{ lastByKey[`${l.exercise_id}_${l.set_number}`] = l; });
+
+  const rows = items.map(it=>{
+    const ex = exercisesById[it.exercise_id];
+    if(!ex) return '';
+    const nSets = it.sets || 3;
+    let sets = '';
+    for(let s=1; s<=nSets; s++){
+      const prev = lastByKey[`${ex.id}_${s}`];
+      const ph = prev ? `${prev.reps||''}` : (it.reps||'');
+      const phc = prev ? `${prev.charge||''}` : '';
+      sets += `<div class="set-line" data-ex="${ex.id}" data-set="${s}">
+        <div class="setnum">S${s}</div>
+        <input type="number" inputmode="numeric" placeholder="${ph}" class="reps-input">
+        <span class="unit">reps</span>
+        <input type="number" inputmode="decimal" placeholder="${phc||'kg'}" class="charge-input">
+        <span class="unit">kg</span>
+        <button class="valid" onclick="validateSet(this)">✓</button>
+      </div>`;
+    }
+    return `<div class="ex-row">
+      <div class="ex-row-top">
+        <div><div class="ex-name" onclick="openExFiche('${ex.id}')">${ex.name}</div>
+        <div class="ex-meta">Dernière fois pré-remplie si dispo</div></div>
+      </div>
+      <div class="set-grid">${sets}</div>
+    </div>`;
+  }).join('');
+
+  document.getElementById('sessBody').innerHTML = `
+    <div class="eyebrow">SÉANCE EN COURS</div>
+    <h1 class="page" style="font-size:32px;">C'est parti 💪</h1>
+    ${rows}
+    <div class="session-bar"><button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="finishSession('${programId}')">Terminer la séance</button></div>
+  `;
+}
+async function validateSet(btn){
+  const line = btn.closest('.set-line');
+  const exId = line.dataset.ex; const setNum = parseInt(line.dataset.set);
+  const reps = parseInt(line.querySelector('.reps-input').value) || null;
+  const charge = parseFloat(line.querySelector('.charge-input').value) || null;
+  try{
+    await logSetFor(activeSession, exId, setNum, reps, charge);
+    btn.classList.add('done');
+  }catch(e){ toast('Erreur, réessaie'); }
+}
+async function finishSession(programId){
+  if(activeSession) await completeSessionFor(activeSession);
+  toast('Séance enregistrée, bravo !');
+  location.hash = `#programme/${programId}`;
+}
+
+// ---------- Création de programme ----------
+let draftExercises = [];
+function renderCreate(){
+  draftExercises = [];
+  const options = exercises.map(e=>`<option value="${e.id}">${e.name} (${e.category})</option>`).join('');
+  app.innerHTML = `
+    <a class="backlink" href="#">← Annuler</a>
+    <div class="eyebrow">NOUVEAU PROGRAMME</div>
+    <h1 class="page" style="font-size:38px;">Crée ton programme</h1>
+    <p class="subtitle">Visible uniquement par toi, depuis cet appareil.</p>
+    <div class="field"><label>Nom du programme</label><input id="pName" type="text" placeholder="Ex : Ma routine du lundi"></div>
+    <div class="field"><label>Description (optionnel)</label><textarea id="pDesc" placeholder="Objectif, contexte..."></textarea></div>
+
+    <div class="section">
+      <h2>Exercices</h2>
+      <div class="picker">
+        <select id="pickEx">${options}</select>
+        <input id="pSets" type="number" placeholder="Séries" style="width:80px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
+        <input id="pReps" type="text" placeholder="Reps" style="width:80px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
+        <button class="btn btn-ghost btn-sm" onclick="addDraftExercise()">Ajouter</button>
+      </div>
+      <div id="draftList"></div>
+    </div>
+
+    <div class="actions-row"><button class="btn btn-accent" onclick="saveProgram()">Enregistrer le programme</button></div>
+  `;
+}
+function addDraftExercise(){
+  const exId = document.getElementById('pickEx').value;
+  const sets = document.getElementById('pSets').value || 3;
+  const reps = document.getElementById('pReps').value || '10-12';
+  const ex = exercisesById[exId];
+  draftExercises.push({ exercise_id: exId, sets: parseInt(sets), reps, name: ex.name });
+  renderDraftList();
+}
+function renderDraftList(){
+  document.getElementById('draftList').innerHTML = draftExercises.map((d,i)=>`
+    <div class="draft-row">${d.name} — ${d.sets}×${d.reps}<button class="rm" onclick="removeDraft(${i})">✕</button></div>
+  `).join('');
+}
+function removeDraft(i){ draftExercises.splice(i,1); renderDraftList(); }
+async function saveProgram(){
+  const name = document.getElementById('pName').value.trim();
+  if(!name){ toast('Donne un nom à ton programme'); return; }
+  if(!draftExercises.length){ toast('Ajoute au moins un exercice'); return; }
+  const desc = document.getElementById('pDesc').value.trim();
+  const programId = await createProgramFor(name, desc||null);
+  for(let i=0;i<draftExercises.length;i++){
+    const d = draftExercises[i];
+    await addProgramExerciseFor(programId, d.exercise_id, i+1, d.sets, d.reps, 90, null);
+  }
+  toast('Programme créé !');
+  location.hash = `#programme/${programId}`;
+}
+
+document.getElementById('exOverlay').addEventListener('click', e=>{ if(e.target.id==='exOverlay') e.target.classList.remove('open'); });
+document.getElementById('modalOverlay').addEventListener('click', e=>{ if(e.target.id==='modalOverlay') e.target.classList.remove('open'); });
+
+boot();
+</script>
+</body>
+</html>
