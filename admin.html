@@ -364,7 +364,7 @@ async function deleteExercise(exId){
     toast('Fiche supprimée');
     exercises = exercises.filter(e=>e.id!==exId); exercisesById = Object.fromEntries(exercises.map(e=>[e.id,e]));
     renderExercisesTab();
-  }catch(e){ toast('Cette fiche est utilisée dans un programme, retire-la d\\'abord.'); }
+  }catch(e){ toast('Cette fiche est utilisée dans un programme, retire-la d\'abord.'); }
 }
 
 boot();

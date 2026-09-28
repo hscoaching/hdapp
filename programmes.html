@@ -120,6 +120,11 @@
     padding:12px 20px; border-radius:999px; font-size:13.5px; z-index:80; display:none;}
 
   footer{border-top:1px solid var(--line); padding:26px 0; text-align:center; color:var(--ink-muted); font-size:12.5px; margin-top:40px;}
+
+  .navrow{display:flex; gap:8px; max-width:960px; margin:0 auto; padding:0 20px 12px; overflow-x:auto; scrollbar-width:none;}
+  .navrow::-webkit-scrollbar{display:none;}
+  .navrow a{flex:1; text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:10px 14px; border-radius:999px; white-space:nowrap; text-decoration:none;}
+  .navrow a.active{background:var(--ink); border-color:var(--ink); color:var(--bg);}
 </style>
 </head>
 <body>
@@ -128,9 +133,12 @@
   <div class="top-inner">
     <div class="mark">HS</div>
     <div class="brand"><div class="b1">HS COACHING</div><div class="b2">Programmes</div></div>
-    <a class="nav-link" href="index.html">Bibliothèque</a>
-    <a class="nav-link" href="compte.html">Mon compte</a>
   </div>
+  <nav class="navrow">
+    <a href="index.html">Bibliothèque</a>
+    <a href="programmes.html" class="active">Programmes</a>
+    <a href="compte.html">Mon compte</a>
+  </nav>
 </header>
 
 <main class="wrap" id="app"></main>
@@ -311,7 +319,7 @@ async function renderList(){
   document.getElementById('officialGrid').innerHTML = official.length ? official.map(cardHtml).join('') :
     '<div class="empty">Aucun programme du coach pour le moment.</div>';
   document.getElementById('mineGrid').innerHTML = mine.length ? mine.map(cardHtml).join('') :
-    '<div class="empty">Tu n\\'as pas encore créé de programme perso.</div>';
+    '<div class="empty">Tu n\'as pas encore créé de programme perso.</div>';
 }
 function cardHtml(p){
   return `<button class="prog-card" onclick="location.hash='#programme/${p.id}'">

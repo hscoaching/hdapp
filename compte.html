@@ -10,9 +10,9 @@
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
-    --bg:#0b0b0c; --surface:#16171a; --surface-2:#1f2024; --line:#2a2b30;
-    --ink:#f4f3f0; --ink-muted:#9a9aa2; --accent:#ff4d2e; --accent-ink:#1a0805;
-    --ok:#3ddc84; --radius:14px; box-sizing:border-box;
+    --bg:#0b0b0c; --surface:#16171a; --surface-2:#1f2024; --line:#2c2c30;
+    --ink:#f5f5f5; --ink-muted:#9a9a9e; --accent:#ffffff; --accent-ink:#0b0b0c;
+    --ok:#ffffff; --radius:14px; box-sizing:border-box;
   }
   *{box-sizing:inherit; margin:0; padding:0;}
   html,body{height:100%;}
@@ -49,7 +49,7 @@
   .btn-block{width:100%; justify-content:center; margin-top:18px;}
   .switch-mode{margin-top:16px; font-size:13px; color:var(--ink-muted); text-align:center;}
   .switch-mode a{color:var(--accent); font-weight:600; cursor:pointer;}
-  .error-msg{color:#ff8a70; font-size:13px; margin-top:10px; display:none;}
+  .error-msg{color:var(--ink); font-size:13px; margin-top:10px; display:none; font-weight:600; border-left:2px solid var(--ink); padding-left:10px;}
   .info-msg{color:var(--ink-muted); font-size:13px; margin-top:14px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:12px 14px;}
 
   .tabs{display:flex; gap:6px; border-bottom:1px solid var(--line); margin-bottom:20px; overflow-x:auto;}
@@ -78,6 +78,11 @@
   .profile-row:first-child{border-top:none;}
 
   footer{border-top:1px solid var(--line); padding:26px 0; text-align:center; color:var(--ink-muted); font-size:12.5px; margin-top:40px;}
+
+  .navrow{display:flex; gap:8px; max-width:960px; margin:0 auto; padding:0 20px 12px; overflow-x:auto; scrollbar-width:none;}
+  .navrow::-webkit-scrollbar{display:none;}
+  .navrow a{flex:1; text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:10px 14px; border-radius:999px; white-space:nowrap; text-decoration:none;}
+  .navrow a.active{background:var(--ink); border-color:var(--ink); color:var(--bg);}
 </style>
 </head>
 <body>
@@ -86,8 +91,12 @@
   <div class="top-inner">
     <div class="mark">HS</div>
     <div class="brand"><div class="b1">HS COACHING</div><div class="b2">Mon compte</div></div>
-    <a class="nav-link" href="programmes.html">Programmes</a>
   </div>
+  <nav class="navrow">
+    <a href="index.html">Bibliothèque</a>
+    <a href="programmes.html">Programmes</a>
+    <a href="compte.html" class="active">Mon compte</a>
+  </nav>
 </header>
 
 <main class="wrap" id="app"></main>
@@ -133,7 +142,7 @@ function renderAuth(){
   app.innerHTML = `
     <div class="eyebrow">MON COMPTE</div>
     <h1 class="page">${authMode==='login' ? 'Connexion' : 'Créer un compte'}</h1>
-    <p class="subtitle">${authMode==='login' ? 'Retrouve tes séances et tes programmes sur n\\'importe quel appareil.' : 'Tes programmes et séances créés sur cet appareil seront automatiquement rattachés à ton compte.'}</p>
+    <p class="subtitle">${authMode==='login' ? 'Retrouve tes séances et tes programmes sur n\'importe quel appareil.' : 'Tes programmes et séances créés sur cet appareil seront automatiquement rattachés à ton compte.'}</p>
     ${authMode==='signup' ? `<div class="field"><label>Prénom</label><input id="aName" type="text" placeholder="Ton prénom"></div>` : ''}
     <div class="field"><label>Email</label><input id="aEmail" type="email" placeholder="toi@email.com"></div>
     <div class="field"><label>Mot de passe</label><input id="aPass" type="password" placeholder="6 caractères minimum"></div>
@@ -219,13 +228,13 @@ async function loadProgrammes(){
   const programs = await res.json();
   document.getElementById('tabBody').innerHTML = programs.length ? programs.map(p=>`
     <div class="card"><div class="tag">${p.is_official?'Coach':'Perso'}</div><h3>${p.name}</h3><p>${p.description||''}</p></div>
-  `).join('') : '<div class="empty">Aucun programme pour l\\'instant. Crée-en un depuis la page Programmes.</div>';
+  `).join('') : '<div class="empty">Aucun programme pour l\'instant. Crée-en un depuis la page Programmes.</div>';
 }
 
 async function loadHistorique(){
   const res = await apiFetch(`/rest/v1/sessions?select=id,started_at,completed_at,programs(name)&order=started_at.desc`);
   const sessions = await res.json();
-  if(!sessions.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucune séance enregistrée pour l\\'instant.</div>'; return; }
+  if(!sessions.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucune séance enregistrée pour l\'instant.</div>'; return; }
   document.getElementById('tabBody').innerHTML = sessions.map(s=>{
     const d = new Date(s.started_at);
     return `<div class="card" style="cursor:pointer" onclick="toggleSessionLogs(this,'${s.id}')">
