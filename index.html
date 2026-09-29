@@ -252,11 +252,14 @@ function renderGrid(){
   });
 }
 
+function isCoach(){ return localStorage.getItem('hs_role') === 'admin'; }
+
 function openSheet(slug, pushHash){
   const ex = exercises.find(e=>e.slug===slug);
   if(!ex) return;
   const fullUrl = location.origin + location.pathname + '#' + ex.slug;
   const points = (ex.technique_points||[]).map(p=>`<li>${p}</li>`).join('');
+  const showQr = isCoach();
   sheet.innerHTML = `
     <div class="sheet-top">
       <div>
@@ -274,18 +277,20 @@ function openSheet(slug, pushHash){
       <h4>Points techniques</h4>
       <ul class="points">${points}</ul>
     </div>
-    <div class="qr-zone">
+    ${showQr ? `<div class="qr-zone">
       <div class="qr-box" id="qrBox"></div>
       <div class="qr-info">
         <p>QR code de cette fiche — à afficher sur la machine pour un accès direct.</p>
         <button class="printBtn" id="printQr">Imprimer ce QR</button>
       </div>
-    </div>
+    </div>` : ''}
   `;
-  document.getElementById('qrBox').innerHTML = '';
-  new QRCode(document.getElementById('qrBox'), { text: fullUrl, width:96, height:96, colorDark:"#0b0b0c", colorLight:"#ffffff" });
+  if(showQr){
+    document.getElementById('qrBox').innerHTML = '';
+    new QRCode(document.getElementById('qrBox'), { text: fullUrl, width:96, height:96, colorDark:"#0b0b0c", colorLight:"#ffffff" });
+    document.getElementById('printQr').addEventListener('click', ()=> printFiche(ex, fullUrl));
+  }
   document.getElementById('closeSheet').addEventListener('click', closeSheet);
-  document.getElementById('printQr').addEventListener('click', ()=> printFiche(ex, fullUrl));
   overlay.classList.add('open');
   if(pushHash) history.replaceState(null,'', '#'+ex.slug);
 }
@@ -307,6 +312,18 @@ function printFiche(ex, fullUrl){
 overlay.addEventListener('click', (e)=>{ if(e.target===overlay) closeSheet(); });
 searchEl.addEventListener('input', renderGrid);
 
+async function syncRoleFromSession(){
+  try{
+    const s = JSON.parse(localStorage.getItem('hs_session')||'null');
+    if(!s || !s.access_token) return;
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/profiles?select=role&id=eq.${s.user.id}`, {
+      headers:{ apikey: SUPABASE_ANON_KEY, Authorization:`Bearer ${s.access_token}` }
+    });
+    const rows = await res.json();
+    if(rows[0] && rows[0].role) localStorage.setItem('hs_role', rows[0].role);
+  }catch(e){}
+}
+
 async function loadExercises(){
   try{
     const res = await fetch(`${SUPABASE_URL}/rest/v1/exercises?select=*&order=category,name`, {
@@ -324,6 +341,7 @@ async function loadExercises(){
   if(hashSlug) openSheet(hashSlug, false);
 }
 
+syncRoleFromSession();
 loadExercises();
 </script>
 </body>
