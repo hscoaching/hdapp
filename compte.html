@@ -270,11 +270,15 @@ async function loadHistorique(){
   if(!sessions.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucune séance enregistrée pour l\'instant.</div>'; return; }
   document.getElementById('tabBody').innerHTML = sessions.map(s=>{
     const d = new Date(s.started_at);
+    let duree = '';
+    if(s.completed_at){
+      const min = Math.max(1, Math.round((new Date(s.completed_at) - d) / 60000));
+      duree = ` · ${min} min`;
+    }
     return `<div class="card" style="cursor:pointer" onclick="toggleSessionLogs(this,'${s.id}')">
-      <div class="tag">${s.completed_at ? 'Terminée':'En cours'}</div>
+      <div class="tag">${d.toLocaleDateString('fr-FR', {day:'numeric',month:'long'})}${duree}</div>
       <h3>${s.programs?.name || 'Séance libre'}</h3>
-      <p>${d.toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'})}</p>
-      <div class="logs" style="display:none; margin-top:10px;"></div>
+      <div class="logs" style="display:none; margin-top:12px;"></div>
     </div>`;
   }).join('');
 }
@@ -284,8 +288,25 @@ async function toggleSessionLogs(card, sessionId){
   if(!box.dataset.loaded){
     const res = await apiFetch(`/rest/v1/session_logs?select=set_number,reps,charge,exercises(name)&session_id=eq.${sessionId}&order=set_number`);
     const logs = await res.json();
-    box.innerHTML = logs.length ? logs.map(l=>`<div class="log-line"><span>${l.exercises?.name||''} — série ${l.set_number}</span><b>${l.reps||'-'} reps · ${l.charge||'-'} kg</b></div>`).join('')
-      : '<div class="empty">Pas de détail pour cette séance.</div>';
+    if(!logs.length){ box.innerHTML = '<div class="empty">Pas de détail pour cette séance.</div>'; }
+    else {
+      const byExercise = {};
+      let totalVolume = 0;
+      logs.forEach(l=>{
+        const name = l.exercises?.name || 'Exercice';
+        if(!byExercise[name]) byExercise[name] = [];
+        byExercise[name].push(l);
+        if(l.reps && l.charge) totalVolume += l.reps * l.charge;
+      });
+      const rows = Object.entries(byExercise).map(([name, sets])=>{
+        const summary = sets.map(s => `${s.reps ?? '–'}×${s.charge ?? '–'}kg`).join('  ·  ');
+        return `<div class="log-line" style="flex-direction:column;align-items:flex-start;gap:4px;">
+          <b>${name}</b><span>${summary}</span>
+        </div>`;
+      }).join('');
+      const volumeLine = totalVolume ? `<div class="log-line" style="border-top:none;padding-top:2px;"><span>Volume total soulevé</span><b>${Math.round(totalVolume).toLocaleString('fr-FR')} kg</b></div>` : '';
+      box.innerHTML = rows + volumeLine;
+    }
     box.dataset.loaded = '1';
   }
   box.style.display='block';
