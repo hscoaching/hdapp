@@ -133,6 +133,9 @@
     font-size:14px; padding:10px 0; border-top:1px solid var(--line); display:flex; gap:10px; align-items:flex-start;
   }
   .points li:before{content:"→"; color:var(--accent); font-weight:700;}
+  .muscle-tags{display:flex; flex-wrap:wrap; gap:8px;}
+  .muscle-tag{font-size:12.5px; font-weight:600; padding:6px 12px; border-radius:999px; border:1px solid var(--line); color:var(--ink-muted); background:var(--surface-2);}
+  .muscle-tag.primary{background:var(--ink); border-color:var(--ink); color:var(--bg);}
 
   .qr-zone{margin-top:26px; padding-top:22px; border-top:1px solid var(--line); display:flex; align-items:center; gap:16px;}
   .qr-box{background:#fff; padding:8px; border-radius:10px; flex:none;}
@@ -295,6 +298,14 @@ function openSheet(slug, pushHash){
     <div class="block">
       <h4>Consigne</h4>
       <p>${ex.instructions||'—'}</p>
+    </div>
+    <div class="block">
+      <h4>Muscles sollicités</h4>
+      <div class="muscle-tags">
+        ${(ex.primary_muscles||[]).map(m=>`<span class="muscle-tag primary">${m}</span>`).join('')}
+        ${(ex.secondary_muscles||[]).map(m=>`<span class="muscle-tag">${m}</span>`).join('')}
+        ${(!ex.primary_muscles||!ex.primary_muscles.length) ? '<span class="muscle-tag">—</span>' : ''}
+      </div>
     </div>
     <div class="block">
       <h4>Points techniques</h4>
