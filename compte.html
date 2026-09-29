@@ -1,0 +1,347 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0c">
+<title>HS Coaching — Mon compte</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#0b0b0c; --surface:#16171a; --surface-2:#1f2024; --line:#2c2c30;
+    --ink:#f5f5f5; --ink-muted:#9a9a9e; --accent:#ffffff; --accent-ink:#0b0b0c;
+    --ok:#ffffff; --radius:14px; box-sizing:border-box;
+  }
+  *{box-sizing:inherit; margin:0; padding:0;}
+  html,body{height:100%;}
+  body{background:var(--bg); color:var(--ink); font-family:'Inter',system-ui,sans-serif;
+    padding-top:env(safe-area-inset-top,0px); padding-bottom:env(safe-area-inset-bottom,0px); -webkit-font-smoothing:antialiased;}
+  h1,h2,h3{font-family:'Bebas Neue',sans-serif; letter-spacing:.02em; line-height:.95;}
+  a{color:inherit;}
+  button{font-family:inherit;}
+  .wrap{max-width:760px; margin:0 auto; padding:0 20px;}
+
+  header.top{position:sticky; top:0; z-index:20; background:rgba(11,11,12,.9); backdrop-filter:blur(10px);
+    border-bottom:1px solid var(--line); padding-top:env(safe-area-inset-top,0px);}
+  .top-inner{display:flex; align-items:center; gap:14px; padding:14px 20px; max-width:760px; margin:0 auto;}
+  .mark{width:40px; height:40px; border-radius:10px; background:var(--accent); display:flex; align-items:center; justify-content:center;
+    flex:none; font-family:'Bebas Neue'; font-size:19px; color:var(--accent-ink);}
+  .brand{flex:1;}
+  .brand .b1{font-size:15px; font-weight:700;}
+  .brand .b2{font-size:12px; color:var(--ink-muted);}
+  .nav-link{font-size:14px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:8px 14px; border-radius:999px;}
+  .nav-link:hover{color:var(--ink); border-color:var(--accent);}
+
+  main{padding:32px 0 90px;}
+  .eyebrow{color:var(--accent); font-weight:700; font-size:13px; margin-bottom:6px;}
+  h1.page{font-size:clamp(32px,7vw,48px); margin-bottom:10px;}
+  .subtitle{color:var(--ink-muted); font-size:14px; max-width:52ch; margin-bottom:20px;}
+
+  .field{margin-top:14px;}
+  .field label{font-size:12.5px; color:var(--ink-muted); display:block; margin-bottom:6px; font-weight:600;}
+  .field input{width:100%; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:12px 14px; font-size:14px; font-family:inherit;}
+  .btn{display:inline-flex; align-items:center; gap:8px; font-size:14px; font-weight:700; padding:12px 20px; border-radius:999px; border:none; cursor:pointer;}
+  .btn-accent{background:var(--accent); color:var(--accent-ink);}
+  .btn-ghost{background:none; border:1px solid var(--line); color:var(--ink);}
+  .btn-ghost:hover{border-color:var(--accent);}
+  .btn-block{width:100%; justify-content:center; margin-top:18px;}
+  .switch-mode{margin-top:16px; font-size:13px; color:var(--ink-muted); text-align:center;}
+  .switch-mode a{color:var(--accent); font-weight:600; cursor:pointer;}
+  .error-msg{color:var(--ink); font-size:13px; margin-top:10px; display:none; font-weight:600; border-left:2px solid var(--ink); padding-left:10px;}
+  .info-msg{color:var(--ink-muted); font-size:13px; margin-top:14px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:12px 14px;}
+
+  .tabs{display:flex; gap:6px; border-bottom:1px solid var(--line); margin-bottom:20px; overflow-x:auto;}
+  .tab{padding:12px 4px; margin-right:18px; font-size:13.5px; font-weight:600; color:var(--ink-muted); cursor:pointer; border-bottom:2px solid transparent; white-space:nowrap;}
+  .tab.active{color:var(--ink); border-color:var(--accent);}
+
+  .card{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:16px; margin-bottom:10px;}
+  .card .tag{font-size:11px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.08em;}
+  .card h3{font-family:'Inter'; font-size:16px; font-weight:700; margin-top:4px; letter-spacing:0;}
+  .card p{color:var(--ink-muted); font-size:13px; margin-top:6px;}
+  .empty{color:var(--ink-muted); font-size:13.5px; padding:14px 0;}
+
+  .log-line{display:flex; justify-content:space-between; font-size:13px; padding:6px 0; border-top:1px solid var(--line); color:var(--ink-muted);}
+  .log-line b{color:var(--ink); font-weight:600;}
+
+  .chat-box{background:var(--surface); border:1px solid var(--line); border-radius:14px; height:400px; display:flex; flex-direction:column;}
+  .chat-msgs{flex:1; overflow-y:auto; padding:16px; display:flex; flex-direction:column; gap:8px;}
+  .msg{max-width:75%; padding:10px 14px; border-radius:14px; font-size:13.5px; line-height:1.4;}
+  .msg.user{align-self:flex-end; background:var(--accent); color:var(--accent-ink); border-bottom-right-radius:4px;}
+  .msg.coach{align-self:flex-start; background:var(--surface-2); border-bottom-left-radius:4px;}
+  .chat-input{display:flex; border-top:1px solid var(--line); padding:10px;}
+  .chat-input input{flex:1; background:none; border:none; outline:none; color:var(--ink); font-size:14px; padding:8px; font-family:inherit;}
+  .chat-input button{background:var(--accent); color:var(--accent-ink); border:none; border-radius:10px; padding:0 16px; font-weight:700; cursor:pointer;}
+
+  .profile-row{display:flex; justify-content:space-between; align-items:center; padding:12px 0; border-top:1px solid var(--line); font-size:14px;}
+  .profile-row:first-child{border-top:none;}
+
+  footer{border-top:1px solid var(--line); padding:26px 0; text-align:center; color:var(--ink-muted); font-size:12.5px; margin-top:40px;}
+
+  .navrow{display:flex; gap:8px; max-width:960px; margin:0 auto; padding:0 20px 12px; overflow-x:auto; scrollbar-width:none;}
+  .navrow::-webkit-scrollbar{display:none;}
+  .navrow a{flex:1; text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:10px 14px; border-radius:999px; white-space:nowrap; text-decoration:none;}
+  .navrow a.active{background:var(--ink); border-color:var(--ink); color:var(--bg);}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="top-inner">
+    <div class="mark">HS</div>
+    <div class="brand"><div class="b1">HS COACHING</div><div class="b2">Mon compte</div></div>
+  </div>
+  <nav class="navrow">
+    <a href="index.html">Bibliothèque</a>
+    <a href="programmes.html">Programmes</a>
+    <a href="compte.html" class="active">Mon compte</a>
+  </nav>
+</header>
+<script>
+(function(){
+  var n=document.querySelector('.navrow');
+  if(n && localStorage.getItem('hs_role')==='admin' && !n.querySelector('[href="admin.html"]')){
+    n.insertAdjacentHTML('beforeend','<a href="admin.html">Espace coach</a>');
+  }
+})();
+</script>
+
+
+<main class="wrap" id="app"></main>
+<footer>HS Coaching · Régularité &amp; dépassement de soi · v3</footer>
+
+<script>
+const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
+const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2ZnRxZGJkaWJmeWxhdWFydGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MjEzMjIsImV4cCI6MjEwNjA5NzMyMn0._WLJkWncu1fwMnlakuPFuJr_I-uvgr_TwvMect8E-a0";
+const app = document.getElementById('app');
+
+function getDeviceToken(){
+  let t = localStorage.getItem('hs_device_token');
+  if(!t){ t = crypto.randomUUID(); localStorage.setItem('hs_device_token', t); }
+  return t;
+}
+function getSession(){
+  try{ return JSON.parse(localStorage.getItem('hs_session') || 'null'); }catch(e){ return null; }
+}
+function setSession(s){ localStorage.setItem('hs_session', JSON.stringify(s)); }
+function clearSession(){ localStorage.removeItem('hs_session'); localStorage.removeItem('hs_role'); }
+
+async function authFetch(path, opts={}){
+  return fetch(`${SUPABASE_URL}${path}`, {
+    ...opts,
+    headers: { apikey: SUPABASE_ANON_KEY, 'Content-Type':'application/json', ...(opts.headers||{}) }
+  });
+}
+async function refreshIfNeeded(){
+  const s = getSession();
+  if(!s || !s.refresh_token) return;
+  const exp = (s.expires_at || 0) * 1000;
+  if(exp && Date.now() < exp - 60000) return;
+  try{
+    const res = await authFetch('/auth/v1/token?grant_type=refresh_token', { method:'POST', body: JSON.stringify({ refresh_token: s.refresh_token }) });
+    const data = await res.json();
+    if(res.ok && data.access_token) setSession(data); else clearSession();
+  }catch(e){}
+}
+async function apiFetch(path, opts={}){
+  await refreshIfNeeded();
+  const s = getSession();
+  return fetch(`${SUPABASE_URL}${path}`, {
+    ...opts,
+    headers: { apikey: SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token}`, 'Content-Type':'application/json', ...(opts.headers||{}) }
+  });
+}
+async function rpcAuth(fn, params){
+  const res = await apiFetch(`/rest/v1/rpc/${fn}`, { method:'POST', body: JSON.stringify(params) });
+  return res.ok ? res.json() : Promise.reject(await res.text());
+}
+
+// ---------- Auth ----------
+let authMode = 'login';
+function renderAuth(){
+  app.innerHTML = `
+    <div class="eyebrow">MON COMPTE</div>
+    <h1 class="page">${authMode==='login' ? 'Connexion' : 'Créer un compte'}</h1>
+    <p class="subtitle">${authMode==='login' ? 'Retrouve tes séances et tes programmes sur n\'importe quel appareil.' : 'Tes programmes et séances créés sur cet appareil seront automatiquement rattachés à ton compte.'}</p>
+    ${authMode==='signup' ? `<div class="field"><label>Prénom</label><input id="aName" type="text" placeholder="Ton prénom"></div>` : ''}
+    <div class="field"><label>Email</label><input id="aEmail" type="email" placeholder="toi@email.com"></div>
+    <div class="field"><label>Mot de passe</label><input id="aPass" type="password" placeholder="6 caractères minimum"></div>
+    <div class="error-msg" id="aError"></div>
+    <button class="btn btn-accent btn-block" id="aSubmit" onclick="submitAuth()">${authMode==='login' ? 'Se connecter' : 'Créer mon compte'}</button>
+    <div class="switch-mode">
+      ${authMode==='login' ? `Pas encore de compte ? <a onclick="authMode='signup'; renderAuth();">Créer un compte</a>`
+                            : `Déjà un compte ? <a onclick="authMode='login'; renderAuth();">Se connecter</a>`}
+    </div>
+  `;
+}
+async function submitAuth(){
+  const email = document.getElementById('aEmail').value.trim();
+  const pass = document.getElementById('aPass').value;
+  const errEl = document.getElementById('aError');
+  errEl.style.display = 'none';
+  if(!email || pass.length < 6){ errEl.textContent = 'Email valide et mot de passe (6+ caractères) requis.'; errEl.style.display='block'; return; }
+  const btn = document.getElementById('aSubmit'); btn.disabled = true; btn.textContent = 'Patiente…';
+  try{
+    if(authMode==='signup'){
+      const fullName = document.getElementById('aName').value.trim();
+      const res = await authFetch('/auth/v1/signup', { method:'POST', body: JSON.stringify({ email, password: pass, data:{ full_name: fullName } }) });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error_description || data.msg || 'Erreur lors de la création du compte.');
+      if(data.access_token){
+        setSession(data);
+        await afterLogin();
+      } else {
+        app.innerHTML = `<div class="eyebrow">MON COMPTE</div><h1 class="page">Vérifie ta boîte mail</h1>
+          <p class="subtitle">Un email de confirmation vient de t'être envoyé. Confirme ton adresse puis reviens te connecter.</p>
+          <button class="btn btn-ghost" onclick="authMode='login'; renderAuth();">Retour à la connexion</button>`;
+      }
+    } else {
+      const res = await authFetch('/auth/v1/token?grant_type=password', { method:'POST', body: JSON.stringify({ email, password: pass }) });
+      const data = await res.json();
+      if(!res.ok) throw new Error(data.error_description || data.msg || 'Email ou mot de passe incorrect.');
+      setSession(data);
+      await afterLogin();
+    }
+  }catch(e){
+    errEl.textContent = e.message; errEl.style.display = 'block';
+  }
+  btn.disabled = false; btn.textContent = authMode==='login' ? 'Se connecter' : 'Créer mon compte';
+}
+async function afterLogin(){
+  try{ await rpcAuth('link_guest_to_user', { p_token: getDeviceToken() }); }catch(e){ console.error(e); }
+  renderDashboard();
+}
+function logout(){ clearSession(); authMode='login'; renderAuth(); }
+
+// ---------- Dashboard ----------
+let currentTab = 'programmes';
+async function syncRole(){
+  try{
+    const s = getSession();
+    const res = await apiFetch(`/rest/v1/profiles?select=role&id=eq.${s.user.id}`);
+    const rows = await res.json();
+    const role = rows[0] && rows[0].role;
+    if(role){ localStorage.setItem('hs_role', role); }
+    const n = document.querySelector('.navrow');
+    if(role==='admin' && n && !n.querySelector('[href="admin.html"]')) n.insertAdjacentHTML('beforeend','<a href="admin.html">Espace coach</a>');
+  }catch(e){}
+}
+async function renderDashboard(){
+  syncRole();
+  app.innerHTML = `
+    <div class="eyebrow">MON COMPTE</div>
+    <h1 class="page">Salut 👋</h1>
+    <div class="tabs">
+      <div class="tab" data-tab="programmes">Mes programmes</div>
+      <div class="tab" data-tab="historique">Historique</div>
+      <div class="tab" data-tab="chat">Discussion coach</div>
+      <div class="tab" data-tab="profil">Profil</div>
+    </div>
+    <div id="tabBody"><div class="empty">Chargement…</div></div>
+  `;
+  [...document.querySelectorAll('.tab')].forEach(t=>{
+    t.addEventListener('click', ()=>{ currentTab = t.dataset.tab; paintTabs(); loadTab(); });
+  });
+  paintTabs();
+  loadTab();
+}
+function paintTabs(){
+  [...document.querySelectorAll('.tab')].forEach(t=> t.classList.toggle('active', t.dataset.tab===currentTab));
+}
+function loadTab(){
+  if(currentTab==='programmes') loadProgrammes();
+  else if(currentTab==='historique') loadHistorique();
+  else if(currentTab==='chat') loadChat();
+  else loadProfil();
+}
+
+async function loadProgrammes(){
+  const res = await apiFetch(`/rest/v1/programs?select=*&order=is_official.desc,created_at.desc`);
+  const programs = await res.json();
+  document.getElementById('tabBody').innerHTML = programs.length ? programs.map(p=>`
+    <div class="card" style="cursor:pointer" onclick="location.href='programmes.html#programme/${p.id}'"><div class="tag">${p.is_official?'Coach':'Perso'}</div><h3>${p.name}</h3><p>${p.description||''}</p><p style="margin-top:8px;color:var(--ink);font-weight:600;">Ouvrir le programme →</p></div>
+  `).join('') : '<div class="empty">Aucun programme pour l\'instant. Crée-en un depuis la page Programmes.</div>';
+}
+
+async function loadHistorique(){
+  const res = await apiFetch(`/rest/v1/sessions?select=id,started_at,completed_at,programs(name)&order=started_at.desc`);
+  const sessions = await res.json();
+  if(!sessions.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucune séance enregistrée pour l\'instant.</div>'; return; }
+  document.getElementById('tabBody').innerHTML = sessions.map(s=>{
+    const d = new Date(s.started_at);
+    return `<div class="card" style="cursor:pointer" onclick="toggleSessionLogs(this,'${s.id}')">
+      <div class="tag">${s.completed_at ? 'Terminée':'En cours'}</div>
+      <h3>${s.programs?.name || 'Séance libre'}</h3>
+      <p>${d.toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'})}</p>
+      <div class="logs" style="display:none; margin-top:10px;"></div>
+    </div>`;
+  }).join('');
+}
+async function toggleSessionLogs(card, sessionId){
+  const box = card.querySelector('.logs');
+  if(box.style.display==='block'){ box.style.display='none'; return; }
+  if(!box.dataset.loaded){
+    const res = await apiFetch(`/rest/v1/session_logs?select=set_number,reps,charge,exercises(name)&session_id=eq.${sessionId}&order=set_number`);
+    const logs = await res.json();
+    box.innerHTML = logs.length ? logs.map(l=>`<div class="log-line"><span>${l.exercises?.name||''} — série ${l.set_number}</span><b>${l.reps||'-'} reps · ${l.charge||'-'} kg</b></div>`).join('')
+      : '<div class="empty">Pas de détail pour cette séance.</div>';
+    box.dataset.loaded = '1';
+  }
+  box.style.display='block';
+}
+
+let chatPoll = null; let conversationId = null;
+async function loadChat(){
+  document.getElementById('tabBody').innerHTML = `<div class="chat-box"><div class="chat-msgs" id="chatMsgs"><div class="empty">Chargement…</div></div>
+    <div class="chat-input"><input id="chatInput" type="text" placeholder="Écris un message…" onkeydown="if(event.key==='Enter')sendMessage()"><button onclick="sendMessage()">Envoyer</button></div></div>`;
+  let convs = await (await apiFetch(`/rest/v1/conversations?select=id&limit=1`)).json();
+  if(!convs.length){
+    convs = await (await apiFetch(`/rest/v1/conversations`, { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({}) })).json();
+  }
+  conversationId = convs[0].id;
+  await refreshMessages();
+  clearInterval(chatPoll);
+  chatPoll = setInterval(()=>{ if(currentTab==='chat') refreshMessages(); }, 5000);
+}
+async function refreshMessages(){
+  const res = await apiFetch(`/rest/v1/messages?select=*&conversation_id=eq.${conversationId}&order=created_at`);
+  const msgs = await res.json();
+  const box = document.getElementById('chatMsgs');
+  if(!box) return;
+  box.innerHTML = msgs.length ? msgs.map(m=>`<div class="msg ${m.sender}">${m.content}</div>`).join('') : '<div class="empty">Dis bonjour à ton coach 👋</div>';
+  box.scrollTop = box.scrollHeight;
+}
+async function sendMessage(){
+  const input = document.getElementById('chatInput');
+  const content = input.value.trim();
+  if(!content) return;
+  input.value = '';
+  await apiFetch(`/rest/v1/messages`, { method:'POST', body: JSON.stringify({ conversation_id: conversationId, sender:'user', content }) });
+  refreshMessages();
+}
+
+async function loadProfil(){
+  const s = getSession();
+  const res = await apiFetch(`/rest/v1/profiles?select=*&id=eq.${s.user.id}`);
+  const profiles = await res.json();
+  const p = profiles[0] || {};
+  document.getElementById('tabBody').innerHTML = `
+    <div class="card">
+      <div class="profile-row"><span>Nom</span><b>${p.full_name || '—'}</b></div>
+      <div class="profile-row"><span>Email</span><b>${s.user.email}</b></div>
+      <div class="profile-row"><span>Statut</span><b>${p.role==='admin' ? 'Coach (admin)' : 'Client'}</b></div>
+    </div>
+    ${p.role==='admin' ? '<a class="btn btn-accent btn-block" href="admin.html" style="text-decoration:none;">Ouvrir mon espace coach →</a>' : ''}
+    <button class="btn btn-ghost btn-block" onclick="logout()">Se déconnecter</button>
+  `;
+}
+
+// ---------- Boot ----------
+(function boot(){
+  const s = getSession();
+  if(s && s.access_token){ renderDashboard(); } else { renderAuth(); }
+})();
+</script>
+</body>
+</html>
