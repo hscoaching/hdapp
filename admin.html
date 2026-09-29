@@ -350,6 +350,9 @@ function renderExerciseForm(exId){
         <select id="efCat">${["Jambes","Dos","Pectoraux","Épaules","Bras","Abdos"].map(c=>`<option ${ex?.category===c?'selected':''}>${c}</option>`).join('')}</select>
       </div>
       <div class="field"><label>Description courte</label><input id="efShort" value="${ex?.short_description||''}"></div>
+      <div class="field"><label>Image (URL)</label><input id="efImg" value="${ex?.image_url||''}" placeholder="https://...">
+        ${ex?.image_url?`<img src="${ex.image_url}" style="width:100%;max-width:220px;border-radius:8px;margin-top:8px;" onerror="this.style.display='none'">`:''}
+      </div>
       <div class="field"><label>Consigne</label><textarea id="efInstr">${ex?.instructions||''}</textarea></div>
       <div class="field"><label>Points techniques (un par ligne)</label><textarea id="efPoints">${(ex?.technique_points||[]).join('\n')}</textarea></div>
       <div class="row-actions">
@@ -366,6 +369,7 @@ async function saveExercise(exId){
   const body = {
     name, slug, category: document.getElementById('efCat').value,
     short_description: document.getElementById('efShort').value.trim(),
+    image_url: document.getElementById('efImg').value.trim() || null,
     instructions: document.getElementById('efInstr').value.trim(),
     technique_points: document.getElementById('efPoints').value.split('\n').map(s=>s.trim()).filter(Boolean)
   };
