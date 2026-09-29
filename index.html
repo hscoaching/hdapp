@@ -243,7 +243,7 @@ function renderGrid(){
   });
   grid.innerHTML = filtered.map(ex => `
     <button class="card" data-slug="${ex.slug}">
-      ${ex.image_url ? `<img class="card-img" src="${ex.image_url}" alt="${ex.name}" loading="lazy" onerror="this.remove()">` : ''}
+      ${imgTag(ex, 'card-img')}
       <div class="card-body">
         <div class="cat">${ex.category}</div>
         <h3>${ex.name}</h3>
@@ -256,6 +256,23 @@ function renderGrid(){
     card.addEventListener('click', ()=> openSheet(card.dataset.slug, true));
   });
 }
+
+function imgTag(ex, cls, extraStyle){
+  const a = ex.image_start_url, b = ex.image_peak_url || ex.image_url;
+  if(a && b && a!==b){
+    return `<img class="${cls} anim-img" data-a="${a}" data-b="${b}" data-t="0" src="${a}" alt="${ex.name}" loading="lazy" style="${extraStyle||''}background:var(--surface-2);" onerror="this.classList.remove('anim-img'); this.remove();">`;
+  }
+  const single = b || a;
+  if(!single) return '';
+  return `<img class="${cls}" src="${single}" alt="${ex.name}" loading="lazy" style="${extraStyle||''}background:var(--surface-2);" onerror="this.remove()">`;
+}
+setInterval(()=>{
+  document.querySelectorAll('.anim-img').forEach(img=>{
+    const t = img.dataset.t === '0' ? '1' : '0';
+    img.dataset.t = t;
+    img.src = t === '0' ? img.dataset.a : img.dataset.b;
+  });
+}, 700);
 
 function isCoach(){ return localStorage.getItem('hs_role') === 'admin'; }
 
@@ -273,7 +290,7 @@ function openSheet(slug, pushHash){
       </div>
       <button class="closeBtn" id="closeSheet">✕</button>
     </div>
-    ${ex.image_url ? `<img src="${ex.image_url}" alt="${ex.name}" style="width:100%;border-radius:12px;margin-top:16px;background:var(--surface-2);" onerror="this.remove()">` : ''}
+    ${imgTag(ex, '', 'width:100%;border-radius:12px;margin-top:16px;')}
     <p class="lede">${ex.short_description||''}</p>
     <div class="block">
       <h4>Consigne</h4>
