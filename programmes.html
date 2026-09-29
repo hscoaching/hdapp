@@ -266,6 +266,23 @@ let exercisesById = {};
 const app = document.getElementById('app');
 const TOKEN = getToken();
 
+function imgTag(ex, cls, extraStyle){
+  const a = ex.image_start_url, b = ex.image_peak_url || ex.image_url;
+  if(a && b && a!==b){
+    return `<img class="${cls} anim-img" data-a="${a}" data-b="${b}" data-t="0" src="${a}" alt="${ex.name}" loading="lazy" style="${extraStyle||''}background:var(--surface-2);" onerror="this.classList.remove('anim-img'); this.remove();">`;
+  }
+  const single = b || a;
+  if(!single) return '';
+  return `<img class="${cls}" src="${single}" alt="${ex.name}" loading="lazy" style="${extraStyle||''}background:var(--surface-2);" onerror="this.remove()">`;
+}
+setInterval(()=>{
+  document.querySelectorAll('.anim-img').forEach(img=>{
+    const t = img.dataset.t === '0' ? '1' : '0';
+    img.dataset.t = t;
+    img.src = t === '0' ? img.dataset.a : img.dataset.b;
+  });
+}, 700);
+
 function openExFiche(exId){
   const ex = exercisesById[exId];
   if(!ex) return;
@@ -276,6 +293,7 @@ function openExFiche(exId){
       <button class="closeBtn" onclick="document.getElementById('exOverlay').classList.remove('open')">✕</button>
     </div>
     <p class="lede">${ex.short_description||''}</p>
+    ${imgTag(ex, '', 'width:100%;border-radius:12px;margin-bottom:4px;')}
     <div class="block"><h4>Consigne</h4><p>${ex.instructions||'—'}</p></div>
     <div class="block">
       <h4>Muscles sollicités</h4>
