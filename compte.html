@@ -299,9 +299,13 @@ async function toggleSessionLogs(card, sessionId){
         if(l.reps && l.charge) totalVolume += l.reps * l.charge;
       });
       const rows = Object.entries(byExercise).map(([name, sets])=>{
-        const summary = sets.map(s => `${s.reps ?? '–'}×${s.charge ?? '–'}kg`).join('  ·  ');
-        return `<div class="log-line" style="flex-direction:column;align-items:flex-start;gap:4px;">
-          <b>${name}</b><span>${summary}</span>
+        const lines = sets.map(s => `<tr style="border-top:1px solid var(--line);"><td style="padding:7px 0;">Série ${s.set_number}</td><td style="padding:7px 0;">${s.reps ?? '–'} reps</td><td style="padding:7px 0;">${s.charge ?? '–'} kg</td></tr>`).join('');
+        return `<div style="margin-bottom:16px;">
+          <b style="display:block;margin-bottom:6px;">${name}</b>
+          <table style="width:100%;border-collapse:collapse;font-size:13px;">
+            <thead><tr style="color:var(--ink-muted);text-align:left;"><th style="font-weight:600;padding:4px 0;">Série</th><th style="font-weight:600;padding:4px 0;">Répétitions</th><th style="font-weight:600;padding:4px 0;">Charge</th></tr></thead>
+            <tbody>${lines}</tbody>
+          </table>
         </div>`;
       }).join('');
       const volumeLine = totalVolume ? `<div class="log-line" style="border-top:none;padding-top:2px;"><span>Volume total soulevé</span><b>${Math.round(totalVolume).toLocaleString('fr-FR')} kg</b></div>` : '';
