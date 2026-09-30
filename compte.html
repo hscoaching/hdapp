@@ -329,7 +329,7 @@ async function loadChat(){
     <div class="chat-input"><input id="chatInput" type="text" placeholder="Écris un message…" onkeydown="if(event.key==='Enter')sendMessage()"><button onclick="sendMessage()">Envoyer</button></div></div>`;
   let convs = await (await apiFetch(`/rest/v1/conversations?select=id&limit=1`)).json();
   if(!convs.length){
-    convs = await (await apiFetch(`/rest/v1/conversations`, { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({}) })).json();
+    convs = await (await apiFetch(`/rest/v1/conversations`, { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ user_id: getSession().user.id }) })).json();
   }
   conversationId = convs[0].id;
   await refreshMessages();
