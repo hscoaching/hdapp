@@ -294,14 +294,15 @@ async function syncRole(){
   }catch(e){}
 }
 async function renderDashboard(){
-  syncRole();
+  const role = await syncRole();
+  const isCoachAccount = role === 'admin';
   app.innerHTML = `
     <div class="eyebrow">MON COMPTE</div>
     <h1 class="page">Salut 👋</h1>
     <div class="tabs">
       <div class="tab" data-tab="programmes">Mes programmes</div>
       <div class="tab" data-tab="historique">Historique</div>
-      <div class="tab" data-tab="chat">Discussion coach</div>
+      ${isCoachAccount ? '' : '<div class="tab" data-tab="chat">Discussion coach</div>'}
       <div class="tab" data-tab="profil">Profil</div>
     </div>
     <div id="tabBody"><div class="empty">Chargement…</div></div>
@@ -423,7 +424,6 @@ async function loadProfil(){
       <div class="profile-row"><span>Email</span><b>${s.user.email}</b></div>
       <div class="profile-row"><span>Statut</span><b>${p.role==='admin' ? 'Coach (admin)' : 'Client'}</b></div>
     </div>
-    ${p.role==='admin' ? '<a class="btn btn-accent btn-block" href="admin.html" style="text-decoration:none;">Ouvrir mon espace coach →</a>' : ''}
     <button class="btn btn-ghost btn-block" onclick="logout()">Se déconnecter</button>
   `;
 }
