@@ -180,7 +180,66 @@ function renderAuth(){
       ${authMode==='login' ? `Pas encore de compte ? <a onclick="authMode='signup'; renderAuth();">Créer un compte</a>`
                             : `Déjà un compte ? <a onclick="authMode='login'; renderAuth();">Se connecter</a>`}
     </div>
+    ${authMode==='login' ? `<div class="switch-mode"><a onclick="renderForgotPassword()">Mot de passe oublié ?</a></div>` : ''}
   `;
+}
+function renderForgotPassword(){
+  const prefill = (document.getElementById('aEmail')?.value || '').trim();
+  app.innerHTML = `
+    <div class="eyebrow">MON COMPTE</div>
+    <h1 class="page">Mot de passe oublié</h1>
+    <p class="subtitle">Indique ton email, on t'envoie un lien pour en choisir un nouveau.</p>
+    <div class="field"><label>Email</label><input id="fpEmail" type="email" value="${prefill}" placeholder="toi@email.com"></div>
+    <div class="error-msg" id="fpError"></div>
+    <button class="btn btn-accent btn-block" id="fpSubmit" onclick="submitForgotPassword()">Envoyer le lien</button>
+    <div class="switch-mode"><a onclick="authMode='login'; renderAuth();">← Retour à la connexion</a></div>
+  `;
+}
+async function submitForgotPassword(){
+  const email = document.getElementById('fpEmail').value.trim();
+  const errEl = document.getElementById('fpError');
+  errEl.style.display = 'none';
+  if(!email){ errEl.textContent = 'Entre un email valide.'; errEl.style.display='block'; return; }
+  const btn = document.getElementById('fpSubmit'); btn.disabled = true; btn.textContent = 'Envoi…';
+  try{
+    const res = await authFetch(`/auth/v1/recover`, { method:'POST', body: JSON.stringify({ email, redirect_to: location.origin + location.pathname }) });
+    if(!res.ok){ const data = await res.json().catch(()=>({})); throw new Error(data.error_description || data.msg || 'Erreur lors de l\'envoi.'); }
+    app.innerHTML = `<div class="eyebrow">MON COMPTE</div><h1 class="page">Email envoyé</h1>
+      <p class="subtitle">Si un compte existe avec cette adresse, un lien pour choisir un nouveau mot de passe vient d'être envoyé.</p>
+      <button class="btn btn-ghost" onclick="authMode='login'; renderAuth();">Retour à la connexion</button>`;
+  }catch(e){
+    errEl.textContent = e.message; errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Envoyer le lien';
+  }
+}
+function renderResetPassword(recoveryToken){
+  app.innerHTML = `
+    <div class="eyebrow">MON COMPTE</div>
+    <h1 class="page">Nouveau mot de passe</h1>
+    <p class="subtitle">Choisis ton nouveau mot de passe (6 caractères minimum).</p>
+    <div class="field"><label>Nouveau mot de passe</label><input id="rpPass" type="password" placeholder="6 caractères minimum"></div>
+    <div class="error-msg" id="rpError"></div>
+    <button class="btn btn-accent btn-block" id="rpSubmit" onclick="submitResetPassword('${recoveryToken}')">Valider</button>
+  `;
+}
+async function submitResetPassword(recoveryToken){
+  const pass = document.getElementById('rpPass').value;
+  const errEl = document.getElementById('rpError');
+  errEl.style.display = 'none';
+  if(pass.length < 6){ errEl.textContent = 'Le mot de passe doit faire 6 caractères minimum.'; errEl.style.display='block'; return; }
+  const btn = document.getElementById('rpSubmit'); btn.disabled = true; btn.textContent = 'Patiente…';
+  try{
+    const res = await fetch(`${SUPABASE_URL}/auth/v1/user`, { method:'PUT', headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${recoveryToken}`, 'Content-Type':'application/json' }, body: JSON.stringify({ password: pass }) });
+    const data = await res.json();
+    if(!res.ok) throw new Error(data.error_description || data.msg || 'Erreur lors de la mise à jour.');
+    history.replaceState(null, '', location.pathname);
+    app.innerHTML = `<div class="eyebrow">MON COMPTE</div><h1 class="page">Mot de passe mis à jour</h1>
+      <p class="subtitle">Tu peux maintenant te connecter avec ton nouveau mot de passe.</p>
+      <button class="btn btn-accent btn-block" onclick="authMode='login'; renderAuth();">Se connecter</button>`;
+  }catch(e){
+    errEl.textContent = e.message; errEl.style.display = 'block';
+    btn.disabled = false; btn.textContent = 'Valider';
+  }
 }
 async function submitAuth(){
   const email = document.getElementById('aEmail').value.trim();
@@ -371,6 +430,11 @@ async function loadProfil(){
 
 // ---------- Boot ----------
 (function boot(){
+  const hashParams = new URLSearchParams(location.hash.replace(/^#/, ''));
+  if(hashParams.get('type') === 'recovery' && hashParams.get('access_token')){
+    renderResetPassword(hashParams.get('access_token'));
+    return;
+  }
   const s = getSession();
   if(s && s.access_token){ renderDashboard(); } else { renderAuth(); }
 })();

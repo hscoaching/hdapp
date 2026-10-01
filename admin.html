@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="fr">
 <head>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0b0b0c">
@@ -66,6 +67,17 @@
   .picker{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
   .picker select, .picker input{background:var(--surface-2); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:9px; font-family:inherit; font-size:13px;}
   .toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--surface-2); border:1px solid var(--line); padding:12px 20px; border-radius:999px; font-size:13.5px; z-index:80; display:none;}
+  .qr-overlay{position:fixed; inset:0; z-index:60; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center;}
+  .qr-overlay.open{display:flex;}
+  .qr-sheet{background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:28px; text-align:center; max-width:320px;}
+  .qr-sheet .box{background:#fff; padding:12px; border-radius:10px; display:inline-block; margin:16px 0;}
+  @media print{
+    body *{visibility:hidden;}
+    #printAreaAdmin, #printAreaAdmin *{visibility:visible;}
+    #printAreaAdmin{position:fixed; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:14px; background:#fff;}
+    #printAreaAdmin .box{background:#fff;}
+    #printAreaAdmin h3{font-family:'Bebas Neue'; font-size:34px; color:#000;}
+  }
   .navrow{display:flex; gap:8px; max-width:960px; margin:0 auto; padding:0 20px 12px; overflow-x:auto; scrollbar-width:none;}
   .navrow::-webkit-scrollbar{display:none;}
   .navrow a{flex:1; text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:10px 14px; border-radius:999px; white-space:nowrap; text-decoration:none;}
@@ -89,6 +101,18 @@
 
 <main class="wrap" id="app"></main>
 <div class="toast" id="toast"></div>
+<div class="qr-overlay" id="qrOverlay">
+  <div class="qr-sheet">
+    <h3 style="font-family:Inter;font-weight:700;font-size:16px;">QR code de la bibliothèque</h3>
+    <div class="box" id="entranceQrBox"></div>
+    <p style="font-size:12.5px;color:var(--ink-muted);margin-bottom:16px;">À afficher à l'entrée de la salle.</p>
+    <div class="row-actions" style="justify-content:center;">
+      <button class="btn btn-accent" onclick="printEntranceQr()">Imprimer</button>
+      <button class="btn btn-ghost" onclick="document.getElementById('qrOverlay').classList.remove('open')">Fermer</button>
+    </div>
+  </div>
+</div>
+<div id="printAreaAdmin" style="display:none;"></div>
 
 <script>
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
@@ -118,6 +142,21 @@ async function api(path, opts={}){
 
 let exercises = []; let exercisesById = {};
 
+function libraryUrl(){ return location.origin + location.pathname.replace(/admin\.html$/, 'index.html'); }
+function openEntranceQr(){
+  document.getElementById('entranceQrBox').innerHTML = '';
+  new QRCode(document.getElementById('entranceQrBox'), { text: libraryUrl(), width:160, height:160, colorDark:"#0b0b0c", colorLight:"#ffffff" });
+  document.getElementById('qrOverlay').classList.add('open');
+}
+function printEntranceQr(){
+  const area = document.getElementById('printAreaAdmin');
+  area.innerHTML = `<h3>HS Coaching</h3><div class="box" id="entranceQrPrint"></div><p style="font-family:Inter;font-size:13px;color:#000;">Scanne pour accéder à la bibliothèque d'exercices</p>`;
+  new QRCode(document.getElementById('entranceQrPrint'), { text: libraryUrl(), width:220, height:220, colorDark:"#0b0b0c", colorLight:"#ffffff" });
+  area.style.display = 'flex';
+  window.print();
+  setTimeout(()=> area.style.display='none', 300);
+}
+
 async function boot(){
   const s = getSession();
   if(!s || !s.access_token){
@@ -141,6 +180,7 @@ let currentTab = 'messages';
 function renderDashboard(){
   app.innerHTML = `
     <h1>Bonjour coach 👋</h1>
+    <div class="row-actions" style="margin-bottom:16px;"><button class="btn btn-ghost" onclick="openEntranceQr()">QR code d'entrée de salle</button></div>
     <div class="tabs">
       <div class="tab" data-t="messages">Messages</div>
       <div class="tab" data-t="programmes">Programmes</div>
