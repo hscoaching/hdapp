@@ -297,7 +297,8 @@ async function syncRole(){
     if(role){ localStorage.setItem('hs_role', role); }
     const n = document.querySelector('.navrow');
     if(role==='admin' && n && !n.querySelector('[href="admin.html"]')) n.insertAdjacentHTML('beforeend','<a href="admin.html">Espace coach</a>');
-  }catch(e){}
+    return role;
+  }catch(e){ return null; }
 }
 async function renderDashboard(){
   const role = await syncRole();
