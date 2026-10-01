@@ -69,17 +69,17 @@
   .ex-name{font-size:17px; font-weight:700; cursor:pointer;}
   .ex-name:hover{color:var(--accent);}
   .ex-meta{color:var(--ink-muted); font-size:12.5px; margin-top:2px;}
-  .set-grid{margin-top:12px; display:flex; flex-direction:column; gap:8px;}
-  .set-line{display:flex; align-items:center; gap:8px; font-size:13px;}
-  .set-line .setnum{width:26px; color:var(--ink-muted); flex:none;}
+  .set-grid{margin-top:12px; display:flex; flex-direction:column; gap:10px;}
+  .set-line{display:flex; align-items:center; gap:6px; font-size:13px;}
+  .set-line .setnum{width:24px; color:var(--ink-muted); flex:none; font-weight:700;}
   .set-line input{
-    width:64px; background:var(--surface-2); border:1px solid var(--line); border-radius:8px; color:var(--ink);
-    padding:8px; font-size:14px; font-family:inherit; text-align:center;
+    flex:1; min-width:0; background:var(--surface-2); border:1px solid var(--line); border-radius:8px; color:var(--ink);
+    padding:12px 4px; font-size:16px; font-family:inherit; text-align:center;
   }
-  .set-line .unit{color:var(--ink-muted); font-size:12px;}
+  .set-line .unit{color:var(--ink-muted); font-size:11px; flex:none;}
   .set-line .valid{
-    margin-left:auto; width:32px; height:32px; border-radius:8px; border:1px solid var(--line); background:var(--surface-2);
-    color:var(--ink-muted); cursor:pointer; flex:none;
+    margin-left:4px; width:42px; height:42px; border-radius:10px; border:1px solid var(--line); background:var(--surface-2);
+    color:var(--ink-muted); cursor:pointer; flex:none; font-size:17px;
   }
   .set-line .valid.done{background:var(--ok); border-color:var(--ok); color:#04170c;}
 
@@ -106,7 +106,7 @@
     border-top-left-radius:22px; border-top-right-radius:22px; padding:26px 24px calc(28px + env(safe-area-inset-bottom,0px));}
   @media(min-width:700px){.overlay{align-items:center;} .sheet{border-radius:22px; max-height:86vh;}}
   .sheet-top{display:flex; justify-content:space-between; align-items:flex-start; gap:12px;}
-  .closeBtn{flex:none; width:34px; height:34px; border-radius:50%; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); font-size:16px; cursor:pointer;}
+  .closeBtn{flex:none; width:40px; height:40px; border-radius:50%; border:1px solid var(--line); background:var(--surface-2); color:var(--ink); font-size:17px; cursor:pointer;}
   .cat{font-size:12px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.08em;}
   .sheet h2{font-size:34px; margin-top:6px;}
   .sheet p.lede{color:var(--ink-muted); margin-top:10px; font-size:14px;}
@@ -128,6 +128,12 @@
   .navrow::-webkit-scrollbar{display:none;}
   .navrow a{flex:1; text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:10px 14px; border-radius:999px; white-space:nowrap; text-decoration:none;}
   .navrow a.active{background:var(--ink); border-color:var(--ink); color:var(--bg);}
+
+  @media (max-width:600px){
+    input, select, textarea{ font-size:16px !important; }
+    .picker{ flex-direction:column; align-items:stretch; }
+    .picker select, .picker input{ width:100% !important; }
+  }
 </style>
 </head>
 <body>

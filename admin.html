@@ -62,8 +62,9 @@
   .chat-input{display:flex; border-top:1px solid var(--line); padding:10px;}
   .chat-input input{flex:1; background:none; border:none; outline:none; color:var(--ink); font-size:14px; padding:8px; font-family:inherit;}
   .chat-input button{background:var(--accent); color:var(--accent-ink); border:none; border-radius:10px; padding:0 16px; font-weight:700; cursor:pointer;}
-  .ex-mini{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-top:1px solid var(--line); font-size:13px;}
-  .ex-mini button{background:none; border:none; color:var(--ink-muted); cursor:pointer; font-size:15px;}
+  .ex-mini{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-top:1px solid var(--line); font-size:13px; gap:10px;}
+  .ex-mini > span:first-child{flex:1;}
+  .ex-mini button{background:var(--surface-2); border:1px solid var(--line); border-radius:8px; color:var(--ink-muted); cursor:pointer; font-size:15px; width:36px; height:36px; flex:none;}
   .picker{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
   .picker select, .picker input{background:var(--surface-2); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:9px; font-family:inherit; font-size:13px;}
   .toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--surface-2); border:1px solid var(--line); padding:12px 20px; border-radius:999px; font-size:13.5px; z-index:80; display:none;}
@@ -82,6 +83,12 @@
   .navrow::-webkit-scrollbar{display:none;}
   .navrow a{flex:1; text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:10px 14px; border-radius:999px; white-space:nowrap; text-decoration:none;}
   .navrow a.active{background:var(--ink); border-color:var(--ink); color:var(--bg);}
+
+  @media (max-width:600px){
+    input, select, textarea{ font-size:16px !important; }
+    .picker{ flex-direction:column; align-items:stretch; }
+    .picker select, .picker input{ width:100% !important; }
+  }
 </style>
 </head>
 <body>

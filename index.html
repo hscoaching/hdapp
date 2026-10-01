@@ -121,8 +121,8 @@
   .sheet .cat{font-size:12px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.08em;}
   .sheet h2{font-size:38px; margin-top:6px;}
   .closeBtn{
-    flex:none; width:34px; height:34px; border-radius:50%; border:1px solid var(--line);
-    background:var(--surface-2); color:var(--ink); font-size:16px; cursor:pointer;
+    flex:none; width:40px; height:40px; border-radius:50%; border:1px solid var(--line);
+    background:var(--surface-2); color:var(--ink); font-size:17px; cursor:pointer;
   }
   .sheet .lede{color:var(--ink-muted); margin-top:10px; font-size:14px;}
   .block{margin-top:22px;}
@@ -160,6 +160,12 @@
   .navrow::-webkit-scrollbar{display:none;}
   .navrow a{flex:1; text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:10px 14px; border-radius:999px; white-space:nowrap; text-decoration:none;}
   .navrow a.active{background:var(--ink); border-color:var(--ink); color:var(--bg);}
+
+  @media (max-width:600px){
+    input, select, textarea{ font-size:16px !important; }
+    .picker{ flex-direction:column; align-items:stretch; }
+    .picker select, .picker input{ width:100% !important; }
+  }
 </style>
 </head>
 <body>
