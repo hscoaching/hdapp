@@ -237,7 +237,7 @@ const MUSCLE_GROUP_OF = {
   "Quadriceps":"Jambes","Ischio-jambiers":"Jambes","Fessiers":"Jambes","Moyen fessier":"Jambes",
   "Mollets (gastrocnémien)":"Jambes","Soléaire":"Jambes","Adducteurs":"Jambes","Abducteurs":"Jambes",
   "Fléchisseurs de hanche":"Jambes",
-  "Grand dorsal":"Dos","Rhomboïdes":"Dos","Trapèzes":"Dos","Érecteurs du rachis":"Dos","Bas du dos":"Dos",
+  "Grand dorsal":"Dos","Rhomboïdes":"Dos","Trapèzes":"Dos","Érecteurs du rachis":"Dos","Lombaires":"Dos",
   "Pectoraux":"Pectoraux",
   "Deltoïde antérieur":"Épaules","Deltoïde latéral":"Épaules","Deltoïde postérieur":"Épaules",
   "Coiffe des rotateurs":"Épaules","Dentelé antérieur":"Épaules",
@@ -245,6 +245,42 @@ const MUSCLE_GROUP_OF = {
   "Avant-bras":"Bras","Avant-bras (fléchisseurs)":"Bras","Avant-bras (extenseurs)":"Bras",
   "Abdominaux":"Abdos","Obliques":"Abdos","Transverse":"Abdos"
 };
+
+// Libellés simplifiés pour le grand public dans les sous-filtres.
+// null = muscle trop technique, on ne lui donne pas de sous-filtre dédié
+// (l'exercice reste visible via "Tous").
+const MUSCLE_PUBLIC_LABEL = {
+  "Quadriceps":"Quadriceps",
+  "Ischio-jambiers":"Ischios",
+  "Fessiers":"Fessiers",
+  "Moyen fessier":"Fessiers",
+  "Mollets (gastrocnémien)":"Mollets",
+  "Soléaire":"Mollets",
+  "Adducteurs":"Intérieur de cuisse",
+  "Abducteurs":"Extérieur de hanche",
+  "Fléchisseurs de hanche":"Hanches",
+  "Grand dorsal":"Dorsaux",
+  "Rhomboïdes":"Haut du dos",
+  "Trapèzes":"Trapèzes",
+  "Érecteurs du rachis":"Lombaires",
+  "Lombaires":"Lombaires",
+  "Deltoïde antérieur":"Épaule avant",
+  "Deltoïde latéral":"Épaule latérale",
+  "Deltoïde postérieur":"Épaule arrière",
+  "Coiffe des rotateurs":null,
+  "Dentelé antérieur":null,
+  "Biceps":"Biceps",
+  "Triceps":"Triceps",
+  "Brachial":"Biceps",
+  "Brachioradial":"Avant-bras",
+  "Avant-bras":"Avant-bras",
+  "Avant-bras (fléchisseurs)":"Avant-bras",
+  "Avant-bras (extenseurs)":"Avant-bras",
+  "Abdominaux":"Abdominaux",
+  "Obliques":"Obliques",
+  "Transverse":"Abdominaux"
+};
+const PEC_ORDER = ["Bas des pectoraux","Milieu des pectoraux","Haut des pectoraux"];
 
 let exercises = [];
 let activeGroup = "Tous";
@@ -261,6 +297,30 @@ const sheet = document.getElementById('sheet');
 function exerciseMatchesGroup(ex, group){
   if(group === "Tous") return true;
   return (ex.primary_muscles||[]).some(m => MUSCLE_GROUP_OF[m] === group);
+}
+
+function pecRegion(ex){
+  const n = (ex.name||'').toLowerCase();
+  if(n.includes('incliné') || n.includes('incline')) return 'Haut des pectoraux';
+  if(n.includes('décliné') || n.includes('decline')) return 'Bas des pectoraux';
+  return 'Milieu des pectoraux';
+}
+
+// Libellés "grand public" des muscles sollicités par un exercice, pour un groupe donné.
+// Fusionne les termes trop techniques (ex. Soléaire -> Mollets) et masque ceux sans
+// équivalent clair (ex. Coiffe des rotateurs).
+function exerciseMuscleLabels(ex, group){
+  if(group === "Pectoraux"){
+    return exerciseMatchesGroup(ex, "Pectoraux") ? [pecRegion(ex)] : [];
+  }
+  const labels = new Set();
+  (ex.primary_muscles||[]).forEach(m=>{
+    if(MUSCLE_GROUP_OF[m] === group){
+      const label = MUSCLE_PUBLIC_LABEL[m];
+      if(label) labels.add(label);
+    }
+  });
+  return [...labels];
 }
 
 function renderChips(){
@@ -286,11 +346,14 @@ function renderSubChips(){
   const inGroup = exercises.filter(ex => exerciseMatchesGroup(ex, activeGroup));
   const counts = {};
   inGroup.forEach(ex=>{
-    (ex.primary_muscles||[]).forEach(m=>{
-      if(MUSCLE_GROUP_OF[m] === activeGroup) counts[m] = (counts[m]||0) + 1;
+    exerciseMuscleLabels(ex, activeGroup).forEach(label=>{
+      counts[label] = (counts[label]||0) + 1;
     });
   });
-  const muscles = Object.keys(counts).sort((a,b)=> counts[b]-counts[a]);
+  let muscles = Object.keys(counts).sort((a,b)=> counts[b]-counts[a]);
+  if(activeGroup === "Pectoraux"){
+    muscles = PEC_ORDER.filter(m => counts[m]);
+  }
   if(!muscles.length){
     subchipsEl.innerHTML = '';
     subchipsEl.classList.add('hidden');
@@ -313,7 +376,7 @@ function renderGrid(){
   const q = searchEl.value.trim().toLowerCase();
   const filtered = exercises.filter(ex=>{
     const matchGroup = exerciseMatchesGroup(ex, activeGroup);
-    const matchMuscle = !activeMuscle || (ex.primary_muscles||[]).includes(activeMuscle) || (ex.secondary_muscles||[]).includes(activeMuscle);
+    const matchMuscle = !activeMuscle || exerciseMuscleLabels(ex, activeGroup).includes(activeMuscle);
     const matchQ = !q || ex.name.toLowerCase().includes(q) || (ex.short_description||'').toLowerCase().includes(q);
     return matchGroup && matchMuscle && matchQ;
   });
