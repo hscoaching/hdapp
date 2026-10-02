@@ -85,6 +85,15 @@
   }
   .chip.active{background:var(--accent); border-color:var(--accent); color:var(--accent-ink);}
 
+  .subchips{display:flex; gap:6px; margin-top:10px; overflow-x:auto; padding-bottom:4px; scrollbar-width:none;}
+  .subchips::-webkit-scrollbar{display:none;}
+  .subchips.hidden{display:none;}
+  .subchip{
+    flex:none; font-size:12px; font-weight:600; padding:6px 13px; border-radius:999px;
+    border:1px solid var(--line); color:var(--ink-muted); cursor:pointer; background:transparent;
+  }
+  .subchip.active{background:var(--ink); border-color:var(--ink); color:var(--bg);}
+
   main{padding:28px 0 80px;}
   .grid{
     display:grid; grid-template-columns:repeat(auto-fill,minmax(220px,1fr)); gap:14px; margin-top:18px;
@@ -203,6 +212,7 @@
     </div>
 
     <div class="chips" id="chips"></div>
+    <div class="subchips" id="subchips"></div>
   </div>
 
   <div class="wrap">
@@ -222,33 +232,90 @@
 <script>
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2ZnRxZGJkaWJmeWxhdWFydGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MjEzMjIsImV4cCI6MjEwNjA5NzMyMn0._WLJkWncu1fwMnlakuPFuJr_I-uvgr_TwvMect8E-a0";
-const CATEGORIES = ["Tous","Jambes","Dos","Pectoraux","Épaules","Bras","Abdos"];
+const GROUPS = ["Jambes","Dos","Pectoraux","Épaules","Bras","Abdos"];
+const MUSCLE_GROUP_OF = {
+  "Quadriceps":"Jambes","Ischio-jambiers":"Jambes","Fessiers":"Jambes","Moyen fessier":"Jambes",
+  "Mollets (gastrocnémien)":"Jambes","Soléaire":"Jambes","Adducteurs":"Jambes","Abducteurs":"Jambes",
+  "Fléchisseurs de hanche":"Jambes",
+  "Grand dorsal":"Dos","Rhomboïdes":"Dos","Trapèzes":"Dos","Érecteurs du rachis":"Dos","Bas du dos":"Dos",
+  "Pectoraux":"Pectoraux",
+  "Deltoïde antérieur":"Épaules","Deltoïde latéral":"Épaules","Deltoïde postérieur":"Épaules",
+  "Coiffe des rotateurs":"Épaules","Dentelé antérieur":"Épaules",
+  "Biceps":"Bras","Triceps":"Bras","Brachial":"Bras","Brachioradial":"Bras",
+  "Avant-bras":"Bras","Avant-bras (fléchisseurs)":"Bras","Avant-bras (extenseurs)":"Bras",
+  "Abdominaux":"Abdos","Obliques":"Abdos","Transverse":"Abdos"
+};
 
 let exercises = [];
-let activeCat = "Tous";
+let activeGroup = "Tous";
+let activeMuscle = null;
 
 const grid = document.getElementById('grid');
 const chipsEl = document.getElementById('chips');
+const subchipsEl = document.getElementById('subchips');
 const emptyEl = document.getElementById('empty');
 const searchEl = document.getElementById('search');
 const overlay = document.getElementById('overlay');
 const sheet = document.getElementById('sheet');
 
+function exerciseMatchesGroup(ex, group){
+  if(group === "Tous") return true;
+  return (ex.primary_muscles||[]).some(m => MUSCLE_GROUP_OF[m] === group);
+}
+
 function renderChips(){
-  chipsEl.innerHTML = CATEGORIES.map(c =>
-    `<div class="chip ${c===activeCat?'active':''}" data-cat="${c}">${c}</div>`
+  const all = ["Tous", ...GROUPS];
+  chipsEl.innerHTML = all.map(c =>
+    `<div class="chip ${c===activeGroup?'active':''}" data-cat="${c}">${c}</div>`
   ).join('');
   [...chipsEl.children].forEach(chip=>{
-    chip.addEventListener('click', ()=>{ activeCat = chip.dataset.cat; renderChips(); renderGrid(); });
+    chip.addEventListener('click', ()=>{
+      activeGroup = chip.dataset.cat;
+      activeMuscle = null;
+      renderChips(); renderSubChips(); renderGrid();
+    });
+  });
+}
+
+function renderSubChips(){
+  if(activeGroup === "Tous"){
+    subchipsEl.innerHTML = '';
+    subchipsEl.classList.add('hidden');
+    return;
+  }
+  const inGroup = exercises.filter(ex => exerciseMatchesGroup(ex, activeGroup));
+  const counts = {};
+  inGroup.forEach(ex=>{
+    (ex.primary_muscles||[]).forEach(m=>{
+      if(MUSCLE_GROUP_OF[m] === activeGroup) counts[m] = (counts[m]||0) + 1;
+    });
+  });
+  const muscles = Object.keys(counts).sort((a,b)=> counts[b]-counts[a]);
+  if(!muscles.length){
+    subchipsEl.innerHTML = '';
+    subchipsEl.classList.add('hidden');
+    return;
+  }
+  subchipsEl.classList.remove('hidden');
+  const items = ["Tous", ...muscles];
+  subchipsEl.innerHTML = items.map(m =>
+    `<div class="subchip ${(m==="Tous" ? activeMuscle===null : activeMuscle===m)?'active':''}" data-m="${m}">${m}</div>`
+  ).join('');
+  [...subchipsEl.children].forEach(chip=>{
+    chip.addEventListener('click', ()=>{
+      activeMuscle = chip.dataset.m === "Tous" ? null : chip.dataset.m;
+      renderSubChips(); renderGrid();
+    });
   });
 }
 
 function renderGrid(){
   const q = searchEl.value.trim().toLowerCase();
   const filtered = exercises.filter(ex=>{
-    const matchCat = activeCat === "Tous" || ex.category === activeCat;
+    const matchGroup = exerciseMatchesGroup(ex, activeGroup);
+    const matchMuscle = !activeMuscle || (ex.primary_muscles||[]).includes(activeMuscle) || (ex.secondary_muscles||[]).includes(activeMuscle);
     const matchQ = !q || ex.name.toLowerCase().includes(q) || (ex.short_description||'').toLowerCase().includes(q);
-    return matchCat && matchQ;
+    return matchGroup && matchMuscle && matchQ;
   });
   grid.innerHTML = filtered.map(ex => `
     <button class="card" data-slug="${ex.slug}">
@@ -376,6 +443,7 @@ async function loadExercises(){
     return;
   }
   renderChips();
+  renderSubChips();
   renderGrid();
   const hashSlug = location.hash.replace('#','');
   if(hashSlug) openSheet(hashSlug, false);
