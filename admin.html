@@ -196,12 +196,13 @@ async function boot(){
   renderDashboard();
 }
 
-let currentTab = 'messages';
+let currentTab = 'clients';
 function renderDashboard(){
   app.innerHTML = `
     <h1>Bonjour coach 👋</h1>
     <div class="row-actions" style="margin-bottom:16px;"><button class="btn btn-ghost" onclick="openEntranceQr()">QR code d'entrée de salle</button></div>
     <div class="tabs">
+      <div class="tab" data-t="clients">Clients</div>
       <div class="tab" data-t="messages">Messages</div>
       <div class="tab" data-t="programmes">Programmes</div>
       <div class="tab" data-t="exercices">Fiches exercices</div>
@@ -213,9 +214,81 @@ function renderDashboard(){
 }
 function paint(){ [...document.querySelectorAll('.tab')].forEach(t=> t.classList.toggle('active', t.dataset.t===currentTab)); }
 function load(){
-  if(currentTab==='messages') renderMessages();
+  if(currentTab==='clients') renderClientsTab();
+  else if(currentTab==='messages') renderMessages();
   else if(currentTab==='programmes') renderProgramsTab();
   else renderExercisesTab();
+}
+
+// ================= CLIENTS =================
+async function renderClientsTab(){
+  document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
+  const clients = await api('/rest/v1/profiles?select=id,full_name,email&role=eq.client&order=full_name');
+  if(!clients.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucun client pour le moment.</div>'; return; }
+  const idList = clients.map(c=>c.id).join(',');
+  const [progs, sessions, convs, unreadMsgs] = await Promise.all([
+    api(`/rest/v1/programs?select=id,name,owner_user_id,created_at&owner_user_id=in.(${idList})&is_official=eq.false&order=created_at.desc`),
+    api(`/rest/v1/sessions?select=user_id,started_at&user_id=in.(${idList})&order=started_at.desc`),
+    api(`/rest/v1/conversations?select=id,user_id&user_id=in.(${idList})`),
+    api('/rest/v1/messages?select=conversation_id&sender=eq.user&read=eq.false')
+  ]);
+  const programByUser = {};
+  progs.forEach(p=>{ if(!programByUser[p.owner_user_id]) programByUser[p.owner_user_id] = p; });
+  const lastActivityByUser = {};
+  sessions.forEach(s=>{ if(s.user_id && !lastActivityByUser[s.user_id]) lastActivityByUser[s.user_id] = s.started_at; });
+  const convByUser = {}; convs.forEach(c=> convByUser[c.user_id] = c.id);
+  const unreadByConv = {}; unreadMsgs.forEach(m=> unreadByConv[m.conversation_id] = (unreadByConv[m.conversation_id]||0)+1);
+
+  const rows = clients.map(c=>{
+    const prog = programByUser[c.id] || null;
+    const last = lastActivityByUser[c.id] || null;
+    const convId = convByUser[c.id] || null;
+    const unread = convId ? (unreadByConv[convId]||0) : 0;
+    return { client:c, prog, last, convId, unread };
+  });
+  rows.sort((a,b)=>{
+    if(a.unread !== b.unread) return b.unread - a.unread;
+    const ta = a.last ? new Date(a.last).getTime() : 0;
+    const tb = b.last ? new Date(b.last).getTime() : 0;
+    return tb - ta;
+  });
+
+  document.getElementById('tabBody').innerHTML = rows.map(r=>{
+    const name = r.client.full_name || r.client.email || 'Client';
+    const esc = name.replace(/'/g,"\\'");
+    const progLine = r.prog ? `Programme : ${r.prog.name}` : 'Aucun programme assigné';
+    const lastLine = r.last ? `Dernière séance : ${new Date(r.last).toLocaleDateString('fr-FR')}` : 'Aucune séance enregistrée';
+    return `<div class="card" style="cursor:default;">
+      <h3>${name} ${r.unread?`<span class="badge">${r.unread}</span>`:''}</h3>
+      <p>${r.client.email||''}</p>
+      <p style="margin-top:8px;">${progLine}</p>
+      <p>${lastLine}</p>
+      <div class="row-actions" style="margin-top:10px;">
+        ${r.convId ? `<button class="btn btn-ghost btn-sm" onclick="goToClientConversation('${r.convId}','${esc}')">💬 Message${r.unread?` (${r.unread})`:''}</button>` : ''}
+        ${r.prog ? `<button class="btn btn-ghost btn-sm" onclick="goToProgramForm('${r.prog.id}')">📋 Voir le programme</button>` : `<button class="btn btn-ghost btn-sm" onclick="goToNewProgramFor('${r.client.id}')">+ Assigner un programme</button>`}
+      </div>
+    </div>`;
+  }).join('');
+}
+async function goToClientConversation(convId, name){
+  currentTab = 'messages'; msgSub = 'conversations'; paint();
+  document.getElementById('tabBody').innerHTML = `
+    <div class="subtabs">
+      <div class="subtab active" data-s="conversations">Discussions clients</div>
+      <div class="subtab" data-s="contacts">Demandes de contact</div>
+    </div>
+    <div id="msgBody"><div class="empty">Chargement…</div></div>
+  `;
+  [...document.querySelectorAll('.subtab')].forEach(t=> t.addEventListener('click', ()=>{ msgSub=t.dataset.s; paintSub(); loadSub(); }));
+  await openConversation(convId, name);
+}
+async function goToProgramForm(programId){
+  currentTab = 'programmes'; paint();
+  await renderProgramForm(programId);
+}
+async function goToNewProgramFor(clientId){
+  currentTab = 'programmes'; paint();
+  await renderProgramForm(null, { name:'', description:'', is_official:false, owner_user_id:clientId, items:[] });
 }
 
 // ================= MESSAGES =================

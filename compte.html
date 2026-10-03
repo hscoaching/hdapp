@@ -408,14 +408,16 @@ async function toggleSessionLogs(card, sessionId){
 // ---------- Progression ----------
 async function loadProgression(){
   document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
-  let rows = [];
+  let sessions = [], rows = [];
   try{
-    rows = await (await apiFetch(`/rest/v1/session_logs?select=exercise_id,charge,session_id,sessions(started_at),exercises(name)&charge=not.is.null`)).json();
+    sessions = await (await apiFetch(`/rest/v1/sessions?select=id,started_at&order=started_at`)).json();
+    rows = await (await apiFetch(`/rest/v1/session_logs?select=exercise_id,charge,reps,session_id,sessions(started_at),exercises(name)`)).json();
   }catch(e){ document.getElementById('tabBody').innerHTML = '<div class="empty">Impossible de charger ta progression pour le moment.</div>'; return; }
-  if(!Array.isArray(rows) || !rows.length){
-    document.getElementById('tabBody').innerHTML = '<div class="empty">Pas encore de charges enregistrées. Elles apparaîtront ici dès ta première séance où tu notes des poids.</div>';
+  if(!Array.isArray(sessions) || !sessions.length){
+    document.getElementById('tabBody').innerHTML = '<div class="empty">Pas encore de séance enregistrée. Ton suivi apparaîtra ici dès ta première séance.</div>';
     return;
   }
+
   const byEx = {};
   rows.forEach(r=>{
     if(r.charge==null || !r.sessions || !r.sessions.started_at) return;
@@ -428,9 +430,89 @@ async function loadProgression(){
     .map(ex => ({ name: ex.name, points: Object.values(ex.bySession).sort((a,b)=> new Date(a.date)-new Date(b.date)) }))
     .filter(ex => ex.points.length)
     .sort((a,b)=> b.points.length - a.points.length);
-  document.getElementById('tabBody').innerHTML = cards.length
-    ? cards.map(progressionCardHtml).join('')
-    : '<div class="empty">Pas encore assez de données.</div>';
+
+  let html = frequencyCardHtml(sessions) + volumeCardHtml(rows);
+  html += cards.length ? cards.map(progressionCardHtml).join('') : '<div class="empty">Pas encore de charges enregistrées par exercice. Elles apparaîtront ici dès ta première séance où tu notes des poids.</div>';
+  document.getElementById('tabBody').innerHTML = html;
+}
+function weekKey(d){
+  const date = new Date(d);
+  const day = (date.getDay()+6)%7; // lundi=0
+  date.setDate(date.getDate()-day);
+  date.setHours(0,0,0,0);
+  return date.toISOString().slice(0,10);
+}
+function frequencyCardHtml(sessions){
+  const weeks = [];
+  const today = new Date();
+  for(let i=7;i>=0;i--){
+    const d = new Date(today);
+    d.setDate(d.getDate() - i*7);
+    weeks.push(weekKey(d));
+  }
+  const counts = {};
+  weeks.forEach(w=> counts[w]=0);
+  sessions.forEach(s=>{
+    const wk = weekKey(s.started_at);
+    if(wk in counts) counts[wk]++;
+  });
+  const max = Math.max(1, ...Object.values(counts));
+  const barW = 24, gap = 10, h = 70;
+  const bars = weeks.map((w,i)=>{
+    const c = counts[w];
+    const bh = Math.max(Math.round((c/max) * (h-16)), c>0?3:0);
+    const x = i*(barW+gap);
+    return `<rect x="${x}" y="${h-bh}" width="${barW}" height="${bh}" rx="4" style="fill:var(--accent);"/>
+      <text x="${x+barW/2}" y="${h+14}" text-anchor="middle" style="font-size:9px; fill:var(--ink-muted);">${c}</text>`;
+  }).join('');
+  const totalW = weeks.length*(barW+gap)-gap;
+  const thisWeekCount = counts[weeks[weeks.length-1]];
+  return `<div class="card progress-card">
+    <h3>Fréquence des séances</h3>
+    <p>${sessions.length} séance${sessions.length>1?'s':''} au total · ${thisWeekCount} cette semaine</p>
+    <svg width="${totalW}" height="${h+20}" viewBox="0 0 ${totalW} ${h+20}">${bars}</svg>
+    <p style="margin-top:8px;color:var(--ink-muted);font-size:12px;">8 dernières semaines</p>
+  </div>`;
+}
+function volumeCardHtml(rows){
+  const bySession = {};
+  rows.forEach(r=>{
+    if(r.reps==null || r.charge==null || !r.sessions || !r.sessions.started_at) return;
+    if(!bySession[r.session_id]) bySession[r.session_id] = { date: r.sessions.started_at, vol:0 };
+    bySession[r.session_id].vol += r.reps * r.charge;
+  });
+  const points = Object.values(bySession).sort((a,b)=> new Date(a.date)-new Date(b.date)).slice(-10);
+  if(!points.length){
+    return `<div class="card progress-card"><h3>Volume total</h3><p>Pas encore assez de données (poids ET répétitions notés sur une même séance) pour calculer ton volume d'entraînement.</p></div>`;
+  }
+  const w = 280, h = 64, pad = 8;
+  const vols = points.map(p=>p.vol);
+  const max = Math.max(...vols) || 1;
+  const stepX = points.length>1 ? (w-2*pad)/(points.length-1) : 0;
+  const coords = points.map((p,i)=>{
+    const x = points.length>1 ? pad+i*stepX : w/2;
+    const y = h-pad-(p.vol/max)*(h-2*pad);
+    return [x,y];
+  });
+  const poly = coords.map(c=> c[0].toFixed(1)+','+c[1].toFixed(1)).join(' ');
+  const dots = coords.map(c=> `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="2.5" style="fill:var(--accent);"/>`).join('');
+  const last = points[points.length-1].vol;
+  const first = points[0].vol;
+  const delta = Math.round(last-first);
+  let deltaTxt;
+  if(points.length < 2) deltaTxt = `1 séance avec volume calculé`;
+  else if(delta > 0) deltaTxt = `+${delta} kg de volume depuis ta première séance notée ici`;
+  else if(delta < 0) deltaTxt = `${delta} kg de volume depuis ta première séance notée ici`;
+  else deltaTxt = `Volume stable depuis ta première séance notée ici`;
+  return `<div class="card progress-card">
+    <h3>Volume total</h3>
+    <p>${deltaTxt}</p>
+    <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      <polyline points="${poly}" style="fill:none; stroke:var(--accent); stroke-width:2;" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}
+    </svg>
+    <p style="margin-top:8px;color:var(--ink-muted);font-size:12px;">Volume = répétitions × charge, cumulé sur toutes les séries d'une séance · ${points.length} dernière${points.length>1?'s':''} séance${points.length>1?'s':''} avec données complètes.</p>
+  </div>`;
 }
 function progressionCardHtml(ex){
   const pts = ex.points;
