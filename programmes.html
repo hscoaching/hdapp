@@ -64,6 +64,19 @@
 
   .empty{color:var(--ink-muted); font-size:13.5px; padding:16px 0;}
 
+  #printProgramArea{display:none;}
+  @media print{
+    body *{visibility:hidden;}
+    #printProgramArea, #printProgramArea *{visibility:visible;}
+    #printProgramArea{display:block; position:fixed; inset:0; background:#fff; padding:40px;}
+    #printProgramArea h1{font-family:'Bebas Neue',sans-serif; font-size:34px; color:#000; margin:0 0 6px;}
+    #printProgramArea p{color:#333; font-size:14px; margin:0 0 10px;}
+    #printProgramArea .pmeta{color:#777; font-size:12px; margin-bottom:18px; text-transform:uppercase; letter-spacing:.5px;}
+    #printProgramArea .pex{border-top:1px solid #ccc; padding:12px 0; color:#000;}
+    #printProgramArea .pex b{display:block; font-size:16px; margin-bottom:2px;}
+    #printProgramArea .pex span{font-size:13px; color:#444;}
+  }
+
   /* Détail programme / séance */
   .backlink{font-size:13px; color:var(--ink-muted); display:inline-block; margin-bottom:16px;}
   .backlink:hover{color:var(--accent);}
@@ -184,6 +197,7 @@
 
 
 <main class="wrap" id="app"></main>
+<div id="printProgramArea"></div>
 
 <footer>HS Coaching · Régularité &amp; dépassement de soi · v3</footer>
 
@@ -413,6 +427,7 @@ function route(){
 }
 
 // ---------- Vue liste ----------
+let allPrograms = [];
 async function renderList(){
   app.innerHTML = `
     <div class="eyebrow">PROGRAMMES</div>
@@ -422,18 +437,29 @@ async function renderList(){
       <button class="btn btn-accent" onclick="location.hash='#creer'">+ Créer mon programme</button>
       <button class="btn btn-ghost" onclick="openContactModal()">Contacter un coach</button>
     </div>
+    <div class="field"><label>Chercher un programme</label><input id="progSearch" type="text" placeholder="Nom, description…" oninput="filterProgramList()"></div>
     <div class="section"><h2>Programmes du coach</h2><div class="prog-grid" id="officialGrid"><div class="empty">Chargement…</div></div></div>
     <div class="section"><h2>Mes programmes</h2><div class="prog-grid" id="mineGrid"><div class="empty">Chargement…</div></div></div>
   `;
-  let programs = [];
-  try{ programs = await listPrograms(); }catch(e){ console.error(e); }
-  markProgramsSeen(programs);
+  allPrograms = [];
+  try{ allPrograms = await listPrograms(); }catch(e){ console.error(e); }
+  markProgramsSeen(allPrograms);
+  renderProgramGrids(allPrograms);
+}
+function renderProgramGrids(programs){
   const official = programs.filter(p=>p.is_official);
   const mine = programs.filter(p=>!p.is_official);
   document.getElementById('officialGrid').innerHTML = official.length ? official.map(cardHtml).join('') :
     '<div class="empty">Aucun programme du coach pour le moment.</div>';
   document.getElementById('mineGrid').innerHTML = mine.length ? mine.map(cardHtml).join('') :
     '<div class="empty">Tu n\'as pas encore créé de programme perso.</div>';
+}
+function filterProgramList(){
+  const q = document.getElementById('progSearch').value.trim().toLowerCase();
+  const matches = !q ? allPrograms : allPrograms.filter(p=>
+    (p.name||'').toLowerCase().includes(q) || (p.description||'').toLowerCase().includes(q)
+  );
+  renderProgramGrids(matches);
 }
 function cardHtml(p){
   return `<button class="prog-card" onclick="location.hash='#programme/${p.id}'">
@@ -444,13 +470,16 @@ function cardHtml(p){
 }
 
 // ---------- Détail programme ----------
+let currentProgramDetail = null;
 async function renderProgramDetail(programId){
   app.innerHTML = `<a class="backlink" href="#">← Tous les programmes</a><div id="progBody"><div class="empty">Chargement…</div></div>`;
   let items = [];
   try{ items = await programExercisesFor(programId); }
   catch(e){ document.getElementById('progBody').innerHTML = '<div class="empty">Programme introuvable.</div>'; return; }
   let progName = '';
-  try{ const all = await listPrograms(); progName = (all.find(x=>x.id===programId)||{}).name || ''; }catch(e){}
+  let progDesc = '';
+  try{ const all = await listPrograms(); const p = all.find(x=>x.id===programId)||{}; progName = p.name || ''; progDesc = p.description || ''; }catch(e){}
+  currentProgramDetail = { id: programId, name: progName, description: progDesc, items };
   const rows = items.map(it=>{
     const ex = exercisesById[it.exercise_id];
     if(!ex) return '';
@@ -465,8 +494,27 @@ async function renderProgramDetail(programId){
     <div class="eyebrow">PROGRAMME</div>
     <h1 class="page">${progName}</h1>
     <div id="progExList">${rows || '<div class="empty">Aucun exercice dans ce programme.</div>'}</div>
+    <div class="actions-row">
+      <button class="btn btn-ghost" onclick="printProgram()">🖨️ Exporter en PDF</button>
+    </div>
     <div class="session-bar"><button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}/seance'">Démarrer la séance</button></div>
   `;
+}
+function printProgram(){
+  if(!currentProgramDetail) return;
+  const { name, description, items } = currentProgramDetail;
+  const rows = items.map(it=>{
+    const ex = exercisesById[it.exercise_id];
+    if(!ex) return '';
+    return `<div class="pex"><b>${ex.name}</b><span>${it.sets||'-'} séries × ${it.reps||'-'} · repos ${it.rest_seconds||'-'}s</span></div>`;
+  }).join('');
+  document.getElementById('printProgramArea').innerHTML = `
+    <h1>${name}</h1>
+    ${description ? `<p>${description}</p>` : ''}
+    <div class="pmeta">HS Coaching — Programme d'entraînement</div>
+    ${rows}
+  `;
+  window.print();
 }
 
 // ---------- Séance en temps réel ----------

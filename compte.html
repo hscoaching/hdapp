@@ -323,6 +323,7 @@ async function renderDashboard(){
       <div class="tab" data-tab="programmes">Mes programmes</div>
       <div class="tab" data-tab="historique">Historique</div>
       <div class="tab" data-tab="progression">Progression</div>
+      ${isCoachAccount ? '' : '<div class="tab" data-tab="poids">Poids</div>'}
       ${isCoachAccount ? '' : '<div class="tab" data-tab="chat">Discussion coach</div>'}
       <div class="tab" data-tab="profil">Profil</div>
     </div>
@@ -341,6 +342,7 @@ function loadTab(){
   if(currentTab==='programmes') loadProgrammes();
   else if(currentTab==='historique') loadHistorique();
   else if(currentTab==='progression') loadProgression();
+  else if(currentTab==='poids') loadPoids();
   else if(currentTab==='chat') loadChat();
   else loadProfil();
 }
@@ -555,6 +557,109 @@ function progressionCardHtml(ex){
     ${svg}
     <p style="margin-top:8px;color:var(--ink-muted);font-size:12px;">Dernière charge notée : ${last} kg · ${pts.length} séance${pts.length>1?'s':''} suivie${pts.length>1?'s':''}</p>
   </div>`;
+}
+
+// ---------- Poids / mensurations ----------
+let bodyLogs = [];
+async function loadPoids(){
+  document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
+  try{
+    const res = await apiFetch(`/rest/v1/body_logs?select=*&order=logged_at.asc`);
+    bodyLogs = await res.json();
+    if(!Array.isArray(bodyLogs)) bodyLogs = [];
+  }catch(e){ bodyLogs = []; }
+  renderPoidsTab();
+}
+function renderPoidsTab(){
+  document.getElementById('tabBody').innerHTML = `
+    <div class="card">
+      <h3>Nouvelle pesée</h3>
+      <div class="field"><label>Poids (kg)</label><input id="newWeight" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 78.5"></div>
+      <div class="field"><label>Tour de taille (cm, optionnel)</label><input id="newWaist" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 82"></div>
+      <button class="btn btn-accent" style="margin-top:4px;" onclick="addBodyLog()">Enregistrer</button>
+    </div>
+    ${weightChartHtml(bodyLogs)}
+    ${bodyLogsListHtml(bodyLogs)}
+  `;
+}
+function weightChartHtml(logs){
+  const pts = logs.filter(l=>l.weight_kg!=null).slice(-20);
+  if(pts.length < 2){
+    return `<div class="card progress-card"><h3>Évolution du poids</h3><p>Ajoute au moins deux pesées pour voir ta courbe d'évolution.</p></div>`;
+  }
+  const w = 280, h = 64, pad = 8;
+  const weights = pts.map(p=>p.weight_kg);
+  const min = Math.min(...weights), max = Math.max(...weights);
+  const range = (max-min) || 1;
+  const stepX = (w-2*pad)/(pts.length-1);
+  const coords = pts.map((p,i)=>{
+    const x = pad+i*stepX;
+    const y = h-pad-((p.weight_kg-min)/range)*(h-2*pad);
+    return [x,y];
+  });
+  const poly = coords.map(c=> c[0].toFixed(1)+','+c[1].toFixed(1)).join(' ');
+  const dots = coords.map(c=> `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="2.5" style="fill:var(--accent);"/>`).join('');
+  const first = pts[0].weight_kg, last = pts[pts.length-1].weight_kg;
+  const delta = Math.round((last-first)*10)/10;
+  let deltaTxt;
+  if(delta > 0) deltaTxt = `+${delta} kg depuis ta première pesée affichée`;
+  else if(delta < 0) deltaTxt = `${delta} kg depuis ta première pesée affichée`;
+  else deltaTxt = `Poids stable depuis ta première pesée affichée`;
+  return `<div class="card progress-card">
+    <h3>Évolution du poids</h3>
+    <p>${deltaTxt}</p>
+    <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      <polyline points="${poly}" style="fill:none; stroke:var(--accent); stroke-width:2;" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}
+    </svg>
+    <p style="margin-top:8px;color:var(--ink-muted);font-size:12px;">Dernier poids noté : ${last} kg · ${pts.length} pesée${pts.length>1?'s':''} affichée${pts.length>1?'s':''}</p>
+  </div>`;
+}
+function bodyLogsListHtml(logs){
+  if(!logs.length) return '<div class="empty">Aucune pesée enregistrée pour l\'instant.</div>';
+  const rows = [...logs].reverse().map(l=>{
+    const d = new Date(l.logged_at);
+    const parts = [];
+    if(l.weight_kg!=null) parts.push(`${l.weight_kg} kg`);
+    if(l.waist_cm!=null) parts.push(`taille ${l.waist_cm} cm`);
+    return `<div class="card" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
+      <div><div class="tag">${d.toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'})}</div>
+      <h3 style="margin-top:4px;">${parts.join(' · ') || '—'}</h3></div>
+      <button class="btn btn-ghost btn-sm" onclick="deleteBodyLog('${l.id}')">Supprimer</button>
+    </div>`;
+  }).join('');
+  return `<div class="section"><h2>Historique</h2>${rows}</div>`;
+}
+async function addBodyLog(){
+  const weightEl = document.getElementById('newWeight');
+  const waistEl = document.getElementById('newWaist');
+  const weight = weightEl.value ? parseFloat(weightEl.value) : null;
+  const waist = waistEl.value ? parseFloat(waistEl.value) : null;
+  if(weight==null && waist==null){ alert('Renseigne au moins un poids ou un tour de taille.'); return; }
+  const btn = event.target;
+  btn.disabled = true; btn.textContent = 'Enregistrement...';
+  try{
+    const res = await apiFetch(`/rest/v1/body_logs`, {
+      method:'POST',
+      headers:{ Prefer:'return=representation' },
+      body: JSON.stringify({ user_id: getSession().user.id, weight_kg: weight, waist_cm: waist })
+    });
+    if(!res.ok) throw new Error(await res.text());
+    const [created] = await res.json();
+    bodyLogs.push(created);
+    renderPoidsTab();
+  }catch(e){
+    btn.disabled = false; btn.textContent = 'Enregistrer';
+    alert('Impossible d\'enregistrer la pesée, réessaie.');
+  }
+}
+async function deleteBodyLog(id){
+  if(!confirm('Supprimer cette pesée ?')) return;
+  try{
+    await apiFetch(`/rest/v1/body_logs?id=eq.${id}`, { method:'DELETE' });
+    bodyLogs = bodyLogs.filter(l=>l.id!==id);
+    renderPoidsTab();
+  }catch(e){ alert('Impossible de supprimer cette pesée.'); }
 }
 
 let chatPoll = null; let conversationId = null;
