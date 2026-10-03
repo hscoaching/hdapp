@@ -157,6 +157,14 @@
     margin-top:10px; font-size:13px; font-weight:600; background:none; color:var(--accent);
     border:1px solid var(--accent); padding:7px 14px; border-radius:999px; cursor:pointer;
   }
+  .editBtn{
+    flex:none; width:40px; height:40px; border-radius:50%; border:1px solid var(--line);
+    background:var(--surface-2); color:var(--ink); font-size:16px; cursor:pointer;
+  }
+  .field{margin-top:14px;}
+  .field label{display:block; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-muted); margin-bottom:6px;}
+  .field input, .field select, .field textarea{width:100%; background:var(--surface-2); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px 12px; font-family:inherit; font-size:14px;}
+  .field textarea{resize:vertical; min-height:80px;}
 
   footer{border-top:1px solid var(--line); padding:26px 0; text-align:center; color:var(--ink-muted); font-size:12.5px;}
 
@@ -435,7 +443,10 @@ function openSheet(slug, pushHash){
         <div class="cat">${ex.category}</div>
         <h2>${ex.name}</h2>
       </div>
-      <button class="closeBtn" id="closeSheet">✕</button>
+      <div style="display:flex; gap:8px;">
+        ${showQr ? `<button class="editBtn" id="editSheetBtn" title="Modifier cette fiche">✏️</button>` : ''}
+        <button class="closeBtn" id="closeSheet">✕</button>
+      </div>
     </div>
     ${imgTag(ex, '', 'width:100%;border-radius:12px;margin-top:16px;')}
     <p class="lede">${ex.short_description||''}</p>
@@ -469,6 +480,10 @@ function openSheet(slug, pushHash){
     document.getElementById('printQr').addEventListener('click', ()=> printFiche(ex, fullUrl));
   }
   document.getElementById('closeSheet').addEventListener('click', closeSheet);
+  if(showQr){
+    const editBtn = document.getElementById('editSheetBtn');
+    if(editBtn) editBtn.addEventListener('click', ()=> renderSheetEdit(ex));
+  }
   overlay.classList.add('open');
   if(pushHash) history.replaceState(null,'', '#'+ex.slug);
 }
@@ -476,6 +491,70 @@ function openSheet(slug, pushHash){
 function closeSheet(){
   overlay.classList.remove('open');
   history.replaceState(null,'', location.pathname);
+}
+
+async function coachApi(path, opts={}){
+  const s = JSON.parse(localStorage.getItem('hs_session')||'null');
+  const res = await fetch(`${SUPABASE_URL}${path}`, {
+    cache:'no-store', ...opts,
+    headers:{ apikey: SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token||SUPABASE_ANON_KEY}`, 'Content-Type':'application/json', ...(opts.headers||{}) }
+  });
+  if(!res.ok){ throw new Error(await res.text()); }
+  const text = await res.text();
+  return text ? JSON.parse(text) : null;
+}
+
+function sheetEditHtml(ex){
+  return `
+    <div class="sheet-top">
+      <h2 style="font-size:22px;">Modifier la fiche</h2>
+      <button class="closeBtn" id="closeSheet">✕</button>
+    </div>
+    <div class="field"><label>Nom</label><input id="seName" value="${(ex.name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field"><label>Catégorie</label>
+      <select id="seCat">${GROUPS.map(c=>`<option ${ex.category===c?'selected':''}>${c}</option>`).join('')}</select>
+    </div>
+    <div class="field"><label>Description courte</label><input id="seShort" value="${(ex.short_description||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field"><label>Image (URL)</label><input id="seImg" value="${(ex.image_url||'').replace(/"/g,'&quot;')}" placeholder="https://..."></div>
+    <div class="field"><label>Consigne</label><textarea id="seInstr" rows="5">${ex.instructions||''}</textarea></div>
+    <div class="field"><label>Points techniques (un par ligne)</label><textarea id="sePoints" rows="4">${(ex.technique_points||[]).join('\n')}</textarea></div>
+    <div style="display:flex; gap:10px; margin-top:18px;">
+      <button class="printBtn" id="seSave" style="background:var(--accent); color:var(--accent-ink); border-color:var(--accent);">Enregistrer</button>
+      <button class="printBtn" id="seCancel">Annuler</button>
+    </div>
+  `;
+}
+
+function renderSheetEdit(ex){
+  sheet.innerHTML = sheetEditHtml(ex);
+  document.getElementById('closeSheet').addEventListener('click', closeSheet);
+  document.getElementById('seCancel').addEventListener('click', ()=> openSheet(ex.slug));
+  document.getElementById('seSave').addEventListener('click', ()=> saveSheetEdit(ex));
+}
+
+async function saveSheetEdit(ex){
+  const btn = document.getElementById('seSave');
+  const name = document.getElementById('seName').value.trim();
+  if(!name){ alert('Le nom est requis.'); return; }
+  const body = {
+    name,
+    category: document.getElementById('seCat').value,
+    short_description: document.getElementById('seShort').value.trim(),
+    image_url: document.getElementById('seImg').value.trim() || null,
+    instructions: document.getElementById('seInstr').value.trim(),
+    technique_points: document.getElementById('sePoints').value.split('\n').map(s=>s.trim()).filter(Boolean)
+  };
+  btn.disabled = true; btn.textContent = 'Enregistrement…';
+  try{
+    await coachApi(`/rest/v1/exercises?id=eq.${ex.id}`, { method:'PATCH', body: JSON.stringify(body) });
+    const idx = exercises.findIndex(e=>e.id===ex.id);
+    if(idx>-1) exercises[idx] = { ...exercises[idx], ...body };
+    renderGrid();
+    openSheet(ex.slug);
+  }catch(e){
+    alert("Impossible d'enregistrer la fiche. Vérifie ta connexion et réessaie.");
+    btn.disabled = false; btn.textContent = 'Enregistrer';
+  }
 }
 
 function printFiche(ex, fullUrl){
