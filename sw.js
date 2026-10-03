@@ -3,7 +3,7 @@
 // et met en cache les réponses Supabase (exercices, images) en "stale-while-revalidate"
 // pour que la bibliothèque reste consultable même avec un wifi de salle capricieux.
 
-const CACHE_NAME = 'hs-coaching-v15';
+const CACHE_NAME = 'hs-coaching-v16';
 const APP_SHELL = [
   'index.html',
   'programmes.html',
@@ -45,6 +45,18 @@ function cacheFirst(request) {
   });
 }
 
+function networkFirst(request) {
+  return fetch(request, { cache: 'no-cache' })
+    .then((res) => {
+      if (res && res.ok) {
+        const copy = res.clone();
+        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
+      }
+      return res;
+    })
+    .catch(() => caches.match(request).then((c) => c || caches.match('index.html')));
+}
+
 function staleWhileRevalidate(request) {
   return caches.open(CACHE_NAME).then((cache) =>
     cache.match(request).then((cached) => {
@@ -72,7 +84,10 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.origin === self.location.origin) {
-    event.respondWith(cacheFirst(event.request));
+    // Pages HTML : réseau d'abord (la dernière version publiée s'affiche toujours),
+    // cache seulement en secours hors-ligne. Le reste (icônes, manifest) : cache d'abord.
+    const isPage = event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/');
+    event.respondWith(isPage ? networkFirst(event.request) : cacheFirst(event.request));
   } else {
     // Endpoints propres à un utilisateur (messages, conversations, programmes assignés,
     // profil...) : jamais de cache, même en secours — toujours le réseau.
