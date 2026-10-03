@@ -520,9 +520,13 @@ async function finishSession(programId){
 
 // ---------- Création de programme ----------
 let draftExercises = [];
+function pickExOptionsHtml(list){
+  return list.length
+    ? list.map(e=>`<option value="${e.id}">${e.name} (${e.category})</option>`).join('')
+    : '<option disabled>Aucun résultat</option>';
+}
 function renderCreate(){
   draftExercises = [];
-  const options = exercises.map(e=>`<option value="${e.id}">${e.name} (${e.category})</option>`).join('');
   app.innerHTML = `
     <a class="backlink" href="#">← Annuler</a>
     <div class="eyebrow">NOUVEAU PROGRAMME</div>
@@ -533,8 +537,9 @@ function renderCreate(){
 
     <div class="section">
       <h2>Exercices</h2>
+      <div class="field"><label>Chercher un exercice</label><input id="pSearch" type="text" placeholder="Nom, catégorie, muscle…" oninput="filterPickEx()"></div>
       <div class="picker">
-        <select id="pickEx">${options}</select>
+        <select id="pickEx">${pickExOptionsHtml(exercises)}</select>
         <input id="pSets" type="number" placeholder="Séries" style="width:80px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
         <input id="pReps" type="text" placeholder="Reps" style="width:80px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
         <button class="btn btn-ghost btn-sm" onclick="addDraftExercise()">Ajouter</button>
@@ -544,6 +549,16 @@ function renderCreate(){
 
     <div class="actions-row"><button class="btn btn-accent" onclick="saveProgram()">Enregistrer le programme</button></div>
   `;
+}
+function filterPickEx(){
+  const q = document.getElementById('pSearch').value.trim().toLowerCase();
+  const matches = !q ? exercises : exercises.filter(e=>
+    e.name.toLowerCase().includes(q)
+    || (e.category||'').toLowerCase().includes(q)
+    || (e.primary_muscles||[]).some(m=>(m||'').toLowerCase().includes(q))
+    || (e.secondary_muscles||[]).some(m=>(m||'').toLowerCase().includes(q))
+  );
+  document.getElementById('pickEx').innerHTML = pickExOptionsHtml(matches);
 }
 function addDraftExercise(){
   const exId = document.getElementById('pickEx').value;

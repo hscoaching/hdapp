@@ -109,7 +109,7 @@
   .card-body{padding:16px;}
   .card:hover{border-color:var(--accent);}
   .card .cat{font-size:11px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.08em;}
-  .card h3{font-size:26px; margin-top:6px;}
+  .card h3{font-size:26px; margin-top:6px; color:var(--ink);}
   .card p{color:var(--ink-muted); font-size:13px; margin-top:8px; line-height:1.4;}
 
   .empty{color:var(--ink-muted); padding:40px 0; text-align:center; font-size:14px;}
@@ -193,7 +193,7 @@
     .card-body{ padding:6px 5px; }
     .card .cat{ display:none; }
     .card h3{
-      font-size:11.5px; margin-top:0; line-height:1.15;
+      font-size:11.5px; margin-top:0; line-height:1.15; color:var(--ink);
       display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
     }
     .card p{ display:none; }
@@ -510,10 +510,17 @@ function closeSheet(){
 
 async function coachApi(path, opts={}){
   const s = JSON.parse(localStorage.getItem('hs_session')||'null');
-  const res = await fetch(`${SUPABASE_URL}${path}`, {
-    cache:'no-store', ...opts,
-    headers:{ apikey: SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token||SUPABASE_ANON_KEY}`, 'Content-Type':'application/json', ...(opts.headers||{}) }
-  });
+  const controller = new AbortController();
+  const timeoutId = setTimeout(()=> controller.abort(), 15000);
+  let res;
+  try{
+    res = await fetch(`${SUPABASE_URL}${path}`, {
+      cache:'no-store', ...opts, signal: controller.signal,
+      headers:{ apikey: SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token||SUPABASE_ANON_KEY}`, 'Content-Type':'application/json', ...(opts.headers||{}) }
+    });
+  } finally {
+    clearTimeout(timeoutId);
+  }
   if(!res.ok){ throw new Error(await res.text()); }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -567,8 +574,8 @@ async function saveSheetEdit(ex){
     renderGrid();
     openSheet(ex.slug);
   }catch(e){
-    alert("Impossible d'enregistrer la fiche. Vérifie ta connexion et réessaie.");
     btn.disabled = false; btn.textContent = 'Enregistrer';
+    alert("Impossible d'enregistrer la fiche. Vérifie ta connexion et réessaie.");
   }
 }
 
