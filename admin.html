@@ -227,6 +227,8 @@ function load(){
 }
 
 // ================= CLIENTS =================
+let clientRows = [];
+let clientSearchQ = '';
 async function renderClientsTab(){
   document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
   const clients = await api('/rest/v1/profiles?select=id,full_name,email&role=eq.client&order=full_name');
@@ -245,21 +247,35 @@ async function renderClientsTab(){
   const convByUser = {}; convs.forEach(c=> convByUser[c.user_id] = c.id);
   const unreadByConv = {}; unreadMsgs.forEach(m=> unreadByConv[m.conversation_id] = (unreadByConv[m.conversation_id]||0)+1);
 
-  const rows = clients.map(c=>{
+  clientRows = clients.map(c=>{
     const prog = programByUser[c.id] || null;
     const last = lastActivityByUser[c.id] || null;
     const convId = convByUser[c.id] || null;
     const unread = convId ? (unreadByConv[convId]||0) : 0;
     return { client:c, prog, last, convId, unread };
   });
-  rows.sort((a,b)=>{
+  clientRows.sort((a,b)=>{
     if(a.unread !== b.unread) return b.unread - a.unread;
     const ta = a.last ? new Date(a.last).getTime() : 0;
     const tb = b.last ? new Date(b.last).getTime() : 0;
     return tb - ta;
   });
-
-  document.getElementById('tabBody').innerHTML = rows.map(r=>{
+  clientSearchQ = '';
+  document.getElementById('tabBody').innerHTML = `
+    <div class="field"><label>Chercher un client</label><input id="clientSearch" type="text" placeholder="Nom ou email…" oninput="filterClientsTab(this.value)"></div>
+    <div id="clientsList"></div>
+  `;
+  renderClientRows(clientRows);
+}
+function filterClientsTab(q){
+  clientSearchQ = q.trim().toLowerCase();
+  const matches = !clientSearchQ ? clientRows : clientRows.filter(r=>
+    (r.client.full_name||'').toLowerCase().includes(clientSearchQ) || (r.client.email||'').toLowerCase().includes(clientSearchQ)
+  );
+  renderClientRows(matches);
+}
+function renderClientRows(rows){
+  document.getElementById('clientsList').innerHTML = rows.length ? rows.map(r=>{
     const name = r.client.full_name || r.client.email || 'Client';
     const esc = name.replace(/'/g,"\\'");
     const progLine = r.prog ? `Programme : ${r.prog.name}` : 'Aucun programme assigné';
@@ -274,7 +290,7 @@ async function renderClientsTab(){
         ${r.prog ? `<button class="btn btn-ghost btn-sm" onclick="goToProgramForm('${r.prog.id}')">📋 Voir le programme</button>` : `<button class="btn btn-ghost btn-sm" onclick="goToNewProgramFor('${r.client.id}')">+ Assigner un programme</button>`}
       </div>
     </div>`;
-  }).join('');
+  }).join('') : '<div class="empty">Aucun client ne correspond à cette recherche.</div>';
 }
 async function goToClientConversation(convId, name){
   currentTab = 'messages'; msgSub = 'conversations'; paint();
