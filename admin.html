@@ -75,6 +75,10 @@
   .qr-overlay.open{display:flex;}
   .qr-sheet{background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:28px; text-align:center; max-width:320px;}
   .qr-sheet .box{background:#fff; padding:12px; border-radius:10px; display:inline-block; margin:16px 0;}
+  .ex-overlay{position:fixed; inset:0; z-index:70; background:rgba(0,0,0,.75); display:none; align-items:center; justify-content:center; padding:16px;}
+  .ex-overlay.open{display:flex;}
+  .ex-modal{background:var(--surface); border:1px solid var(--line); border-radius:18px; padding:24px; max-width:480px; width:100%; max-height:88vh; overflow-y:auto;}
+  .ex-modal h3{font-family:Inter; font-weight:700; font-size:16px; margin-bottom:14px;}
   @media print{
     body *{visibility:hidden;}
     #printAreaAdmin, #printAreaAdmin *{visibility:visible;}
@@ -122,6 +126,12 @@
     </div>
   </div>
 </div>
+<div class="ex-overlay" id="exModalOverlay">
+  <div class="ex-modal">
+    <h3 id="exModalTitle">Fiche exercice</h3>
+    <div id="exModalBody"></div>
+  </div>
+</div>
 <div id="printAreaAdmin" style="display:none;"></div>
 
 <script>
@@ -144,7 +154,7 @@ async function refreshIfNeeded(){
 async function api(path, opts={}){
   await refreshIfNeeded();
   const s = getSession();
-  const res = await fetch(`${SUPABASE_URL}${path}`, { ...opts, headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token}`, 'Content-Type':'application/json', ...(opts.headers||{}) } });
+  const res = await fetch(`${SUPABASE_URL}${path}`, { cache:'no-store', ...opts, headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token}`, 'Content-Type':'application/json', ...(opts.headers||{}) } });
   if(!res.ok){ console.error(await res.text()); throw new Error('api_error'); }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
@@ -256,10 +266,22 @@ async function openConversation(convId, name){
 async function sendCoachMsg(convId){
   const input = document.getElementById('cInput'); const content = input.value.trim();
   if(!content) return; input.value='';
-  await api('/rest/v1/messages', { method:'POST', body: JSON.stringify({ conversation_id: convId, sender:'coach', content }) });
-  const msgs = await api(`/rest/v1/messages?select=*&conversation_id=eq.${convId}&order=created_at`);
-  document.getElementById('cMsgs').innerHTML = msgs.map(m=>`<div class="msg ${m.sender}">${m.content}</div>`).join('');
-  document.getElementById('cMsgs').scrollTop = 999999;
+  const box = document.getElementById('cMsgs');
+  const tmp = document.createElement('div');
+  tmp.className = 'msg coach'; tmp.textContent = content;
+  box.appendChild(tmp);
+  box.scrollTop = 999999;
+  try{
+    await api('/rest/v1/messages', { method:'POST', body: JSON.stringify({ conversation_id: convId, sender:'coach', content }) });
+    const msgs = await api(`/rest/v1/messages?select=*&conversation_id=eq.${convId}&order=created_at`);
+    box.innerHTML = msgs.map(m=>`<div class="msg ${m.sender}">${m.content}</div>`).join('');
+    box.scrollTop = 999999;
+  }catch(e){
+    tmp.style.opacity = '0.5';
+    tmp.title = 'Échec de l\'envoi — réessaie.';
+    input.value = content;
+    alert("Le message n'a pas pu être envoyé. Réessaie.");
+  }
 }
 async function loadContacts(){
   const reqs = await api('/rest/v1/coach_contact_requests?select=*&order=created_at.desc');
@@ -342,6 +364,7 @@ async function renderProgramForm(programId, prefill){
       <div class="field"><label>Chercher un exercice</label><input id="pfSearch" type="text" placeholder="Tape un nom…" oninput="filterExPicker()"></div>
       <div class="picker">
         <select id="pfPickEx">${exercises.map(e=>`<option value="${e.id}">${e.name}</option>`).join('')}</select>
+        <button class="btn btn-ghost" type="button" onclick="editSelectedPickerEx()" title="Modifier cette fiche">✏️</button>
         <input id="pfSets" type="number" placeholder="Séries" value="3" style="width:70px;">
         <input id="pfReps" type="text" placeholder="Reps" value="10-12" style="width:70px;">
         <input id="pfRest" type="number" placeholder="Repos(s)" value="90" style="width:80px;">
@@ -362,6 +385,11 @@ function filterExPicker(){
   const matches = exercises.filter(e=> e.name.toLowerCase().includes(q));
   sel.innerHTML = matches.length ? matches.map(e=>`<option value="${e.id}">${e.name}</option>`).join('') : '<option disabled>Aucun résultat</option>';
 }
+function editSelectedPickerEx(){
+  const exId = document.getElementById('pfPickEx').value;
+  if(!exId){ toast('Choisis une fiche à modifier'); return; }
+  openExerciseModal(exId);
+}
 
 function renderDraftList(){
   document.getElementById('pfExList').innerHTML = draftItems.length ? draftItems.map((it,i)=>{
@@ -369,6 +397,7 @@ function renderDraftList(){
     return `<div class="ex-mini">
       <span>${ex?ex.name:'Exercice'} — ${it.sets||'-'}×${it.reps||'-'} (repos ${it.rest_seconds||'-'}s)</span>
       <span style="display:flex;gap:2px;">
+        <button onclick="openExerciseModal('${it.exercise_id}')" title="Modifier la fiche">✏️</button>
         <button onclick="moveDraft(${i},-1)" title="Monter">↑</button>
         <button onclick="moveDraft(${i},1)" title="Descendre">↓</button>
         <button onclick="removeDraftEx(${i})" title="Retirer">✕</button>
@@ -435,35 +464,62 @@ async function duplicateProgram(programId){
 }
 
 // ================= EXERCICES =================
+let exSearchQ = '';
 async function renderExercisesTab(){
   document.getElementById('tabBody').innerHTML = `
-    <div class="row-actions"><button class="btn btn-accent" onclick="renderExerciseForm()">+ Nouvel exercice</button></div>
-    <div id="exList" style="margin-top:16px;">${exercises.map(e=>`
-      <div class="card" onclick="renderExerciseForm('${e.id}')"><div class="tag">${e.category}</div><h3>${e.name}</h3><p>${e.short_description||''}</p></div>
-    `).join('')}</div>
+    <div class="row-actions"><button class="btn btn-accent" onclick="openExerciseModal()">+ Nouvel exercice</button></div>
+    <div class="field" style="margin-top:12px;"><label>Chercher une fiche</label><input id="exSearch" type="text" placeholder="Nom, categorie, muscle..." value="${exSearchQ.replace(/"/g,'&quot;')}" oninput="filterExercisesTab(this.value)"></div>
+    <div id="exList" style="margin-top:16px;"></div>
   `;
+  filterExercisesTab(exSearchQ);
+  document.getElementById('exSearch').focus();
 }
-function renderExerciseForm(exId){
+function filterExercisesTab(q){
+  exSearchQ = q || '';
+  const qq = exSearchQ.trim().toLowerCase();
+  const list = !qq ? exercises : exercises.filter(e=>
+    (e.name||'').toLowerCase().includes(qq)
+    || (e.category||'').toLowerCase().includes(qq)
+    || (e.short_description||'').toLowerCase().includes(qq)
+    || (e.primary_muscles||[]).some(m=>(m||'').toLowerCase().includes(qq))
+    || (e.secondary_muscles||[]).some(m=>(m||'').toLowerCase().includes(qq))
+  );
+  renderExList(list);
+}
+function renderExList(list){
+  const box = document.getElementById('exList');
+  if(!box) return;
+  box.innerHTML = list.length ? list.map(e=>`
+    <div class="card" onclick="openExerciseModal('${e.id}')"><div class="tag">${e.category}</div><h3>${e.name}</h3><p>${e.short_description||''}</p></div>
+  `).join('') : '<div class="empty">Aucune fiche ne correspond a cette recherche.</div>';
+}
+function exerciseFormHtml(exId){
   const ex = exId ? exercisesById[exId] : null;
-  document.getElementById('tabBody').innerHTML = `
-    <a class="backlink" onclick="renderExercisesTab()">← Toutes les fiches</a>
-    <div class="panel">
-      <div class="field"><label>Nom</label><input id="efName" value="${ex?.name||''}"></div>
-      <div class="field"><label>Catégorie</label>
-        <select id="efCat">${["Jambes","Dos","Pectoraux","Épaules","Bras","Abdos"].map(c=>`<option ${ex?.category===c?'selected':''}>${c}</option>`).join('')}</select>
-      </div>
-      <div class="field"><label>Description courte</label><input id="efShort" value="${ex?.short_description||''}"></div>
-      <div class="field"><label>Image (URL)</label><input id="efImg" value="${ex?.image_url||''}" placeholder="https://...">
-        ${ex?.image_url?`<img src="${ex.image_url}" style="width:100%;max-width:220px;border-radius:8px;margin-top:8px;" onerror="this.style.display='none'">`:''}
-      </div>
-      <div class="field"><label>Consigne</label><textarea id="efInstr">${ex?.instructions||''}</textarea></div>
-      <div class="field"><label>Points techniques (un par ligne)</label><textarea id="efPoints">${(ex?.technique_points||[]).join('\n')}</textarea></div>
-      <div class="row-actions">
-        <button class="btn btn-accent" onclick="saveExercise('${exId||''}')">${exId?'Enregistrer':'Créer la fiche'}</button>
-        ${exId?`<button class="btn btn-danger" onclick="deleteExercise('${exId}')">Supprimer</button>`:''}
-      </div>
+  return `
+    <div class="field"><label>Nom</label><input id="efName" value="${(ex?.name||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field"><label>Categorie</label>
+      <select id="efCat">${["Jambes","Dos","Pectoraux","Épaules","Bras","Abdos"].map(c=>`<option ${ex?.category===c?'selected':''}>${c}</option>`).join('')}</select>
+    </div>
+    <div class="field"><label>Description courte</label><input id="efShort" value="${(ex?.short_description||'').replace(/"/g,'&quot;')}"></div>
+    <div class="field"><label>Image (URL)</label><input id="efImg" value="${(ex?.image_url||'').replace(/"/g,'&quot;')}" placeholder="https://...">
+      ${ex?.image_url?`<img src="${ex.image_url}" style="width:100%;max-width:220px;border-radius:8px;margin-top:8px;" onerror="this.style.display='none'">`:''}
+    </div>
+    <div class="field"><label>Consigne</label><textarea id="efInstr">${ex?.instructions||''}</textarea></div>
+    <div class="field"><label>Points techniques (un par ligne)</label><textarea id="efPoints">${(ex?.technique_points||[]).join('\n')}</textarea></div>
+    <div class="row-actions">
+      <button class="btn btn-accent" onclick="saveExercise('${exId||''}')">${exId?'Enregistrer':'Creer la fiche'}</button>
+      ${exId?`<button class="btn btn-danger" onclick="deleteExercise('${exId}')">Supprimer</button>`:''}
+      <button class="btn btn-ghost" onclick="closeExerciseModal()">Annuler</button>
     </div>
   `;
+}
+function openExerciseModal(exId){
+  document.getElementById('exModalTitle').textContent = exId ? 'Modifier la fiche' : 'Nouvelle fiche';
+  document.getElementById('exModalBody').innerHTML = exerciseFormHtml(exId);
+  document.getElementById('exModalOverlay').classList.add('open');
+}
+function closeExerciseModal(){
+  document.getElementById('exModalOverlay').classList.remove('open');
 }
 async function saveExercise(exId){
   const name = document.getElementById('efName').value.trim();
@@ -476,15 +532,26 @@ async function saveExercise(exId){
     instructions: document.getElementById('efInstr').value.trim(),
     technique_points: document.getElementById('efPoints').value.split('\n').map(s=>s.trim()).filter(Boolean)
   };
-  if(exId){
-    await api(`/rest/v1/exercises?id=eq.${exId}`, { method:'PATCH', body: JSON.stringify(body) });
-  } else {
-    await api('/rest/v1/exercises', { method:'POST', body: JSON.stringify(body) });
-  }
+  let savedId = exId;
+  try{
+    if(exId){
+      await api(`/rest/v1/exercises?id=eq.${exId}`, { method:'PATCH', body: JSON.stringify(body) });
+    } else {
+      const created = await api('/rest/v1/exercises', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify(body) });
+      savedId = created[0].id;
+    }
+  }catch(e){ toast("Impossible d'enregistrer la fiche."); return; }
   toast('Fiche enregistrée');
   exercises = await api('/rest/v1/exercises?select=*&order=category,name');
   exercisesById = Object.fromEntries(exercises.map(e=>[e.id,e]));
-  renderExercisesTab();
+  closeExerciseModal();
+  if(document.getElementById('exList')) filterExercisesTab(exSearchQ);
+  if(document.getElementById('pfPickEx')){
+    filterExPicker();
+    const sel = document.getElementById('pfPickEx');
+    if(savedId && [...sel.options].some(o=>o.value===savedId)) sel.value = savedId;
+    renderDraftList();
+  }
 }
 async function deleteExercise(exId){
   if(!confirm('Supprimer cette fiche ? (impossible si elle est utilisée dans un programme)')) return;
@@ -492,7 +559,9 @@ async function deleteExercise(exId){
     await api(`/rest/v1/exercises?id=eq.${exId}`, { method:'DELETE' });
     toast('Fiche supprimée');
     exercises = exercises.filter(e=>e.id!==exId); exercisesById = Object.fromEntries(exercises.map(e=>[e.id,e]));
-    renderExercisesTab();
+    closeExerciseModal();
+    if(document.getElementById('exList')) filterExercisesTab(exSearchQ);
+    if(document.getElementById('pfPickEx')){ filterExPicker(); renderDraftList(); }
   }catch(e){ toast('Cette fiche est utilisée dans un programme, retire-la d\'abord.'); }
 }
 

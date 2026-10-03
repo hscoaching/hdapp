@@ -148,6 +148,7 @@ function clearSession(){ localStorage.removeItem('hs_session'); localStorage.rem
 
 async function authFetch(path, opts={}){
   return fetch(`${SUPABASE_URL}${path}`, {
+    cache: 'no-store',
     ...opts,
     headers: { apikey: SUPABASE_ANON_KEY, 'Content-Type':'application/json', ...(opts.headers||{}) }
   });
@@ -167,6 +168,7 @@ async function apiFetch(path, opts={}){
   await refreshIfNeeded();
   const s = getSession();
   return fetch(`${SUPABASE_URL}${path}`, {
+    cache: 'no-store',
     ...opts,
     headers: { apikey: SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token}`, 'Content-Type':'application/json', ...(opts.headers||{}) }
   });
@@ -495,8 +497,25 @@ async function sendMessage(){
   const content = input.value.trim();
   if(!content) return;
   input.value = '';
-  await apiFetch(`/rest/v1/messages`, { method:'POST', body: JSON.stringify({ conversation_id: conversationId, sender:'user', content }) });
-  refreshMessages();
+  const box = document.getElementById('chatMsgs');
+  let tmp = null;
+  if(box){
+    const empty = box.querySelector('.empty');
+    if(empty) empty.remove();
+    tmp = document.createElement('div');
+    tmp.className = 'msg user'; tmp.textContent = content;
+    box.appendChild(tmp);
+    box.scrollTop = box.scrollHeight;
+  }
+  try{
+    const res = await apiFetch(`/rest/v1/messages`, { method:'POST', body: JSON.stringify({ conversation_id: conversationId, sender:'user', content }) });
+    if(!res.ok) throw new Error('send_failed');
+    await refreshMessages();
+  }catch(e){
+    if(tmp){ tmp.style.opacity = '0.5'; tmp.title = "Échec de l'envoi — réessaie."; }
+    input.value = content;
+    alert("Ton message n'a pas pu être envoyé. Réessaie.");
+  }
 }
 
 async function loadProfil(){
