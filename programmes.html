@@ -268,7 +268,9 @@ async function listPrograms(){
 }
 async function programExercisesFor(programId){
   if(isLoggedIn()) return (await authedFetch(`/rest/v1/program_exercises?select=*&program_id=eq.${programId}&order=order_index`)).json();
-  return rpc('guest_program_exercises', { p_token: TOKEN, p_program_id: programId });
+  const rows = await rpc('guest_program_exercises', { p_token: TOKEN, p_program_id: programId });
+  // Les lignes "désactivées" (sets=0) lors d'une modification côté invité ne doivent plus s'afficher.
+  return rows.filter(r => r.sets !== 0);
 }
 async function startSessionFor(programId){
   if(isLoggedIn()){
@@ -429,6 +431,7 @@ function route(){
   const parts = hash.split('/').filter(Boolean);
   if(parts[0]==='creer') renderCreate();
   else if(parts[0]==='programme' && parts[1] && parts[2]==='seance') renderSession(parts[1]);
+  else if(parts[0]==='programme' && parts[1] && parts[2]==='modifier') renderEditProgram(parts[1]);
   else if(parts[0]==='programme' && parts[1]) renderProgramDetail(parts[1]);
   else renderList();
 }
@@ -485,8 +488,9 @@ async function renderProgramDetail(programId){
   catch(e){ document.getElementById('progBody').innerHTML = '<div class="empty">Programme introuvable.</div>'; return; }
   let progName = '';
   let progDesc = '';
-  try{ const all = await listPrograms(); const p = all.find(x=>x.id===programId)||{}; progName = p.name || ''; progDesc = p.description || ''; }catch(e){}
-  currentProgramDetail = { id: programId, name: progName, description: progDesc, items };
+  let isOfficial = true;
+  try{ const all = await listPrograms(); const p = all.find(x=>x.id===programId)||{}; progName = p.name || ''; progDesc = p.description || ''; isOfficial = !!p.is_official; }catch(e){}
+  currentProgramDetail = { id: programId, name: progName, description: progDesc, items, isOfficial };
   const rows = items.map(it=>{
     const ex = exercisesById[it.exercise_id];
     if(!ex) return '';
@@ -502,6 +506,7 @@ async function renderProgramDetail(programId){
     <h1 class="page">${progName}</h1>
     <div id="progExList">${rows || '<div class="empty">Aucun exercice dans ce programme.</div>'}</div>
     <div class="actions-row">
+      ${isOfficial ? '' : `<button class="btn btn-ghost" onclick="location.hash='#programme/${programId}/modifier'">✏️ Modifier mon programme</button>`}
       <button class="btn btn-ghost" onclick="printProgram()">🖨️ Exporter en PDF</button>
     </div>
     <div class="session-bar"><button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}/seance'">Démarrer la séance</button></div>
@@ -587,9 +592,10 @@ async function finishSession(programId){
   location.hash = `#programme/${programId}`;
 }
 
-// ---------- Création de programme ----------
+// ---------- Création / édition de programme ----------
 let draftExercises = [];
 let selectedPickExId = null;
+let editingProgramId = null;
 function pickExGridHtml(list){
   return list.length ? list.map(e=>`
     <button type="button" class="pick-ex-card ${e.id===selectedPickExId?'selected':''}" data-id="${e.id}" onclick="selectPickEx('${e.id}')">
@@ -608,14 +614,53 @@ function selectPickEx(exId){
 function renderCreate(){
   draftExercises = [];
   selectedPickExId = null;
+  editingProgramId = null;
   pickRepsMode = 'reps';
-  app.innerHTML = `
-    <a class="backlink" href="#">← Annuler</a>
-    <div class="eyebrow">NOUVEAU PROGRAMME</div>
-    <h1 class="page" style="font-size:38px;">Crée ton programme</h1>
+  app.innerHTML = programFormHtml({
+    backHash: '#', eyebrow: 'NOUVEAU PROGRAMME', title: 'Crée ton programme',
+    name: '', desc: '', saveLabel: 'Enregistrer le programme'
+  });
+  renderPickExGrid(exercises);
+  renderDraftList();
+}
+async function renderEditProgram(programId){
+  app.innerHTML = `<div class="empty">Chargement…</div>`;
+  let prog = null, items = [];
+  try{
+    const all = await listPrograms();
+    prog = all.find(x=>x.id===programId);
+    items = await programExercisesFor(programId);
+  }catch(e){ console.error(e); }
+  if(!prog || prog.is_official){
+    toast('Programme introuvable ou non modifiable');
+    location.hash = programId ? `#programme/${programId}` : '#';
+    return;
+  }
+  editingProgramId = programId;
+  selectedPickExId = null;
+  pickRepsMode = 'reps';
+  draftExercises = items.map(it=> ({
+    exercise_id: it.exercise_id,
+    sets: it.sets || 3,
+    reps: it.reps || '10-12',
+    name: (exercisesById[it.exercise_id]||{}).name || 'Exercice'
+  }));
+  app.innerHTML = programFormHtml({
+    backHash: `#programme/${programId}`, eyebrow: 'MODIFIER LE PROGRAMME', title: prog.name,
+    name: prog.name || '', desc: prog.description || '', saveLabel: 'Enregistrer les modifications'
+  });
+  renderPickExGrid(exercises);
+  renderDraftList();
+}
+function programFormHtml({ backHash, eyebrow, title, name, desc, saveLabel }){
+  const esc = s => (s||'').replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;');
+  return `
+    <a class="backlink" href="${backHash}">← Annuler</a>
+    <div class="eyebrow">${eyebrow}</div>
+    <h1 class="page" style="font-size:38px;">${esc(title)}</h1>
     <p class="subtitle">Visible uniquement par toi, depuis cet appareil.</p>
-    <div class="field"><label>Nom du programme</label><input id="pName" type="text" placeholder="Ex : Ma routine du lundi"></div>
-    <div class="field"><label>Description (optionnel)</label><textarea id="pDesc" placeholder="Objectif, contexte..."></textarea></div>
+    <div class="field"><label>Nom du programme</label><input id="pName" type="text" placeholder="Ex : Ma routine du lundi" value="${esc(name)}"></div>
+    <div class="field"><label>Description (optionnel)</label><textarea id="pDesc" placeholder="Objectif, contexte...">${esc(desc)}</textarea></div>
 
     <div class="section">
       <h2>Exercices</h2>
@@ -633,9 +678,8 @@ function renderCreate(){
       <div id="draftList"></div>
     </div>
 
-    <div class="actions-row"><button class="btn btn-accent" id="saveProgramBtn" onclick="saveProgram()">Enregistrer le programme</button></div>
+    <div class="actions-row"><button class="btn btn-accent" id="saveProgramBtn" onclick="saveProgram()">${saveLabel}</button></div>
   `;
-  renderPickExGrid(exercises);
 }
 function filterPickEx(){
   const q = document.getElementById('pSearch').value.trim().toLowerCase();
@@ -678,19 +722,66 @@ async function saveProgram(){
   if(!draftExercises.length){ toast('Ajoute au moins un exercice'); return; }
   const desc = document.getElementById('pDesc').value.trim();
   const btn = document.getElementById('saveProgramBtn');
+  const wasEditing = !!editingProgramId;
   btn.disabled = true; btn.textContent = 'Enregistrement...';
   try{
-    const programId = await createProgramFor(name, desc||null);
-    for(let i=0;i<draftExercises.length;i++){
-      const d = draftExercises[i];
-      await addProgramExerciseFor(programId, d.exercise_id, i+1, d.sets, d.reps, 90, null);
+    let programId;
+    if(wasEditing){
+      programId = editingProgramId;
+      await updateProgramFor(programId, name, desc||null);
+      await saveProgramExercises(programId, draftExercises);
+    } else {
+      programId = await createProgramFor(name, desc||null);
+      for(let i=0;i<draftExercises.length;i++){
+        const d = draftExercises[i];
+        await addProgramExerciseFor(programId, d.exercise_id, i+1, d.sets, d.reps, 90, null);
+      }
     }
-    toast('Programme créé !');
+    toast(wasEditing ? 'Programme mis à jour !' : 'Programme créé !');
+    editingProgramId = null;
     location.hash = `#programme/${programId}`;
   }catch(e){
     console.error(e);
-    btn.disabled = false; btn.textContent = 'Enregistrer le programme';
+    btn.disabled = false; btn.textContent = wasEditing ? 'Enregistrer les modifications' : 'Enregistrer le programme';
     toast('Erreur, impossible d\'enregistrer. Réessaie.');
+  }
+}
+async function updateProgramFor(programId, name, desc){
+  if(isLoggedIn()){
+    const res = await authedFetch(`/rest/v1/programs?id=eq.${programId}`, { method:'PATCH', body: JSON.stringify({ name, description: desc }) });
+    if(!res.ok){ console.error(await res.text()); throw new Error('update_program_failed'); }
+    return;
+  }
+  return rpc('guest_update_program', { p_token: TOKEN, p_program_id: programId, p_name: name, p_description: desc });
+}
+async function saveProgramExercises(programId, draft){
+  if(isLoggedIn()){
+    const res = await authedFetch(`/rest/v1/program_exercises?program_id=eq.${programId}`, { method:'DELETE' });
+    if(!res.ok){ console.error(await res.text()); throw new Error('clear_program_exercises_failed'); }
+    for(let i=0;i<draft.length;i++){
+      const d = draft[i];
+      await addProgramExerciseFor(programId, d.exercise_id, i+1, d.sets, d.reps, 90, null);
+    }
+    return;
+  }
+  // Invité : pas de suppression en masse côté serveur, on réutilise les lignes existantes
+  // en les mettant à jour en place, et on "désactive" celles en trop (sets=0) plutôt que de les supprimer.
+  const existing = (await rpc('guest_program_exercises', { p_token: TOKEN, p_program_id: programId }))
+    .sort((a,b)=> (a.order_index||0)-(b.order_index||0));
+  const n = Math.min(existing.length, draft.length);
+  for(let i=0;i<n;i++){
+    const d = draft[i];
+    await rpc('guest_update_program_exercise', { p_token: TOKEN, p_id: existing[i].id, p_exercise_id: d.exercise_id, p_order_index: i+1, p_sets: d.sets, p_reps: d.reps, p_rest_seconds: existing[i].rest_seconds||90 });
+  }
+  if(draft.length > existing.length){
+    for(let i=existing.length;i<draft.length;i++){
+      const d = draft[i];
+      await addProgramExerciseFor(programId, d.exercise_id, i+1, d.sets, d.reps, 90, null);
+    }
+  } else if(existing.length > draft.length){
+    for(let i=draft.length;i<existing.length;i++){
+      await rpc('guest_update_program_exercise', { p_token: TOKEN, p_id: existing[i].id, p_exercise_id: existing[i].exercise_id, p_order_index: 9999, p_sets: 0, p_reps: null, p_rest_seconds: existing[i].rest_seconds||90 });
+    }
   }
 }
 

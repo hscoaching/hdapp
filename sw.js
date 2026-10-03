@@ -45,18 +45,6 @@ function cacheFirst(request) {
   });
 }
 
-function networkFirst(request) {
-  return fetch(request, { cache: 'no-cache' })
-    .then((res) => {
-      if (res && res.ok) {
-        const copy = res.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
-      }
-      return res;
-    })
-    .catch(() => caches.match(request).then((c) => c || caches.match('index.html')));
-}
-
 function staleWhileRevalidate(request) {
   return caches.open(CACHE_NAME).then((cache) =>
     cache.match(request).then((cached) => {
@@ -84,10 +72,7 @@ self.addEventListener('fetch', (event) => {
   }
 
   if (url.origin === self.location.origin) {
-    // Pages HTML : réseau d'abord (la dernière version publiée s'affiche toujours),
-    // cache seulement en secours hors-ligne. Le reste (icônes, manifest) : cache d'abord.
-    const isPage = event.request.mode === 'navigate' || url.pathname.endsWith('.html') || url.pathname.endsWith('/');
-    event.respondWith(isPage ? networkFirst(event.request) : cacheFirst(event.request));
+    event.respondWith(cacheFirst(event.request));
   } else {
     // Endpoints propres à un utilisateur (messages, conversations, programmes assignés,
     // profil...) : jamais de cache, même en secours — toujours le réseau.
