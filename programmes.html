@@ -57,6 +57,7 @@
   .btn-accent{background:var(--accent); color:var(--accent-ink);}
   .btn-ghost{background:none; border:1px solid var(--line); color:var(--ink);}
   .btn-ghost:hover{border-color:var(--accent);}
+  .reps-mode-btn.active{border-color:var(--accent); color:var(--accent); background:var(--surface);}
   .btn-sm{padding:8px 14px; font-size:13px;}
   .btn:disabled{opacity:.5; cursor:default;}
 
@@ -607,6 +608,7 @@ function selectPickEx(exId){
 function renderCreate(){
   draftExercises = [];
   selectedPickExId = null;
+  pickRepsMode = 'reps';
   app.innerHTML = `
     <a class="backlink" href="#">← Annuler</a>
     <div class="eyebrow">NOUVEAU PROGRAMME</div>
@@ -619,8 +621,12 @@ function renderCreate(){
       <h2>Exercices</h2>
       <div class="field"><label>Chercher un exercice</label><input id="pSearch" type="text" placeholder="Nom, catégorie, muscle…" oninput="filterPickEx()"></div>
       <div id="pickExGrid" class="pick-ex-grid"></div>
-      <div class="picker" style="margin-top:10px;">
+      <div class="picker" style="margin-top:10px; flex-wrap:wrap;">
         <input id="pSets" type="number" placeholder="Séries" style="width:80px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
+        <div style="display:flex; gap:6px;">
+          <button type="button" class="btn btn-ghost btn-sm reps-mode-btn active" data-mode="reps" onclick="setRepsMode('reps')">Répétitions</button>
+          <button type="button" class="btn btn-ghost btn-sm reps-mode-btn" data-mode="time" onclick="setRepsMode('time')">Temps</button>
+        </div>
         <input id="pReps" type="text" placeholder="Reps" style="width:80px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
         <button class="btn btn-ghost btn-sm" onclick="addDraftExercise()">Ajouter la sélection</button>
       </div>
@@ -641,11 +647,21 @@ function filterPickEx(){
   );
   renderPickExGrid(matches);
 }
+let pickRepsMode = 'reps';
+function setRepsMode(mode){
+  pickRepsMode = mode;
+  [...document.querySelectorAll('.reps-mode-btn')].forEach(b=> b.classList.toggle('active', b.dataset.mode===mode));
+  const repsInput = document.getElementById('pReps');
+  if(mode==='time'){ repsInput.type='number'; repsInput.placeholder='Secondes'; }
+  else { repsInput.type='text'; repsInput.placeholder='Reps'; }
+  repsInput.value = '';
+}
 function addDraftExercise(){
   const exId = selectedPickExId;
   if(!exId){ toast('Choisis un exercice dans la liste'); return; }
   const sets = document.getElementById('pSets').value || 3;
-  const reps = document.getElementById('pReps').value || '10-12';
+  const repsRaw = document.getElementById('pReps').value.trim();
+  const reps = pickRepsMode==='time' ? `${repsRaw || '30'}s` : (repsRaw || '10-12');
   const ex = exercisesById[exId];
   draftExercises.push({ exercise_id: exId, sets: parseInt(sets), reps, name: ex.name });
   renderDraftList();
