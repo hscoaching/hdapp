@@ -7,6 +7,9 @@
 <meta name="theme-color" content="#0b0b0c">
 <meta name="robots" content="noindex, nofollow">
 <title>HS Coaching — Admin</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -499,6 +502,10 @@ function showFatal(msg){
 window.addEventListener('unhandledrejection', e=> showFatal(e.reason && e.reason.message ? e.reason.message : e.reason));
 window.addEventListener('error', e=> showFatal(e.message));
 boot().catch(showFatal);
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
 </script>
 </body>
 </html>

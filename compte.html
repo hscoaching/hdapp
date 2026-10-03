@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0b0b0c">
 <title>HS Coaching — Mon compte</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -90,6 +93,9 @@
   .navrow::-webkit-scrollbar{display:none;}
   .navrow a{flex:1; text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:10px 14px; border-radius:999px; white-space:nowrap; text-decoration:none;}
   .navrow a.active{background:var(--ink); border-color:var(--ink); color:var(--bg);}
+  .navrow a{position:relative;}
+  .nav-dot{position:absolute; top:5px; right:10px; width:8px; height:8px; border-radius:50%; background:#ff5a4e; border:1.5px solid var(--bg);}
+  .progress-card svg{display:block; margin-top:10px;}
 
   @media (max-width:600px){
     input, select, textarea{ font-size:16px !important; }
@@ -309,6 +315,7 @@ async function renderDashboard(){
     <div class="tabs">
       <div class="tab" data-tab="programmes">Mes programmes</div>
       <div class="tab" data-tab="historique">Historique</div>
+      <div class="tab" data-tab="progression">Progression</div>
       ${isCoachAccount ? '' : '<div class="tab" data-tab="chat">Discussion coach</div>'}
       <div class="tab" data-tab="profil">Profil</div>
     </div>
@@ -326,6 +333,7 @@ function paintTabs(){
 function loadTab(){
   if(currentTab==='programmes') loadProgrammes();
   else if(currentTab==='historique') loadHistorique();
+  else if(currentTab==='progression') loadProgression();
   else if(currentTab==='chat') loadChat();
   else loadProfil();
 }
@@ -333,6 +341,11 @@ function loadTab(){
 async function loadProgrammes(){
   const res = await apiFetch(`/rest/v1/programs?select=*&order=is_official.desc,created_at.desc`);
   const programs = await res.json();
+  try{
+    const seen = new Set(JSON.parse(localStorage.getItem('hs_seen_programs')||'[]'));
+    programs.forEach(p=> seen.add(p.id));
+    localStorage.setItem('hs_seen_programs', JSON.stringify([...seen]));
+  }catch(e){}
   document.getElementById('tabBody').innerHTML = programs.length ? programs.map(p=>`
     <div class="card" style="cursor:pointer" onclick="location.href='programmes.html#programme/${p.id}'"><div class="tag">${p.is_official?'Coach':'Perso'}</div><h3>${p.name}</h3><p>${p.description||''}</p><p style="margin-top:8px;color:var(--ink);font-weight:600;">Ouvrir le programme →</p></div>
   `).join('') : '<div class="empty">Aucun programme pour l\'instant. Crée-en un depuis la page Programmes.</div>';
@@ -390,6 +403,71 @@ async function toggleSessionLogs(card, sessionId){
   box.style.display='block';
 }
 
+// ---------- Progression ----------
+async function loadProgression(){
+  document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
+  let rows = [];
+  try{
+    rows = await (await apiFetch(`/rest/v1/session_logs?select=exercise_id,charge,session_id,sessions(started_at),exercises(name)&charge=not.is.null`)).json();
+  }catch(e){ document.getElementById('tabBody').innerHTML = '<div class="empty">Impossible de charger ta progression pour le moment.</div>'; return; }
+  if(!Array.isArray(rows) || !rows.length){
+    document.getElementById('tabBody').innerHTML = '<div class="empty">Pas encore de charges enregistrées. Elles apparaîtront ici dès ta première séance où tu notes des poids.</div>';
+    return;
+  }
+  const byEx = {};
+  rows.forEach(r=>{
+    if(r.charge==null || !r.sessions || !r.sessions.started_at) return;
+    const key = r.exercise_id;
+    if(!byEx[key]) byEx[key] = { name: (r.exercises && r.exercises.name) || 'Exercice', bySession:{} };
+    const cur = byEx[key].bySession[r.session_id];
+    if(!cur || r.charge > cur.charge) byEx[key].bySession[r.session_id] = { date: r.sessions.started_at, charge: r.charge };
+  });
+  const cards = Object.values(byEx)
+    .map(ex => ({ name: ex.name, points: Object.values(ex.bySession).sort((a,b)=> new Date(a.date)-new Date(b.date)) }))
+    .filter(ex => ex.points.length)
+    .sort((a,b)=> b.points.length - a.points.length);
+  document.getElementById('tabBody').innerHTML = cards.length
+    ? cards.map(progressionCardHtml).join('')
+    : '<div class="empty">Pas encore assez de données.</div>';
+}
+function progressionCardHtml(ex){
+  const pts = ex.points;
+  const last = pts[pts.length-1].charge;
+  const first = pts[0].charge;
+  const delta = Math.round((last-first)*10)/10;
+  let deltaTxt;
+  if(pts.length < 2) deltaTxt = `1 séance enregistrée`;
+  else if(delta > 0) deltaTxt = `+${delta} kg depuis ta première séance notée`;
+  else if(delta < 0) deltaTxt = `${delta} kg depuis ta première séance notée`;
+  else deltaTxt = `Charge stable depuis ta première séance notée`;
+
+  let svg = '';
+  if(pts.length > 1){
+    const w = 280, h = 64, pad = 8;
+    const charges = pts.map(p=>p.charge);
+    const min = Math.min(...charges), max = Math.max(...charges);
+    const range = (max - min) || 1;
+    const stepX = (w - 2*pad) / (pts.length - 1);
+    const coords = pts.map((p,i)=>{
+      const x = pad + i*stepX;
+      const y = h - pad - ((p.charge - min) / range) * (h - 2*pad);
+      return [x, y];
+    });
+    const poly = coords.map(c=> c[0].toFixed(1)+','+c[1].toFixed(1)).join(' ');
+    const dots = coords.map(c=> `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="2.5" style="fill:var(--accent);"/>`).join('');
+    svg = `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+      <polyline points="${poly}" style="fill:none; stroke:var(--accent); stroke-width:2;" stroke-linecap="round" stroke-linejoin="round"/>
+      ${dots}
+    </svg>`;
+  }
+  return `<div class="card progress-card">
+    <h3>${ex.name}</h3>
+    <p>${deltaTxt}</p>
+    ${svg}
+    <p style="margin-top:8px;color:var(--ink-muted);font-size:12px;">Dernière charge notée : ${last} kg · ${pts.length} séance${pts.length>1?'s':''} suivie${pts.length>1?'s':''}</p>
+  </div>`;
+}
+
 let chatPoll = null; let conversationId = null;
 async function loadChat(){
   document.getElementById('tabBody').innerHTML = `<div class="chat-box"><div class="chat-msgs" id="chatMsgs"><div class="empty">Chargement…</div></div>
@@ -400,6 +478,7 @@ async function loadChat(){
   }
   conversationId = convs[0].id;
   await refreshMessages();
+  apiFetch(`/rest/v1/messages?conversation_id=eq.${conversationId}&sender=eq.coach&read=eq.false`, { method:'PATCH', body: JSON.stringify({ read:true }) }).catch(()=>{});
   clearInterval(chatPoll);
   chatPoll = setInterval(()=>{ if(currentTab==='chat') refreshMessages(); }, 5000);
 }
@@ -445,6 +524,10 @@ async function loadProfil(){
   const s = getSession();
   if(s && s.access_token){ renderDashboard(); } else { renderAuth(); }
 })();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
 </script>
 </body>
 </html>

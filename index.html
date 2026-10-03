@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0b0b0c">
 <title>HS Coaching — Bibliothèque O2</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -169,6 +172,8 @@
   .navrow::-webkit-scrollbar{display:none;}
   .navrow a{flex:1; text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:10px 14px; border-radius:999px; white-space:nowrap; text-decoration:none;}
   .navrow a.active{background:var(--ink); border-color:var(--ink); color:var(--bg);}
+  .navrow a{position:relative;}
+  .nav-dot{position:absolute; top:5px; right:10px; width:8px; height:8px; border-radius:50%; background:#ff5a4e; border:1.5px solid var(--bg);}
 
   @media (max-width:600px){
     input, select, textarea{ font-size:16px !important; }
@@ -377,7 +382,10 @@ function renderGrid(){
   const filtered = exercises.filter(ex=>{
     const matchGroup = exerciseMatchesGroup(ex, activeGroup);
     const matchMuscle = !activeMuscle || exerciseMuscleLabels(ex, activeGroup).includes(activeMuscle);
-    const matchQ = !q || ex.name.toLowerCase().includes(q) || (ex.short_description||'').toLowerCase().includes(q);
+    const matchQ = !q || ex.name.toLowerCase().includes(q) || (ex.short_description||'').toLowerCase().includes(q)
+      || (ex.category||'').toLowerCase().includes(q)
+      || (ex.primary_muscles||[]).some(m=> m.toLowerCase().includes(q))
+      || (ex.secondary_muscles||[]).some(m=> m.toLowerCase().includes(q));
     return matchGroup && matchMuscle && matchQ;
   });
   grid.innerHTML = filtered.map(ex => `
@@ -494,6 +502,32 @@ async function syncRoleFromSession(){
   }catch(e){}
 }
 
+// Petit point rouge sur "Mon compte" : message du coach non lu, ou programme qui vient de t'être assigné.
+async function checkClientNotifications(){
+  try{
+    const s = JSON.parse(localStorage.getItem('hs_session')||'null');
+    if(!s || !s.access_token) return;
+    const uid = s.user.id;
+    const headers = { apikey: SUPABASE_ANON_KEY, Authorization:`Bearer ${s.access_token}` };
+    let hasNotif = false;
+
+    const convs = await fetch(`${SUPABASE_URL}/rest/v1/conversations?select=id&user_id=eq.${uid}&limit=1`, { headers }).then(r=>r.json());
+    if(convs[0]){
+      const unread = await fetch(`${SUPABASE_URL}/rest/v1/messages?select=id&conversation_id=eq.${convs[0].id}&sender=eq.coach&read=eq.false`, { headers }).then(r=>r.json());
+      if(Array.isArray(unread) && unread.length) hasNotif = true;
+    }
+    if(!hasNotif){
+      const assigned = await fetch(`${SUPABASE_URL}/rest/v1/programs?select=id&owner_user_id=eq.${uid}`, { headers }).then(r=>r.json());
+      const seen = JSON.parse(localStorage.getItem('hs_seen_programs')||'[]');
+      if(Array.isArray(assigned) && assigned.some(p=>!seen.includes(p.id))) hasNotif = true;
+    }
+    if(hasNotif){
+      const link = document.querySelector('.navrow a[href="compte.html"]');
+      if(link && !link.querySelector('.nav-dot')) link.insertAdjacentHTML('beforeend', '<span class="nav-dot"></span>');
+    }
+  }catch(e){}
+}
+
 async function loadExercises(){
   try{
     const res = await fetch(`${SUPABASE_URL}/rest/v1/exercises?select=*&order=category,name`, {
@@ -513,7 +547,12 @@ async function loadExercises(){
 }
 
 syncRoleFromSession();
+checkClientNotifications();
 loadExercises();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
 </script>
 </body>
 </html>

@@ -5,6 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0b0b0c">
 <title>HS Coaching — Programmes</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -128,6 +131,8 @@
   .navrow::-webkit-scrollbar{display:none;}
   .navrow a{flex:1; text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:10px 14px; border-radius:999px; white-space:nowrap; text-decoration:none;}
   .navrow a.active{background:var(--ink); border-color:var(--ink); color:var(--bg);}
+  .navrow a{position:relative;}
+  .nav-dot{position:absolute; top:5px; right:10px; width:8px; height:8px; border-radius:50%; background:#ff5a4e; border:1.5px solid var(--bg);}
 
   @media (max-width:600px){
     input, select, textarea{ font-size:16px !important; }
@@ -272,6 +277,39 @@ let exercisesById = {};
 const app = document.getElementById('app');
 const TOKEN = getToken();
 
+// Petit point rouge sur "Mon compte" : message du coach non lu, ou programme qui vient de t'être assigné.
+async function checkClientNotifications(){
+  try{
+    const s = getUserSession();
+    if(!s || !s.access_token) return;
+    const uid = s.user.id;
+    const headers = { apikey: SUPABASE_ANON_KEY, Authorization:`Bearer ${s.access_token}` };
+    let hasNotif = false;
+
+    const convs = await fetch(`${SUPABASE_URL}/rest/v1/conversations?select=id&user_id=eq.${uid}&limit=1`, { headers }).then(r=>r.json());
+    if(convs[0]){
+      const unread = await fetch(`${SUPABASE_URL}/rest/v1/messages?select=id&conversation_id=eq.${convs[0].id}&sender=eq.coach&read=eq.false`, { headers }).then(r=>r.json());
+      if(Array.isArray(unread) && unread.length) hasNotif = true;
+    }
+    if(!hasNotif){
+      const assigned = await fetch(`${SUPABASE_URL}/rest/v1/programs?select=id&owner_user_id=eq.${uid}`, { headers }).then(r=>r.json());
+      const seen = JSON.parse(localStorage.getItem('hs_seen_programs')||'[]');
+      if(Array.isArray(assigned) && assigned.some(p=>!seen.includes(p.id))) hasNotif = true;
+    }
+    if(hasNotif){
+      const link = document.querySelector('.navrow a[href="compte.html"]');
+      if(link && !link.querySelector('.nav-dot')) link.insertAdjacentHTML('beforeend', '<span class="nav-dot"></span>');
+    }
+  }catch(e){}
+}
+function markProgramsSeen(programs){
+  try{
+    const seen = new Set(JSON.parse(localStorage.getItem('hs_seen_programs')||'[]'));
+    programs.forEach(p=> seen.add(p.id));
+    localStorage.setItem('hs_seen_programs', JSON.stringify([...seen]));
+  }catch(e){}
+}
+
 function imgTag(ex, cls, extraStyle){
   const a = ex.image_start_url, b = ex.image_peak_url || ex.image_url;
   if(a && b && a!==b){
@@ -370,6 +408,7 @@ async function renderList(){
   `;
   let programs = [];
   try{ programs = await listPrograms(); }catch(e){ console.error(e); }
+  markProgramsSeen(programs);
   const official = programs.filter(p=>p.is_official);
   const mine = programs.filter(p=>!p.is_official);
   document.getElementById('officialGrid').innerHTML = official.length ? official.map(cardHtml).join('') :
@@ -533,6 +572,11 @@ document.getElementById('exOverlay').addEventListener('click', e=>{ if(e.target.
 document.getElementById('modalOverlay').addEventListener('click', e=>{ if(e.target.id==='modalOverlay') e.target.classList.remove('open'); });
 
 boot();
+checkClientNotifications();
+
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
+}
 </script>
 </body>
 </html>
