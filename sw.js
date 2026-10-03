@@ -3,7 +3,7 @@
 // et met en cache les réponses Supabase (exercices, images) en "stale-while-revalidate"
 // pour que la bibliothèque reste consultable même avec un wifi de salle capricieux.
 
-const CACHE_NAME = 'hs-coaching-v3';
+const CACHE_NAME = 'hs-coaching-v4';
 const APP_SHELL = [
   'index.html',
   'programmes.html',
@@ -63,11 +63,25 @@ self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
   const url = new URL(event.request.url);
 
+  // Une requête explicitement marquée no-store (messages, données propres à un
+  // utilisateur juste après un envoi) ne doit jamais être servie depuis le cache :
+  // on va toujours chercher la réponse fraîche sur le réseau.
+  if (event.request.cache === 'no-store') {
+    event.respondWith(fetch(event.request));
+    return;
+  }
+
   if (url.origin === self.location.origin) {
     event.respondWith(cacheFirst(event.request));
   } else {
-    // Supabase REST (exercices, programmes...) et images (RepDB, storage) : réseau si possible,
-    // cache en secours sinon.
-    event.respondWith(staleWhileRevalidate(event.request));
+    // Endpoints propres à un utilisateur (messages, conversations, programmes assignés,
+    // profil...) : jamais de cache, même en secours — toujours le réseau.
+    const isPersonal = /\/rest\/v1\/(messages|conversations|profiles|programs|program_exercises|coach_contact_requests|session_logs|sessions)\b/.test(url.pathname);
+    if (isPersonal) {
+      event.respondWith(fetch(event.request));
+    } else {
+      // Exercices et images : mise en cache "stale-while-revalidate" pour un accès hors-ligne.
+      event.respondWith(staleWhileRevalidate(event.request));
+    }
   }
 });
