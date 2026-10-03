@@ -5,9 +5,6 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <meta name="theme-color" content="#0b0b0c">
 <title>HS Coaching — Bibliothèque O2</title>
-<link rel="manifest" href="manifest.json">
-<link rel="icon" href="icon-192.png">
-<link rel="apple-touch-icon" href="icon-192.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
@@ -109,7 +106,7 @@
   .card-body{padding:16px;}
   .card:hover{border-color:var(--accent);}
   .card .cat{font-size:11px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.08em;}
-  .card h3{font-size:26px; margin-top:6px; color:var(--ink);}
+  .card h3{font-size:26px; margin-top:6px;}
   .card p{color:var(--ink-muted); font-size:13px; margin-top:8px; line-height:1.4;}
 
   .empty{color:var(--ink-muted); padding:40px 0; text-align:center; font-size:14px;}
@@ -157,14 +154,6 @@
     margin-top:10px; font-size:13px; font-weight:600; background:none; color:var(--accent);
     border:1px solid var(--accent); padding:7px 14px; border-radius:999px; cursor:pointer;
   }
-  .editBtn{
-    flex:none; width:40px; height:40px; border-radius:50%; border:1px solid var(--line);
-    background:var(--surface-2); color:var(--ink); font-size:16px; cursor:pointer;
-  }
-  .field{margin-top:14px;}
-  .field label{display:block; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-muted); margin-bottom:6px;}
-  .field input, .field select, .field textarea{width:100%; background:var(--surface-2); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px 12px; font-family:inherit; font-size:14px;}
-  .field textarea{resize:vertical; min-height:80px;}
 
   footer{border-top:1px solid var(--line); padding:26px 0; text-align:center; color:var(--ink-muted); font-size:12.5px;}
 
@@ -180,29 +169,12 @@
   .navrow::-webkit-scrollbar{display:none;}
   .navrow a{flex:1; text-align:center; font-size:13.5px; font-weight:600; color:var(--ink-muted); border:1px solid var(--line); padding:10px 14px; border-radius:999px; white-space:nowrap; text-decoration:none;}
   .navrow a.active{background:var(--ink); border-color:var(--ink); color:var(--bg);}
-  .navrow a{position:relative;}
-  .nav-dot{position:absolute; top:5px; right:10px; width:8px; height:8px; border-radius:50%; background:#ff5a4e; border:1.5px solid var(--bg);}
 
   @media (max-width:600px){
     input, select, textarea{ font-size:16px !important; }
     .picker{ flex-direction:column; align-items:stretch; }
     .picker select, .picker input{ width:100% !important; }
-    .wrap{ padding:0 14px; }
-    .grid{ grid-template-columns:repeat(4,1fr); gap:7px; }
-    .card-img{ aspect-ratio:1/1; }
-    .card-body{ padding:6px 5px; }
-    .card .cat{ display:none; }
-    .card h3{
-      font-size:11.5px; margin-top:0; line-height:1.15; color:var(--ink);
-      display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;
-    }
-    .card p{ display:none; }
   }
-
-  .install-banner{position:fixed; left:12px; right:12px; bottom:12px; z-index:90; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 16px; display:none; align-items:center; gap:12px; box-shadow:0 8px 24px rgba(0,0,0,.4);}
-  .install-banner.show{display:flex;}
-  .install-banner p{flex:1; font-size:13px; color:var(--ink); margin:0; line-height:1.4;}
-  .install-banner .btn-row{display:flex; gap:8px; flex:none; align-items:center;}
 </style>
 </head>
 <body>
@@ -405,10 +377,7 @@ function renderGrid(){
   const filtered = exercises.filter(ex=>{
     const matchGroup = exerciseMatchesGroup(ex, activeGroup);
     const matchMuscle = !activeMuscle || exerciseMuscleLabels(ex, activeGroup).includes(activeMuscle);
-    const matchQ = !q || ex.name.toLowerCase().includes(q) || (ex.short_description||'').toLowerCase().includes(q)
-      || (ex.category||'').toLowerCase().includes(q)
-      || (ex.primary_muscles||[]).some(m=> m.toLowerCase().includes(q))
-      || (ex.secondary_muscles||[]).some(m=> m.toLowerCase().includes(q));
+    const matchQ = !q || ex.name.toLowerCase().includes(q) || (ex.short_description||'').toLowerCase().includes(q);
     return matchGroup && matchMuscle && matchQ;
   });
   grid.innerHTML = filtered.map(ex => `
@@ -458,10 +427,7 @@ function openSheet(slug, pushHash){
         <div class="cat">${ex.category}</div>
         <h2>${ex.name}</h2>
       </div>
-      <div style="display:flex; gap:8px;">
-        ${showQr ? `<button class="editBtn" id="editSheetBtn" title="Modifier cette fiche">✏️</button>` : ''}
-        <button class="closeBtn" id="closeSheet">✕</button>
-      </div>
+      <button class="closeBtn" id="closeSheet">✕</button>
     </div>
     ${imgTag(ex, '', 'width:100%;border-radius:12px;margin-top:16px;')}
     <p class="lede">${ex.short_description||''}</p>
@@ -495,10 +461,6 @@ function openSheet(slug, pushHash){
     document.getElementById('printQr').addEventListener('click', ()=> printFiche(ex, fullUrl));
   }
   document.getElementById('closeSheet').addEventListener('click', closeSheet);
-  if(showQr){
-    const editBtn = document.getElementById('editSheetBtn');
-    if(editBtn) editBtn.addEventListener('click', ()=> renderSheetEdit(ex));
-  }
   overlay.classList.add('open');
   if(pushHash) history.replaceState(null,'', '#'+ex.slug);
 }
@@ -506,77 +468,6 @@ function openSheet(slug, pushHash){
 function closeSheet(){
   overlay.classList.remove('open');
   history.replaceState(null,'', location.pathname);
-}
-
-async function coachApi(path, opts={}){
-  const s = JSON.parse(localStorage.getItem('hs_session')||'null');
-  const controller = new AbortController();
-  const timeoutId = setTimeout(()=> controller.abort(), 15000);
-  let res;
-  try{
-    res = await fetch(`${SUPABASE_URL}${path}`, {
-      cache:'no-store', ...opts, signal: controller.signal,
-      headers:{ apikey: SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token||SUPABASE_ANON_KEY}`, 'Content-Type':'application/json', ...(opts.headers||{}) }
-    });
-  } finally {
-    clearTimeout(timeoutId);
-  }
-  if(!res.ok){ throw new Error(await res.text()); }
-  const text = await res.text();
-  return text ? JSON.parse(text) : null;
-}
-
-function sheetEditHtml(ex){
-  return `
-    <div class="sheet-top">
-      <h2 style="font-size:22px;">Modifier la fiche</h2>
-      <button class="closeBtn" id="closeSheet">✕</button>
-    </div>
-    <div class="field"><label>Nom</label><input id="seName" value="${(ex.name||'').replace(/"/g,'&quot;')}"></div>
-    <div class="field"><label>Catégorie</label>
-      <select id="seCat">${GROUPS.map(c=>`<option ${ex.category===c?'selected':''}>${c}</option>`).join('')}</select>
-    </div>
-    <div class="field"><label>Description courte</label><input id="seShort" value="${(ex.short_description||'').replace(/"/g,'&quot;')}"></div>
-    <div class="field"><label>Image (URL)</label><input id="seImg" value="${(ex.image_url||'').replace(/"/g,'&quot;')}" placeholder="https://..."></div>
-    <div class="field"><label>Consigne</label><textarea id="seInstr" rows="5">${ex.instructions||''}</textarea></div>
-    <div class="field"><label>Points techniques (un par ligne)</label><textarea id="sePoints" rows="4">${(ex.technique_points||[]).join('\n')}</textarea></div>
-    <div style="display:flex; gap:10px; margin-top:18px;">
-      <button class="printBtn" id="seSave" style="background:var(--accent); color:var(--accent-ink); border-color:var(--accent);">Enregistrer</button>
-      <button class="printBtn" id="seCancel">Annuler</button>
-    </div>
-  `;
-}
-
-function renderSheetEdit(ex){
-  sheet.innerHTML = sheetEditHtml(ex);
-  document.getElementById('closeSheet').addEventListener('click', closeSheet);
-  document.getElementById('seCancel').addEventListener('click', ()=> openSheet(ex.slug));
-  document.getElementById('seSave').addEventListener('click', ()=> saveSheetEdit(ex));
-}
-
-async function saveSheetEdit(ex){
-  const btn = document.getElementById('seSave');
-  const name = document.getElementById('seName').value.trim();
-  if(!name){ alert('Le nom est requis.'); return; }
-  const body = {
-    name,
-    category: document.getElementById('seCat').value,
-    short_description: document.getElementById('seShort').value.trim(),
-    image_url: document.getElementById('seImg').value.trim() || null,
-    instructions: document.getElementById('seInstr').value.trim(),
-    technique_points: document.getElementById('sePoints').value.split('\n').map(s=>s.trim()).filter(Boolean)
-  };
-  btn.disabled = true; btn.textContent = 'Enregistrement…';
-  try{
-    await coachApi(`/rest/v1/exercises?id=eq.${ex.id}`, { method:'PATCH', body: JSON.stringify(body) });
-    const idx = exercises.findIndex(e=>e.id===ex.id);
-    if(idx>-1) exercises[idx] = { ...exercises[idx], ...body };
-    renderGrid();
-    openSheet(ex.slug);
-  }catch(e){
-    btn.disabled = false; btn.textContent = 'Enregistrer';
-    alert("Impossible d'enregistrer la fiche. Vérifie ta connexion et réessaie.");
-  }
 }
 
 function printFiche(ex, fullUrl){
@@ -603,32 +494,6 @@ async function syncRoleFromSession(){
   }catch(e){}
 }
 
-// Petit point rouge sur "Mon compte" : message du coach non lu, ou programme qui vient de t'être assigné.
-async function checkClientNotifications(){
-  try{
-    const s = JSON.parse(localStorage.getItem('hs_session')||'null');
-    if(!s || !s.access_token) return;
-    const uid = s.user.id;
-    const headers = { apikey: SUPABASE_ANON_KEY, Authorization:`Bearer ${s.access_token}` };
-    let hasNotif = false;
-
-    const convs = await fetch(`${SUPABASE_URL}/rest/v1/conversations?select=id&user_id=eq.${uid}&limit=1`, { headers }).then(r=>r.json());
-    if(convs[0]){
-      const unread = await fetch(`${SUPABASE_URL}/rest/v1/messages?select=id&conversation_id=eq.${convs[0].id}&sender=eq.coach&read=eq.false`, { headers }).then(r=>r.json());
-      if(Array.isArray(unread) && unread.length) hasNotif = true;
-    }
-    if(!hasNotif){
-      const assigned = await fetch(`${SUPABASE_URL}/rest/v1/programs?select=id&owner_user_id=eq.${uid}`, { headers }).then(r=>r.json());
-      const seen = JSON.parse(localStorage.getItem('hs_seen_programs')||'[]');
-      if(Array.isArray(assigned) && assigned.some(p=>!seen.includes(p.id))) hasNotif = true;
-    }
-    if(hasNotif){
-      const link = document.querySelector('.navrow a[href="compte.html"]');
-      if(link && !link.querySelector('.nav-dot')) link.insertAdjacentHTML('beforeend', '<span class="nav-dot"></span>');
-    }
-  }catch(e){}
-}
-
 async function loadExercises(){
   try{
     const res = await fetch(`${SUPABASE_URL}/rest/v1/exercises?select=*&order=category,name`, {
@@ -648,61 +513,7 @@ async function loadExercises(){
 }
 
 syncRoleFromSession();
-checkClientNotifications();
 loadExercises();
-
-if('serviceWorker' in navigator){
-  window.addEventListener('load', ()=> navigator.serviceWorker.register('sw.js').catch(()=>{}));
-}
-
-(function(){
-  const KEY = 'hs_install_dismissed_v1';
-  if (localStorage.getItem(KEY)) return;
-  const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-  if (isStandalone) return;
-
-  function showBanner(html, onInstall){
-    const bar = document.createElement('div');
-    bar.className = 'install-banner show';
-    bar.innerHTML = html;
-    document.body.appendChild(bar);
-    const closeBtn = bar.querySelector('.installClose');
-    if (closeBtn) closeBtn.addEventListener('click', ()=>{ localStorage.setItem(KEY,'1'); bar.remove(); });
-    const installBtn = bar.querySelector('.installGo');
-    if (installBtn && onInstall) installBtn.addEventListener('click', onInstall);
-  }
-
-  const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
-  if (isIos) {
-    const isSafari = /safari/i.test(navigator.userAgent) && !/crios|fxios|edgios/i.test(navigator.userAgent);
-    if (isSafari) {
-      showBanner(`
-        <p>Installe cette app sur ton écran d'accueil : appuie sur <strong>Partager</strong> puis <strong>« Sur l'écran d'accueil »</strong>.</p>
-        <div class="btn-row"><button class="installClose" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer;">✕</button></div>
-      `);
-    }
-  } else {
-    let deferredPrompt = null;
-    window.addEventListener('beforeinstallprompt', (e)=>{
-      e.preventDefault();
-      deferredPrompt = e;
-      showBanner(`
-        <p>Installe HS Coaching sur ton appareil pour un accès rapide, même hors-ligne.</p>
-        <div class="btn-row">
-          <button class="installGo" style="background:var(--accent);color:var(--accent-ink);border:none;border-radius:999px;padding:8px 16px;font-weight:700;font-size:13px;cursor:pointer;">Installer</button>
-          <button class="installClose" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer;">✕</button>
-        </div>
-      `, async ()=>{
-        if (!deferredPrompt) return;
-        deferredPrompt.prompt();
-        await deferredPrompt.userChoice;
-        deferredPrompt = null;
-        localStorage.setItem(KEY,'1');
-        const el = document.querySelector('.install-banner'); if (el) el.remove();
-      });
-    });
-  }
-})();
 </script>
 </body>
 </html>

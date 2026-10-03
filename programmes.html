@@ -50,7 +50,7 @@
   .prog-card{background:var(--surface); border:1px solid var(--line); border-radius:var(--radius); padding:18px; text-align:left; cursor:pointer;}
   .prog-card:hover{border-color:var(--accent);}
   .prog-card .tag{font-size:11px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.08em;}
-  .prog-card h3{font-size:22px; margin-top:6px; font-family:'Inter'; font-weight:700; letter-spacing:0;}
+  .prog-card h3{font-size:22px; margin-top:6px; font-family:'Inter'; font-weight:700; letter-spacing:0; color:var(--ink);}
   .prog-card p{color:var(--ink-muted); font-size:13px; margin-top:8px; line-height:1.4;}
 
   .btn{display:inline-flex; align-items:center; gap:8px; font-size:14px; font-weight:700; padding:12px 20px; border-radius:999px; border:none; cursor:pointer;}
@@ -99,6 +99,20 @@
   .field textarea{min-height:70px; resize:vertical;}
   .picker{display:flex; gap:8px; margin-top:10px;}
   .picker select{flex:1; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;}
+  .pick-ex-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:8px;
+    max-height:300px; overflow-y:auto; padding:10px;
+    background:var(--surface); border:1px solid var(--line); border-radius:12px; margin-top:8px;
+  }
+  .pick-ex-card{
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+    background:var(--surface-2); border:1.5px solid var(--line); border-radius:10px;
+    padding:6px; cursor:pointer; text-align:center; font-family:inherit; font-size:10.5px; color:var(--ink);
+  }
+  .pick-ex-card .pick-ex-img{width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:6px; background:var(--surface);}
+  .pick-ex-card .pick-ex-noimg{width:100%; aspect-ratio:1/1; border-radius:6px; background:var(--surface); display:flex; align-items:center; justify-content:center; color:var(--ink-muted); font-size:9px; text-transform:uppercase; letter-spacing:.05em; padding:4px;}
+  .pick-ex-card span{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.2;}
+  .pick-ex-card.selected{border-color:var(--accent); background:var(--surface);}
   .draft-row{display:flex; align-items:center; gap:8px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:10px 14px; margin-top:8px; font-size:13.5px;}
   .draft-row .rm{margin-left:auto; color:var(--ink-muted); cursor:pointer; background:none; border:none; font-size:16px;}
 
@@ -520,13 +534,25 @@ async function finishSession(programId){
 
 // ---------- Création de programme ----------
 let draftExercises = [];
-function pickExOptionsHtml(list){
-  return list.length
-    ? list.map(e=>`<option value="${e.id}">${e.name} (${e.category})</option>`).join('')
-    : '<option disabled>Aucun résultat</option>';
+let selectedPickExId = null;
+function pickExGridHtml(list){
+  return list.length ? list.map(e=>`
+    <button type="button" class="pick-ex-card ${e.id===selectedPickExId?'selected':''}" data-id="${e.id}" onclick="selectPickEx('${e.id}')">
+      ${imgTag(e, 'pick-ex-img') || '<span class="pick-ex-noimg">'+e.category+'</span>'}
+      <span>${e.name}</span>
+    </button>
+  `).join('') : '<div class="empty" style="padding:20px 0;">Aucun résultat.</div>';
+}
+function renderPickExGrid(list){
+  document.getElementById('pickExGrid').innerHTML = pickExGridHtml(list);
+}
+function selectPickEx(exId){
+  selectedPickExId = exId;
+  [...document.querySelectorAll('.pick-ex-card')].forEach(c=> c.classList.toggle('selected', c.dataset.id===exId));
 }
 function renderCreate(){
   draftExercises = [];
+  selectedPickExId = null;
   app.innerHTML = `
     <a class="backlink" href="#">← Annuler</a>
     <div class="eyebrow">NOUVEAU PROGRAMME</div>
@@ -538,17 +564,18 @@ function renderCreate(){
     <div class="section">
       <h2>Exercices</h2>
       <div class="field"><label>Chercher un exercice</label><input id="pSearch" type="text" placeholder="Nom, catégorie, muscle…" oninput="filterPickEx()"></div>
-      <div class="picker">
-        <select id="pickEx">${pickExOptionsHtml(exercises)}</select>
+      <div id="pickExGrid" class="pick-ex-grid"></div>
+      <div class="picker" style="margin-top:10px;">
         <input id="pSets" type="number" placeholder="Séries" style="width:80px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
         <input id="pReps" type="text" placeholder="Reps" style="width:80px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
-        <button class="btn btn-ghost btn-sm" onclick="addDraftExercise()">Ajouter</button>
+        <button class="btn btn-ghost btn-sm" onclick="addDraftExercise()">Ajouter la sélection</button>
       </div>
       <div id="draftList"></div>
     </div>
 
     <div class="actions-row"><button class="btn btn-accent" onclick="saveProgram()">Enregistrer le programme</button></div>
   `;
+  renderPickExGrid(exercises);
 }
 function filterPickEx(){
   const q = document.getElementById('pSearch').value.trim().toLowerCase();
@@ -558,10 +585,11 @@ function filterPickEx(){
     || (e.primary_muscles||[]).some(m=>(m||'').toLowerCase().includes(q))
     || (e.secondary_muscles||[]).some(m=>(m||'').toLowerCase().includes(q))
   );
-  document.getElementById('pickEx').innerHTML = pickExOptionsHtml(matches);
+  renderPickExGrid(matches);
 }
 function addDraftExercise(){
-  const exId = document.getElementById('pickEx').value;
+  const exId = selectedPickExId;
+  if(!exId){ toast('Choisis un exercice dans la liste'); return; }
   const sets = document.getElementById('pSets').value || 3;
   const reps = document.getElementById('pReps').value || '10-12';
   const ex = exercisesById[exId];
