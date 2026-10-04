@@ -102,6 +102,7 @@
 
   .session-bar{position:sticky; bottom:0; padding:14px 0; padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));
     background:linear-gradient(0deg, var(--bg) 60%, transparent); margin-top:10px;}
+  body.has-install-banner .session-bar{margin-bottom:70px;}
 
   /* Formulaire création programme */
   .field{margin-top:14px;}
@@ -162,7 +163,7 @@
   .navrow a{position:relative;}
   .nav-dot{position:absolute; top:5px; right:10px; width:8px; height:8px; border-radius:50%; background:#ff5a4e; border:1.5px solid var(--bg);}
 
-  .install-banner{position:fixed; left:12px; right:12px; bottom:12px; z-index:90; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 16px; display:none; align-items:center; gap:12px; box-shadow:0 8px 24px rgba(0,0,0,.4);}
+  .install-banner{position:fixed; left:12px; right:12px; bottom:12px; z-index:40; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 16px; display:none; align-items:center; gap:12px; box-shadow:0 8px 24px rgba(0,0,0,.4);}
   .install-banner.show{display:flex;}
   .install-banner p{flex:1; font-size:13px; color:var(--ink); margin:0; line-height:1.4;}
   .install-banner .btn-row{display:flex; gap:8px; flex:none; align-items:center;}
@@ -788,6 +789,21 @@ async function saveProgramExercises(programId, draft){
 document.getElementById('exOverlay').addEventListener('click', e=>{ if(e.target.id==='exOverlay') e.target.classList.remove('open'); });
 document.getElementById('modalOverlay').addEventListener('click', e=>{ if(e.target.id==='modalOverlay') e.target.classList.remove('open'); });
 
+function trackVisit(){
+  try{
+    let vid = localStorage.getItem('hs_visitor_id');
+    if(!vid){ vid = crypto.randomUUID(); localStorage.setItem('hs_visitor_id', vid); }
+    let uid = null;
+    try{ const s = JSON.parse(localStorage.getItem('hs_session')||'null'); if(s && s.user && s.user.id) uid = s.user.id; }catch(e){}
+    fetch(`${SUPABASE_URL}/rest/v1/rpc/track_visit`, {
+      method:'POST',
+      headers:{ apikey: SUPABASE_ANON_KEY, Authorization:`Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type':'application/json' },
+      body: JSON.stringify({ p_token: vid, p_user_id: uid })
+    }).catch(()=>{});
+  }catch(e){}
+}
+trackVisit();
+
 boot();
 checkClientNotifications();
 
@@ -806,8 +822,9 @@ if('serviceWorker' in navigator){
     bar.className = 'install-banner show';
     bar.innerHTML = html;
     document.body.appendChild(bar);
+    document.body.classList.add('has-install-banner');
     const closeBtn = bar.querySelector('.installClose');
-    if (closeBtn) closeBtn.addEventListener('click', ()=>{ localStorage.setItem(KEY,'1'); bar.remove(); });
+    if (closeBtn) closeBtn.addEventListener('click', ()=>{ localStorage.setItem(KEY,'1'); bar.remove(); document.body.classList.remove('has-install-banner'); });
     const installBtn = bar.querySelector('.installGo');
     if (installBtn && onInstall) installBtn.addEventListener('click', onInstall);
   }
@@ -839,6 +856,7 @@ if('serviceWorker' in navigator){
         deferredPrompt = null;
         localStorage.setItem(KEY,'1');
         const el = document.querySelector('.install-banner'); if (el) el.remove();
+        document.body.classList.remove('has-install-banner');
       });
     });
   }
