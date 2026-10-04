@@ -280,14 +280,16 @@ async function renderCoachStats(){
       api('/rest/v1/app_visits?select=user_id')
     ]);
     const activeClients = new Set(recentSessions.map(s=>s.user_id).filter(Boolean)).size;
-    const withAccount = visits.filter(v=>v.user_id).length;
-    const anonymous = visits.length - withAccount;
+    // Un compte utilisé sur plusieurs appareils ne compte qu'une fois
+    const withAccount = new Set(visits.filter(v=>v.user_id).map(v=>v.user_id)).size;
+    const anonymous = visits.filter(v=>!v.user_id).length;
+    const totalVisitors = withAccount + anonymous;
     if(!document.getElementById('coachStats')) return; // l'utilisateur a changé de page pendant le chargement
     el.innerHTML = `
       <div class="stat-tile"><div class="stat-num">${weekSessions.length}</div><div class="stat-label">Séances cette semaine</div></div>
       <div class="stat-tile"><div class="stat-num">${activeClients}/${allClients.length}</div><div class="stat-label">Clients actifs (7j)</div></div>
       <div class="stat-tile"><div class="stat-num">${unread.length}</div><div class="stat-label">Messages non lus</div></div>
-      <div class="stat-tile" style="cursor:pointer;" onclick="openVisitsModal()"><div class="stat-num">${visits.length}</div><div class="stat-label">Visiteurs de l'appli (${withAccount} comptes, ${anonymous} invités)</div></div>
+      <div class="stat-tile" style="cursor:pointer;" onclick="openVisitsModal()"><div class="stat-num">${totalVisitors}</div><div class="stat-label">Visiteurs de l'appli (${withAccount} comptes, ${anonymous} invités)</div></div>
     `;
   }catch(e){
     console.error(e);
