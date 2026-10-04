@@ -103,6 +103,20 @@
   .session-bar{position:sticky; bottom:0; padding:14px 0; padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));
     background:linear-gradient(0deg, var(--bg) 60%, transparent); margin-top:10px;}
   body.has-install-banner .session-bar{margin-bottom:70px;}
+  .sess-timer{display:flex; align-items:center; gap:8px; margin-bottom:10px; min-height:42px;}
+  .sess-elapsed{flex:none; font-size:12.5px; color:var(--ink-muted); font-variant-numeric:tabular-nums; font-weight:600;}
+  .rest-chips{display:flex; gap:6px; flex:1; justify-content:flex-end; align-items:center;}
+  .rest-label{font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:.04em; margin-right:2px;}
+  .rest-chip{background:var(--surface-2); border:1px solid var(--line); color:var(--ink); border-radius:999px; padding:9px 11px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit; font-variant-numeric:tabular-nums;}
+  .rest-run{display:none; flex:1; align-items:center; justify-content:flex-end; gap:12px;}
+  .rest-count{font-size:30px; font-weight:800; line-height:1; color:var(--accent); font-variant-numeric:tabular-nums;}
+  .rest-stop{background:var(--surface-2); border:1px solid var(--line); color:var(--ink); border-radius:999px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;}
+  .sess-timer.running .rest-chips{display:none;}
+  .sess-timer.running .rest-run{display:flex;}
+  .sess-summary{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin:18px 0 22px;}
+  .sess-summary > div{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px 10px; text-align:center;}
+  .sess-summary b{display:block; font-size:26px; font-weight:800; color:var(--accent); font-variant-numeric:tabular-nums;}
+  .sess-summary span{display:block; font-size:11px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:.04em; margin-top:4px;}
 
   /* Formulaire création programme */
   .field{margin-top:14px;}
@@ -153,7 +167,7 @@
 
   .toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--surface-2); border:1px solid var(--line);
     padding:12px 20px; border-radius:999px; font-size:13.5px; z-index:80; display:none;}
-  body:has(.session-bar) .toast{ bottom:calc(24px + 56px + env(safe-area-inset-bottom,0px)); }
+  body:has(.session-bar) .toast{ bottom:calc(24px + 130px + env(safe-area-inset-bottom,0px)); }
 
   footer{border-top:1px solid var(--line); padding:26px 0; text-align:center; color:var(--ink-muted); font-size:12.5px; margin-top:40px;}
 
@@ -541,6 +555,7 @@ async function renderSession(programId){
     startSessionFor(programId)
   ]);
   activeSession = sessionId;
+  sessStart = Date.now(); sessDone = {}; restEnd = 0;
   const lastByKey = {};
   (lastLogs||[]).forEach(l=>{ lastByKey[`${l.exercise_id}_${l.set_number}`] = l; });
 
@@ -579,8 +594,28 @@ async function renderSession(programId){
     <div class="eyebrow">SÉANCE EN COURS</div>
     <h1 class="page" style="font-size:32px;">C'est parti 💪</h1>
     ${rows}
-    <div class="session-bar"><button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="finishSession('${programId}')">Terminer la séance</button></div>
+    <div class="session-bar">
+      <div class="sess-timer" id="sessTimer">
+        <div class="sess-elapsed" id="sessElapsed">⏱ 00:00</div>
+        <div class="rest-chips">
+          <span class="rest-label">Repos</span>
+          <button type="button" class="rest-chip" onclick="startRest(60)">1:00</button>
+          <button type="button" class="rest-chip" onclick="startRest(90)">1:30</button>
+          <button type="button" class="rest-chip" onclick="startRest(120)">2:00</button>
+          <button type="button" class="rest-chip" onclick="startRest(180)">3:00</button>
+        </div>
+        <div class="rest-run">
+          <span class="rest-label">Repos</span>
+          <span class="rest-count" id="restCount">00:00</span>
+          <button type="button" class="rest-stop" onclick="endRest(false)">Stop</button>
+        </div>
+      </div>
+      <button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="finishSession('${programId}')">Terminer la séance</button>
+    </div>
   `;
+  clearInterval(sessTick);
+  sessTick = setInterval(sessTickFn, 250);
+  sessTickFn();
 }
 async function validateSet(btn){
   const line = btn.closest('.set-line');
@@ -590,12 +625,62 @@ async function validateSet(btn){
   try{
     await logSetFor(activeSession, exId, setNum, reps, charge);
     btn.classList.add('done');
+    sessDone[`${exId}_${setNum}`] = (reps && charge) ? reps*charge : 0;
   }catch(e){ toast('Erreur, réessaie'); }
 }
+
+// Chrono de séance (durée totale) + minuteur de repos.
+// Basé sur des horodatages : reste juste même si l'écran se met en veille.
+let sessStart = 0, sessTick = null, restEnd = 0, sessDone = {};
+function fmtClock(ms){
+  const t = Math.max(0, Math.floor(ms/1000));
+  const h = Math.floor(t/3600), m = Math.floor((t%3600)/60), s = t%60;
+  const mm = String(m).padStart(2,'0'), ss = String(s).padStart(2,'0');
+  return h ? `${h}:${mm}:${ss}` : `${mm}:${ss}`;
+}
+function sessTickFn(){
+  const el = document.getElementById('sessElapsed');
+  if(!el){ clearInterval(sessTick); sessTick = null; restEnd = 0; return; }
+  el.textContent = '⏱ ' + fmtClock(Date.now() - sessStart);
+  if(restEnd){
+    const left = restEnd - Date.now();
+    if(left <= 0) endRest(true);
+    else { const c = document.getElementById('restCount'); if(c) c.textContent = fmtClock(left + 999); }
+  }
+}
+function startRest(sec){
+  restEnd = Date.now() + sec*1000;
+  const box = document.getElementById('sessTimer'); if(box) box.classList.add('running');
+  sessTickFn();
+}
+function endRest(alarm){
+  restEnd = 0;
+  const box = document.getElementById('sessTimer'); if(box) box.classList.remove('running');
+  if(!alarm) return;
+  try{ if(navigator.vibrate) navigator.vibrate([200,100,200,100,200]); }catch(e){}
+  toast('Repos terminé, c\'est reparti !');
+}
 async function finishSession(programId){
-  if(activeSession) await completeSessionFor(activeSession);
-  toast('Séance enregistrée, bravo !');
-  location.hash = `#programme/${programId}`;
+  const durationMs = Date.now() - sessStart;
+  try{
+    if(activeSession) await completeSessionFor(activeSession);
+  }catch(e){ console.error(e); toast('Erreur, réessaie'); return; }
+  clearInterval(sessTick); sessTick = null; restEnd = 0;
+  const body = document.getElementById('sessBody');
+  if(!body){ location.hash = `#programme/${programId}`; return; }
+  const nSets = Object.keys(sessDone).length;
+  const vol = Object.values(sessDone).reduce((a,b)=>a+b, 0);
+  body.innerHTML = `
+    <div class="eyebrow">SÉANCE TERMINÉE</div>
+    <h1 class="page" style="font-size:32px;">Bravo 💪</h1>
+    <div class="sess-summary">
+      <div><b>${fmtClock(durationMs)}</b><span>Durée de la séance</span></div>
+      <div><b>${nSets}</b><span>Séries validées</span></div>
+      ${vol ? `<div><b>${Math.round(vol).toLocaleString('fr-FR')} kg</b><span>Poids total soulevé</span></div>` : ''}
+    </div>
+    <button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}'">Retour au programme</button>
+  `;
+  window.scrollTo(0,0);
 }
 
 // ---------- Création / édition de programme ----------

@@ -368,8 +368,9 @@ async function loadHistorique(){
     const d = new Date(s.started_at);
     let duree = '';
     if(s.completed_at){
-      const min = Math.max(1, Math.round((new Date(s.completed_at) - d) / 60000));
-      duree = ` · ${min} min`;
+      const tot = Math.max(1, Math.round((new Date(s.completed_at) - d) / 1000));
+      const h = Math.floor(tot/3600), m = Math.floor((tot%3600)/60), sec = tot%60;
+      duree = ' · ' + (h ? `${h} h ${String(m).padStart(2,'0')} min ${String(sec).padStart(2,'0')} s` : (m ? `${m} min ${String(sec).padStart(2,'0')} s` : `${sec} s`));
     }
     return `<div class="card" style="cursor:pointer" onclick="toggleSessionLogs(this,'${s.id}')">
       <div class="tag">${d.toLocaleDateString('fr-FR', {day:'numeric',month:'long'})}${duree}</div>
