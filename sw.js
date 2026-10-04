@@ -3,7 +3,7 @@
 // et met en cache les réponses Supabase (exercices, images) en "stale-while-revalidate"
 // pour que la bibliothèque reste consultable même avec un wifi de salle capricieux.
 
-const CACHE_NAME = 'hs-coaching-v21';
+const CACHE_NAME = 'hs-coaching-v22';
 const APP_SHELL = [
   'index.html',
   'programmes.html',

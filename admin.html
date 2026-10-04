@@ -145,6 +145,15 @@
     </div>
   </div>
 </div>
+<div class="ex-overlay" id="visitsOverlay">
+  <div class="ex-modal">
+    <h3>Visiteurs de l'appli</h3>
+    <div id="visitsBody"></div>
+    <div class="row-actions" style="justify-content:center; margin-top:14px;">
+      <button class="btn btn-ghost" onclick="document.getElementById('visitsOverlay').classList.remove('open')">Fermer</button>
+    </div>
+  </div>
+</div>
 <div class="ex-overlay" id="exModalOverlay">
   <div class="ex-modal">
     <h3 id="exModalTitle">Fiche exercice</h3>
@@ -224,7 +233,7 @@ function renderDashboard(){
       <div class="stat-tile"><div class="stat-num">…</div><div class="stat-label">Séances cette semaine</div></div>
       <div class="stat-tile"><div class="stat-num">…</div><div class="stat-label">Clients actifs (7j)</div></div>
       <div class="stat-tile"><div class="stat-num">…</div><div class="stat-label">Messages non lus</div></div>
-      <div class="stat-tile"><div class="stat-num">…</div><div class="stat-label">Visiteurs de l'appli</div></div>
+      <div class="stat-tile" style="cursor:pointer;" onclick="openVisitsModal()"><div class="stat-num">…</div><div class="stat-label">Visiteurs de l'appli</div></div>
     </div>
     <div class="row-actions" style="margin-bottom:16px;"><button class="btn btn-ghost" onclick="openEntranceQr()">QR code d'entrée de salle</button></div>
     <div class="tabs">
@@ -262,11 +271,35 @@ async function renderCoachStats(){
       <div class="stat-tile"><div class="stat-num">${weekSessions.length}</div><div class="stat-label">Séances cette semaine</div></div>
       <div class="stat-tile"><div class="stat-num">${activeClients}/${allClients.length}</div><div class="stat-label">Clients actifs (7j)</div></div>
       <div class="stat-tile"><div class="stat-num">${unread.length}</div><div class="stat-label">Messages non lus</div></div>
-      <div class="stat-tile"><div class="stat-num">${visits.length}</div><div class="stat-label">Visiteurs de l'appli (${withAccount} comptes, ${anonymous} invités)</div></div>
+      <div class="stat-tile" style="cursor:pointer;" onclick="openVisitsModal()"><div class="stat-num">${visits.length}</div><div class="stat-label">Visiteurs de l'appli (${withAccount} comptes, ${anonymous} invités)</div></div>
     `;
   }catch(e){
     console.error(e);
     if(el) el.innerHTML = '<div class="empty">Statistiques indisponibles.</div>';
+  }
+}
+async function openVisitsModal(){
+  document.getElementById('visitsOverlay').classList.add('open');
+  const body = document.getElementById('visitsBody');
+  body.innerHTML = '<div class="empty">Chargement…</div>';
+  try{
+    const visits = await api('/rest/v1/app_visits?select=user_id,first_seen,last_seen&order=last_seen.desc');
+    const userIds = [...new Set(visits.map(v=>v.user_id).filter(Boolean))];
+    let profilesById = {};
+    if(userIds.length){
+      const profs = await api(`/rest/v1/profiles?select=id,full_name,email,role&id=in.(${userIds.join(',')})`);
+      profilesById = Object.fromEntries(profs.map(p=>[p.id,p]));
+    }
+    body.innerHTML = visits.length ? visits.map(v=>{
+      const p = v.user_id ? profilesById[v.user_id] : null;
+      const label = p ? (p.full_name || p.email || 'Compte') + (p.role==='admin' ? ' (coach)' : '') : 'Invité anonyme';
+      const last = new Date(v.last_seen).toLocaleString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
+      const first = new Date(v.first_seen).toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' });
+      return `<div class="ex-mini"><span>${label}<br><span style="color:var(--ink-muted); font-size:11.5px;">Dernière visite : ${last} · première visite : ${first}</span></span></div>`;
+    }).join('') : '<div class="empty">Aucune visite enregistrée.</div>';
+  }catch(e){
+    console.error(e);
+    body.innerHTML = '<div class="empty">Impossible de charger les visites.</div>';
   }
 }
 function paint(){ [...document.querySelectorAll('.tab')].forEach(t=> t.classList.toggle('active', t.dataset.t===currentTab)); }
