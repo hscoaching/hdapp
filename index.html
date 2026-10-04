@@ -103,11 +103,13 @@
   }
   .card{
     background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
-    padding:0; cursor:pointer; text-align:left; overflow:hidden;
+    padding:0; cursor:pointer; text-align:left; overflow:hidden; position:relative;
   }
   .card-img{width:100%; aspect-ratio:4/3; object-fit:cover; background:var(--surface-2); display:block;}
   .card-body{padding:16px;}
   .card:hover{border-color:var(--accent);}
+  .fav-star{position:absolute; top:8px; right:8px; width:30px; height:30px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer; z-index:2;}
+  .fav-star.active{color:#ffd54a;}
   .card .cat{font-size:11px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.08em;}
   .card h3{font-size:26px; margin-top:6px; color:var(--ink);}
   .card p{color:var(--ink-muted); font-size:13px; margin-top:8px; line-height:1.4;}
@@ -161,6 +163,7 @@
     flex:none; width:40px; height:40px; border-radius:50%; border:1px solid var(--line);
     background:var(--surface-2); color:var(--ink); font-size:16px; cursor:pointer;
   }
+  .editBtn.active{color:#ffd54a; border-color:#ffd54a;}
   .field{margin-top:14px;}
   .field label{display:block; font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-muted); margin-bottom:6px;}
   .field input, .field select, .field textarea{width:100%; background:var(--surface-2); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px 12px; font-family:inherit; font-size:14px;}
@@ -191,6 +194,7 @@
     .grid{ grid-template-columns:repeat(4,1fr); gap:7px; }
     .card-img{ aspect-ratio:1/1; }
     .card-body{ padding:6px 5px; }
+    .fav-star{ width:22px; height:22px; font-size:12px; top:4px; right:4px; }
     .card .cat{ display:none; }
     .card h3{
       font-size:11.5px; margin-top:0; line-height:1.15; color:var(--ink);
@@ -199,7 +203,7 @@
     .card p{ display:none; }
   }
 
-  .install-banner{position:fixed; left:12px; right:12px; bottom:12px; z-index:90; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 16px; display:none; align-items:center; gap:12px; box-shadow:0 8px 24px rgba(0,0,0,.4);}
+  .install-banner{position:fixed; left:12px; right:12px; bottom:12px; z-index:40; background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 16px; display:none; align-items:center; gap:12px; box-shadow:0 8px 24px rgba(0,0,0,.4);}
   .install-banner.show{display:flex;}
   .install-banner p{flex:1; font-size:13px; color:var(--ink); margin:0; line-height:1.4;}
   .install-banner .btn-row{display:flex; gap:8px; flex:none; align-items:center;}
@@ -313,6 +317,20 @@ const PEC_ORDER = ["Bas des pectoraux","Milieu des pectoraux","Haut des pectorau
 let exercises = [];
 let activeGroup = "Tous";
 let activeMuscle = null;
+let favorites = new Set();
+try{ favorites = new Set(JSON.parse(localStorage.getItem('hs_favorites')||'[]')); }catch(e){}
+function isFavorite(exId){ return favorites.has(exId); }
+function toggleFavorite(exId){
+  if(favorites.has(exId)) favorites.delete(exId); else favorites.add(exId);
+  try{ localStorage.setItem('hs_favorites', JSON.stringify([...favorites])); }catch(e){}
+  renderChips();
+  renderGrid();
+  const sheetBtn = document.getElementById('favSheetBtn');
+  if(sheetBtn && sheetBtn.dataset.exId === exId){
+    sheetBtn.textContent = favorites.has(exId) ? '★' : '☆';
+    sheetBtn.classList.toggle('active', favorites.has(exId));
+  }
+}
 
 const grid = document.getElementById('grid');
 const chipsEl = document.getElementById('chips');
@@ -324,6 +342,7 @@ const sheet = document.getElementById('sheet');
 
 function exerciseMatchesGroup(ex, group){
   if(group === "Tous") return true;
+  if(group === "Favoris") return favorites.has(ex.id);
   return (ex.primary_muscles||[]).some(m => MUSCLE_GROUP_OF[m] === group);
 }
 
@@ -352,9 +371,9 @@ function exerciseMuscleLabels(ex, group){
 }
 
 function renderChips(){
-  const all = ["Tous", ...GROUPS];
+  const all = ["Tous", "Favoris", ...GROUPS];
   chipsEl.innerHTML = all.map(c =>
-    `<div class="chip ${c===activeGroup?'active':''}" data-cat="${c}">${c}</div>`
+    `<div class="chip ${c===activeGroup?'active':''}" data-cat="${c}">${c==='Favoris' ? `★ Favoris${favorites.size?` (${favorites.size})`:''}` : c}</div>`
   ).join('');
   [...chipsEl.children].forEach(chip=>{
     chip.addEventListener('click', ()=>{
@@ -366,7 +385,7 @@ function renderChips(){
 }
 
 function renderSubChips(){
-  if(activeGroup === "Tous"){
+  if(activeGroup === "Tous" || activeGroup === "Favoris"){
     subchipsEl.innerHTML = '';
     subchipsEl.classList.add('hidden');
     return;
@@ -413,6 +432,7 @@ function renderGrid(){
   });
   grid.innerHTML = filtered.map(ex => `
     <button class="card" data-slug="${ex.slug}">
+      <span class="fav-star ${favorites.has(ex.id)?'active':''}" data-fav-id="${ex.id}">${favorites.has(ex.id)?'★':'☆'}</span>
       ${imgTag(ex, 'card-img')}
       <div class="card-body">
         <div class="cat">${ex.category}</div>
@@ -424,6 +444,9 @@ function renderGrid(){
   emptyEl.style.display = filtered.length ? 'none' : 'block';
   [...grid.children].forEach(card=>{
     card.addEventListener('click', ()=> openSheet(card.dataset.slug, true));
+  });
+  [...grid.querySelectorAll('.fav-star')].forEach(star=>{
+    star.addEventListener('click', e=>{ e.stopPropagation(); toggleFavorite(star.dataset.favId); });
   });
 }
 
@@ -459,6 +482,7 @@ function openSheet(slug, pushHash){
         <h2>${ex.name}</h2>
       </div>
       <div style="display:flex; gap:8px;">
+        <button class="editBtn ${favorites.has(ex.id)?'active':''}" id="favSheetBtn" data-ex-id="${ex.id}" title="Ajouter aux favoris">${favorites.has(ex.id)?'★':'☆'}</button>
         ${showQr ? `<button class="editBtn" id="editSheetBtn" title="Modifier cette fiche">✏️</button>` : ''}
         <button class="closeBtn" id="closeSheet">✕</button>
       </div>
@@ -495,6 +519,7 @@ function openSheet(slug, pushHash){
     document.getElementById('printQr').addEventListener('click', ()=> printFiche(ex, fullUrl));
   }
   document.getElementById('closeSheet').addEventListener('click', closeSheet);
+  document.getElementById('favSheetBtn').addEventListener('click', ()=> toggleFavorite(ex.id));
   if(showQr){
     const editBtn = document.getElementById('editSheetBtn');
     if(editBtn) editBtn.addEventListener('click', ()=> renderSheetEdit(ex));
@@ -666,8 +691,9 @@ if('serviceWorker' in navigator){
     bar.className = 'install-banner show';
     bar.innerHTML = html;
     document.body.appendChild(bar);
+    document.body.classList.add('has-install-banner');
     const closeBtn = bar.querySelector('.installClose');
-    if (closeBtn) closeBtn.addEventListener('click', ()=>{ localStorage.setItem(KEY,'1'); bar.remove(); });
+    if (closeBtn) closeBtn.addEventListener('click', ()=>{ localStorage.setItem(KEY,'1'); bar.remove(); document.body.classList.remove('has-install-banner'); });
     const installBtn = bar.querySelector('.installGo');
     if (installBtn && onInstall) installBtn.addEventListener('click', onInstall);
   }
@@ -699,6 +725,7 @@ if('serviceWorker' in navigator){
         deferredPrompt = null;
         localStorage.setItem(KEY,'1');
         const el = document.querySelector('.install-banner'); if (el) el.remove();
+        document.body.classList.remove('has-install-banner');
       });
     });
   }
