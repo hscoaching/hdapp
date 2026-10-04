@@ -42,7 +42,9 @@
   .btn-accent{background:var(--accent); color:var(--accent-ink);}
   .btn-ghost{background:none; border:1px solid var(--line); color:var(--ink);}
   .btn-sm{padding:8px 14px; font-size:12.5px;}
-  .reps-mode-btn.active{border-color:var(--accent); color:var(--accent);}
+  .reps-mode-btn.active{border-color:var(--accent); color:var(--accent); background:var(--surface);}
+  .pf-field{display:flex; flex-direction:column; gap:3px;}
+  .pf-field label{font-size:10.5px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:.03em;}
   .btn-danger{background:none; border:1px dashed var(--ink-muted); color:var(--ink);}
   .row-actions{display:flex; gap:8px; margin-top:16px; flex-wrap:wrap;}
   .stats-row{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin-top:16px;}
@@ -74,6 +76,7 @@
   .chat-input button{background:var(--accent); color:var(--accent-ink); border:none; border-radius:10px; padding:0 16px; font-weight:700; cursor:pointer;}
   .ex-mini{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-top:1px solid var(--line); font-size:13px; gap:10px;}
   .ex-mini > span:first-child{flex:1;}
+  .ex-mini > span:last-child{display:flex; gap:8px;}
   .ex-mini button{background:var(--surface-2); border:1px solid var(--line); border-radius:8px; color:var(--ink-muted); cursor:pointer; font-size:15px; width:36px; height:36px; flex:none;}
   .visits-section-title{font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-muted); margin:16px 0 4px; display:flex; align-items:center; gap:7px;}
   .visits-toggle{cursor:pointer;}
@@ -180,6 +183,7 @@ const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2ZnRxZGJkaWJmeWxhdWFydGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MjEzMjIsImV4cCI6MjEwNjA5NzMyMn0._WLJkWncu1fwMnlakuPFuJr_I-uvgr_TwvMect8E-a0";
 const app = document.getElementById('app');
 function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; clearTimeout(window._t); window._t=setTimeout(()=>t.style.display='none',2200); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 function getSession(){ try{ return JSON.parse(localStorage.getItem('hs_session')||'null'); }catch(e){ return null; } }
 async function refreshIfNeeded(){
   const s = getSession();
@@ -403,15 +407,22 @@ let clientRows = [];
 let clientSearchQ = '';
 async function renderClientsTab(){
   document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
-  const clients = await api('/rest/v1/profiles?select=id,full_name,email&role=eq.client&order=full_name');
-  if(!clients.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucun client pour le moment.</div>'; return; }
-  const idList = clients.map(c=>c.id).join(',');
-  const [progs, sessions, convs, unreadMsgs] = await Promise.all([
-    api(`/rest/v1/programs?select=id,name,owner_user_id,created_at&owner_user_id=in.(${idList})&is_official=eq.false&order=created_at.desc`),
-    api(`/rest/v1/sessions?select=user_id,started_at&user_id=in.(${idList})&order=started_at.desc`),
-    api(`/rest/v1/conversations?select=id,user_id&user_id=in.(${idList})`),
-    api('/rest/v1/messages?select=conversation_id&sender=eq.user&read=eq.false')
-  ]);
+  let clients, progs, sessions, convs, unreadMsgs;
+  try{
+    clients = await api('/rest/v1/profiles?select=id,full_name,email&role=eq.client&order=full_name');
+    if(!clients.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucun client pour le moment.</div>'; return; }
+    const idList = clients.map(c=>c.id).join(',');
+    [progs, sessions, convs, unreadMsgs] = await Promise.all([
+      api(`/rest/v1/programs?select=id,name,owner_user_id,created_at&owner_user_id=in.(${idList})&is_official=eq.false&order=created_at.desc`),
+      api(`/rest/v1/sessions?select=user_id,started_at&user_id=in.(${idList})&order=started_at.desc`),
+      api(`/rest/v1/conversations?select=id,user_id&user_id=in.(${idList})`),
+      api('/rest/v1/messages?select=conversation_id&sender=eq.user&read=eq.false')
+    ]);
+  }catch(e){
+    console.error(e);
+    document.getElementById('tabBody').innerHTML = '<div class="empty">Impossible de charger les clients. Réessaie.</div>';
+    return;
+  }
   const programByUser = {};
   progs.forEach(p=>{ if(!programByUser[p.owner_user_id]) programByUser[p.owner_user_id] = p; });
   const lastActivityByUser = {};
@@ -449,12 +460,12 @@ function filterClientsTab(q){
 function renderClientRows(rows){
   document.getElementById('clientsList').innerHTML = rows.length ? rows.map(r=>{
     const name = r.client.full_name || r.client.email || 'Client';
-    const esc = name.replace(/'/g,"\\'");
-    const progLine = r.prog ? `Programme : ${r.prog.name}` : 'Aucun programme assigné';
+    const esc = escapeHtml(name).replace(/'/g,"\\'");
+    const progLine = r.prog ? `Programme : ${escapeHtml(r.prog.name)}` : 'Aucun programme assigné';
     const lastLine = r.last ? `Dernière séance : ${new Date(r.last).toLocaleDateString('fr-FR')}` : 'Aucune séance enregistrée';
     return `<div class="card" style="cursor:default;">
-      <h3>${name} ${r.unread?`<span class="badge">${r.unread}</span>`:''}</h3>
-      <p>${r.client.email||''}</p>
+      <h3>${escapeHtml(name)} ${r.unread?`<span class="badge">${r.unread}</span>`:''}</h3>
+      <p>${escapeHtml(r.client.email||'')}</p>
       <p style="margin-top:8px;">${progLine}</p>
       <p>${lastLine}</p>
       <div class="row-actions" style="margin-top:10px;">
@@ -488,7 +499,7 @@ async function printClientReport(clientId){
     }catch(e){}
   }
   const exRows = exItems.length ? exItems.map(it=>
-    `<div class="pex"><b>${it.exercises?.name||'Exercice'}</b><span>${it.sets||'-'}×${it.reps||'-'} · repos ${it.rest_seconds||'-'}s</span></div>`
+    `<div class="pex"><b>${escapeHtml(it.exercises?.name||'Exercice')}</b><span>${escapeHtml(it.sets||'-')}×${escapeHtml(it.reps||'-')} · repos ${escapeHtml(it.rest_seconds||'-')}s</span></div>`
   ).join('') : '<div class="empty-print">Aucun programme assigné.</div>';
   const sessRows = sessions.length ? sessions.map(s=>{
     const d = new Date(s.started_at);
@@ -498,9 +509,9 @@ async function printClientReport(clientId){
     return `<div class="sess-row"><span>${d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}</span><span>${duree}${vol}</span></div>`;
   }).join('') : '<div class="empty-print">Aucune séance enregistrée.</div>';
   document.getElementById('printClientArea').innerHTML = `
-    <h1>${name}</h1>
-    <div class="pmeta">${client.email||''} · Fiche coach — HS Coaching</div>
-    <h2>Programme assigné${prog?` — ${prog.name}`:''}</h2>
+    <h1>${escapeHtml(name)}</h1>
+    <div class="pmeta">${escapeHtml(client.email||'')} · Fiche coach — HS Coaching</div>
+    <h2>Programme assigné${prog?` — ${escapeHtml(prog.name)}`:''}</h2>
     ${exRows}
     <h2>Historique des séances (15 dernières)</h2>
     ${sessRows}
@@ -545,32 +556,39 @@ function paintSub(){ [...document.querySelectorAll('.subtab')].forEach(t=> t.cla
 function loadSub(){ if(msgSub==='conversations') loadConversations(); else loadContacts(); }
 
 async function loadConversations(){
-  const convs = await api('/rest/v1/conversations?select=*&order=created_at.desc');
-  if(!convs.length){ document.getElementById('msgBody').innerHTML = '<div class="empty">Aucune discussion pour le moment.</div>'; return; }
-  const ids = [...new Set(convs.map(c=>c.user_id))];
-  const profs = await api(`/rest/v1/profiles?select=id,full_name,email&id=in.(${ids.join(',')})`);
+  let convs, profs, unread;
+  try{
+    convs = await api('/rest/v1/conversations?select=*&order=created_at.desc');
+    if(!convs.length){ document.getElementById('msgBody').innerHTML = '<div class="empty">Aucune discussion pour le moment.</div>'; return; }
+    const ids = [...new Set(convs.map(c=>c.user_id))];
+    profs = await api(`/rest/v1/profiles?select=id,full_name,email&id=in.(${ids.join(',')})`);
+    unread = await api(`/rest/v1/messages?select=conversation_id&sender=eq.user&read=eq.false`);
+  }catch(e){
+    console.error(e);
+    document.getElementById('msgBody').innerHTML = '<div class="empty">Impossible de charger les discussions. Réessaie.</div>';
+    return;
+  }
   const profById = Object.fromEntries(profs.map(p=>[p.id,p]));
-  const unread = await api(`/rest/v1/messages?select=conversation_id&sender=eq.user&read=eq.false`);
   const unreadCount = {}; unread.forEach(m=> unreadCount[m.conversation_id] = (unreadCount[m.conversation_id]||0)+1);
   document.getElementById('msgBody').innerHTML = convs.map(c=>{
     const p = profById[c.user_id] || {};
     const n = unreadCount[c.id];
-    return `<div class="card" onclick="openConversation('${c.id}','${(p.full_name||p.email||'Client').replace(/'/g,"\\'")}')">
-      <h3>${p.full_name || p.email || 'Client'} ${n?`<span class="badge">${n}</span>`:''}</h3>
-      <p>${p.email||''}</p>
+    return `<div class="card" onclick="openConversation('${c.id}','${escapeHtml(p.full_name||p.email||'Client').replace(/'/g,"\\'")}')">
+      <h3>${escapeHtml(p.full_name || p.email || 'Client')} ${n?`<span class="badge">${n}</span>`:''}</h3>
+      <p>${escapeHtml(p.email||'')}</p>
     </div>`;
   }).join('');
 }
 async function openConversation(convId, name){
   document.getElementById('msgBody').innerHTML = `
     <a class="backlink" onclick="loadConversations()">← Toutes les discussions</a>
-    <h3 style="font-family:Inter; font-weight:700; margin-bottom:10px;">${name}</h3>
+    <h3 style="font-family:Inter; font-weight:700; margin-bottom:10px;">${escapeHtml(name)}</h3>
     <div class="chat-box"><div class="chat-msgs" id="cMsgs"><div class="empty">Chargement…</div></div>
       <div class="chat-input"><input id="cInput" type="text" placeholder="Répondre…" onkeydown="if(event.key==='Enter')sendCoachMsg('${convId}')"><button onclick="sendCoachMsg('${convId}')">Envoyer</button></div></div>
   `;
   await api(`/rest/v1/messages?conversation_id=eq.${convId}&sender=eq.user&read=eq.false`, { method:'PATCH', body: JSON.stringify({ read:true }) });
   const msgs = await api(`/rest/v1/messages?select=*&conversation_id=eq.${convId}&order=created_at`);
-  document.getElementById('cMsgs').innerHTML = msgs.map(m=>`<div class="msg ${m.sender}">${m.content}</div>`).join('') || '<div class="empty">Pas encore de message.</div>';
+  document.getElementById('cMsgs').innerHTML = msgs.map(m=>`<div class="msg ${m.sender}">${escapeHtml(m.content)}</div>`).join('') || '<div class="empty">Pas encore de message.</div>';
   document.getElementById('cMsgs').scrollTop = 999999;
 }
 async function sendCoachMsg(convId){
@@ -584,7 +602,7 @@ async function sendCoachMsg(convId){
   try{
     await api('/rest/v1/messages', { method:'POST', body: JSON.stringify({ conversation_id: convId, sender:'coach', content }) });
     const msgs = await api(`/rest/v1/messages?select=*&conversation_id=eq.${convId}&order=created_at`);
-    box.innerHTML = msgs.map(m=>`<div class="msg ${m.sender}">${m.content}</div>`).join('');
+    box.innerHTML = msgs.map(m=>`<div class="msg ${m.sender}">${escapeHtml(m.content)}</div>`).join('');
     box.scrollTop = 999999;
   }catch(e){
     tmp.style.opacity = '0.5';
@@ -594,12 +612,19 @@ async function sendCoachMsg(convId){
   }
 }
 async function loadContacts(){
-  const reqs = await api('/rest/v1/coach_contact_requests?select=*&order=created_at.desc');
+  let reqs;
+  try{
+    reqs = await api('/rest/v1/coach_contact_requests?select=*&order=created_at.desc');
+  }catch(e){
+    console.error(e);
+    document.getElementById('msgBody').innerHTML = '<div class="empty">Impossible de charger les demandes. Réessaie.</div>';
+    return;
+  }
   document.getElementById('msgBody').innerHTML = reqs.length ? reqs.map(r=>`
     <div class="card" onclick="markContact('${r.id}')">
-      <div class="tag">${r.status}</div>
-      <h3>${r.name}</h3>
-      <p>${r.email||r.phone||''} ${r.message?'— '+r.message:''}</p>
+      <div class="tag">${escapeHtml(r.status)}</div>
+      <h3>${escapeHtml(r.name)}</h3>
+      <p>${escapeHtml(r.email||r.phone||'')} ${r.message?'— '+escapeHtml(r.message):''}</p>
     </div>`).join('') : '<div class="empty">Aucune demande de contact.</div>';
 }
 async function markContact(id){
@@ -613,19 +638,25 @@ async function renderProgramsTab(){
     <div class="row-actions"><button class="btn btn-accent" onclick="renderProgramForm()">+ Nouveau programme</button></div>
     <div id="progList" style="margin-top:16px;"><div class="empty">Chargement…</div></div>
   `;
-  const progs = await api('/rest/v1/programs?select=*&order=is_official.desc,created_at.desc');
-  const ownerIds = [...new Set(progs.map(p=>p.owner_user_id).filter(Boolean))];
-  let profById = {};
-  if(ownerIds.length){
-    const profs = await api(`/rest/v1/profiles?select=id,full_name,email&id=in.(${ownerIds.join(',')})`);
-    profById = Object.fromEntries(profs.map(p=>[p.id,p]));
+  let progs, profById = {};
+  try{
+    progs = await api('/rest/v1/programs?select=*&order=is_official.desc,created_at.desc');
+    const ownerIds = [...new Set(progs.map(p=>p.owner_user_id).filter(Boolean))];
+    if(ownerIds.length){
+      const profs = await api(`/rest/v1/profiles?select=id,full_name,email&id=in.(${ownerIds.join(',')})`);
+      profById = Object.fromEntries(profs.map(p=>[p.id,p]));
+    }
+  }catch(e){
+    console.error(e);
+    document.getElementById('progList').innerHTML = '<div class="empty">Impossible de charger les programmes. Réessaie.</div>';
+    return;
   }
   document.getElementById('progList').innerHTML = progs.length ? progs.map(p=>{
-    const owner = p.owner_user_id ? (profById[p.owner_user_id]?.full_name || profById[p.owner_user_id]?.email || 'client') : null;
+    const owner = p.owner_user_id ? escapeHtml(profById[p.owner_user_id]?.full_name || profById[p.owner_user_id]?.email || 'client') : null;
     return `<div class="card">
       <div onclick="renderProgramForm('${p.id}')" style="cursor:pointer;">
         <div class="tag">${p.is_official ? 'Officiel — tous les visiteurs' : (owner ? 'Assigné à '+owner : 'Perso visiteur')}</div>
-        <h3>${p.name}</h3><p>${p.description||''}</p>
+        <h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description||'')}</p>
       </div>
       <div class="row-actions" style="margin-top:10px;">
         <button class="btn btn-ghost btn-sm" onclick="duplicateProgram('${p.id}')">Dupliquer</button>
@@ -665,7 +696,7 @@ async function renderProgramForm(programId, prefill){
         <label>Client</label><select id="pfClient">${clientOptions}</select>
       </div>
       <div class="row-actions">
-        <button class="btn btn-accent" onclick="saveProgramForm('${programId||''}')">${programId?'Enregistrer':'Créer le programme'}</button>
+        <button class="btn btn-accent" id="pfSaveBtn" onclick="saveProgramForm('${programId||''}')">${programId?'Enregistrer':'Créer le programme'}</button>
         ${programId ? `<button class="btn btn-danger" onclick="deleteProgramForm('${programId}')">Supprimer le programme</button>` : ''}
       </div>
     </div>
@@ -676,13 +707,13 @@ async function renderProgramForm(programId, prefill){
       <div class="picker" style="flex-wrap:wrap;">
         <select id="pfPickEx">${exercises.map(e=>`<option value="${e.id}">${e.name}</option>`).join('')}</select>
         <button class="btn btn-ghost" type="button" onclick="editSelectedPickerEx()" title="Modifier cette fiche">✏️</button>
-        <input id="pfSets" type="number" placeholder="Séries" value="3" style="width:70px;">
+        <div class="pf-field"><label for="pfSets">Séries</label><input id="pfSets" type="number" placeholder="Séries" value="3" style="width:70px;"></div>
         <div style="display:flex; gap:6px;">
           <button type="button" class="btn btn-ghost btn-sm reps-mode-btn active" data-mode="reps" onclick="setPfRepsMode('reps')">Répétitions</button>
           <button type="button" class="btn btn-ghost btn-sm reps-mode-btn" data-mode="time" onclick="setPfRepsMode('time')">Temps</button>
         </div>
-        <input id="pfReps" type="text" placeholder="Reps" value="10-12" style="width:70px;">
-        <input id="pfRest" type="number" placeholder="Repos(s)" value="90" style="width:80px;">
+        <div class="pf-field"><label for="pfReps">Reps</label><input id="pfReps" type="text" placeholder="Reps" value="10-12" style="width:70px;"></div>
+        <div class="pf-field"><label for="pfRest">Repos (s)</label><input id="pfRest" type="number" placeholder="Repos(s)" value="90" style="width:80px;"></div>
         <button class="btn btn-ghost" onclick="addDraftEx()">Ajouter à la liste</button>
       </div>
       <p class="empty" style="padding-top:10px;">Rien n'est enregistré tant que tu n'as pas cliqué sur "${programId?'Enregistrer':'Créer le programme'}" en haut.</p>
@@ -711,7 +742,7 @@ function renderDraftList(){
     const ex = exercisesById[it.exercise_id];
     return `<div class="ex-mini">
       <span>${ex?ex.name:'Exercice'} — ${it.sets||'-'}×${it.reps||'-'} (repos ${it.rest_seconds||'-'}s)</span>
-      <span style="display:flex;gap:2px;">
+      <span style="display:flex;gap:8px;">
         <button onclick="openExerciseModal('${it.exercise_id}')" title="Modifier la fiche">✏️</button>
         <button onclick="moveDraft(${i},-1)" title="Monter">↑</button>
         <button onclick="moveDraft(${i},1)" title="Descendre">↓</button>
@@ -745,6 +776,8 @@ function moveDraft(i, dir){
   renderDraftList();
 }
 function removeDraftEx(i){
+  const ex = exercisesById[draftItems[i]?.exercise_id];
+  if(!confirm(`Retirer "${ex?ex.name:'cet exercice'}" du programme ?`)) return;
   draftItems.splice(i,1);
   renderDraftList();
 }
@@ -756,19 +789,28 @@ async function saveProgramForm(programId){
   const clientId = target==='client' ? document.getElementById('pfClient').value : null;
   if(!name){ toast('Donne un nom au programme'); return; }
   if(!draftItems.length){ toast('Ajoute au moins un exercice à la liste'); return; }
-  const body = { name, description: desc||null, is_official: target==='official', owner_user_id: clientId };
-  let pid = programId;
-  if(pid){
-    await api(`/rest/v1/programs?id=eq.${pid}`, { method:'PATCH', body: JSON.stringify(body) });
-    await api(`/rest/v1/program_exercises?program_id=eq.${pid}`, { method:'DELETE' });
-  } else {
-    const created = await api('/rest/v1/programs', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify(body) });
-    pid = created[0].id;
+  const btn = document.getElementById('pfSaveBtn');
+  const originalLabel = btn ? btn.textContent : '';
+  if(btn){ btn.disabled = true; btn.textContent = 'Enregistrement...'; }
+  try{
+    const body = { name, description: desc||null, is_official: target==='official', owner_user_id: clientId };
+    let pid = programId;
+    if(pid){
+      await api(`/rest/v1/programs?id=eq.${pid}`, { method:'PATCH', body: JSON.stringify(body) });
+      await api(`/rest/v1/program_exercises?program_id=eq.${pid}`, { method:'DELETE' });
+    } else {
+      const created = await api('/rest/v1/programs', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify(body) });
+      pid = created[0].id;
+    }
+    const rows = draftItems.map((it,i)=>({ program_id: pid, exercise_id: it.exercise_id, order_index: i+1, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds }));
+    await api('/rest/v1/program_exercises', { method:'POST', body: JSON.stringify(rows) });
+    toast(programId ? 'Programme mis à jour' : 'Programme créé');
+    renderProgramForm(pid);
+  }catch(e){
+    console.error(e);
+    toast('Erreur, impossible d\'enregistrer. Réessaie.');
+    if(btn){ btn.disabled = false; btn.textContent = originalLabel; }
   }
-  const rows = draftItems.map((it,i)=>({ program_id: pid, exercise_id: it.exercise_id, order_index: i+1, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds }));
-  await api('/rest/v1/program_exercises', { method:'POST', body: JSON.stringify(rows) });
-  toast(programId ? 'Programme mis à jour' : 'Programme créé');
-  renderProgramForm(pid);
 }
 async function deleteProgramForm(programId){
   if(!confirm('Supprimer ce programme ?')) return;

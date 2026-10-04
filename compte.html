@@ -52,7 +52,7 @@
   .btn-block{width:100%; justify-content:center; margin-top:18px;}
   .switch-mode{margin-top:16px; font-size:13px; color:var(--ink-muted); text-align:center;}
   .switch-mode a{color:var(--accent); font-weight:600; cursor:pointer;}
-  .error-msg{color:var(--ink); font-size:13px; margin-top:10px; display:none; font-weight:600; border-left:2px solid var(--ink); padding-left:10px;}
+  .error-msg{color:#ff8a65; font-size:13px; margin-top:10px; display:none; font-weight:600; border-left:2px solid #ff8a65; padding-left:10px; background:rgba(255,138,101,.08); padding:8px 10px; border-radius:0 8px 8px 0;}
   .info-msg{color:var(--ink-muted); font-size:13px; margin-top:14px; background:var(--surface); border:1px solid var(--line); border-radius:10px; padding:12px 14px;}
 
   .tabs{display:flex; gap:6px; border-bottom:1px solid var(--line); margin-bottom:20px; overflow-x:auto;}
@@ -150,6 +150,7 @@ function getSession(){
 }
 function setSession(s){ localStorage.setItem('hs_session', JSON.stringify(s)); }
 function clearSession(){ localStorage.removeItem('hs_session'); localStorage.removeItem('hs_role'); }
+function escapeHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 async function authFetch(path, opts={}){
   return fetch(`${SUPABASE_URL}${path}`, {
@@ -681,7 +682,7 @@ async function refreshMessages(){
   const msgs = await res.json();
   const box = document.getElementById('chatMsgs');
   if(!box) return;
-  box.innerHTML = msgs.length ? msgs.map(m=>`<div class="msg ${m.sender}">${m.content}</div>`).join('') : '<div class="empty">Dis bonjour à ton coach 👋</div>';
+  box.innerHTML = msgs.length ? msgs.map(m=>`<div class="msg ${m.sender}">${escapeHtml(m.content)}</div>`).join('') : '<div class="empty">Dis bonjour à ton coach 👋</div>';
   box.scrollTop = box.scrollHeight;
 }
 async function sendMessage(){
@@ -717,8 +718,8 @@ async function loadProfil(){
   const p = profiles[0] || {};
   document.getElementById('tabBody').innerHTML = `
     <div class="card">
-      <div class="profile-row"><span>Nom</span><b>${p.full_name || '—'}</b></div>
-      <div class="profile-row"><span>Email</span><b>${s.user.email}</b></div>
+      <div class="profile-row"><span>Nom</span><b>${escapeHtml(p.full_name || '—')}</b></div>
+      <div class="profile-row"><span>Email</span><b>${escapeHtml(s.user.email)}</b></div>
       <div class="profile-row"><span>Statut</span><b>${p.role==='admin' ? 'Coach (admin)' : 'Client'}</b></div>
     </div>
     <button class="btn btn-ghost btn-block" onclick="logout()">Se déconnecter</button>
