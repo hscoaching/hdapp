@@ -544,12 +544,15 @@ async function renderSession(programId){
   const lastByKey = {};
   (lastLogs||[]).forEach(l=>{ lastByKey[`${l.exercise_id}_${l.set_number}`] = l; });
 
+  const setCounterByEx = {};
   const rows = items.map(it=>{
     const ex = exercisesById[it.exercise_id];
     if(!ex) return '';
     const nSets = it.sets || 3;
     let sets = '';
-    for(let s=1; s<=nSets; s++){
+    const already = setCounterByEx[ex.id] || 0;
+    for(let i=1; i<=nSets; i++){
+      const s = already + i;
       const prev = lastByKey[`${ex.id}_${s}`];
       const ph = prev ? `${prev.reps||''}` : (it.reps||'');
       const phc = prev ? `${prev.charge||''}` : '';
@@ -562,6 +565,7 @@ async function renderSession(programId){
         <button class="valid" onclick="validateSet(this)">✓</button>
       </div>`;
     }
+    setCounterByEx[ex.id] = already + nSets;
     return `<div class="ex-row">
       <div class="ex-row-top" style="cursor:pointer" onclick="openExFiche('${ex.id}')">
         <div><div class="ex-name">${ex.name}</div>
