@@ -75,6 +75,18 @@
   .ex-mini{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-top:1px solid var(--line); font-size:13px; gap:10px;}
   .ex-mini > span:first-child{flex:1;}
   .ex-mini button{background:var(--surface-2); border:1px solid var(--line); border-radius:8px; color:var(--ink-muted); cursor:pointer; font-size:15px; width:36px; height:36px; flex:none;}
+  .visits-section-title{font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.04em; color:var(--ink-muted); margin:16px 0 4px; display:flex; align-items:center; gap:7px;}
+  .visits-toggle{cursor:pointer;}
+  .visits-count{background:var(--surface-2); border-radius:999px; padding:1px 8px; font-size:11px; color:var(--ink); font-weight:700;}
+  .visit-row{display:flex; align-items:center; gap:10px; padding:9px 0; border-top:1px solid var(--line);}
+  .visit-avatar{flex:none; width:34px; height:34px; border-radius:50%; background:var(--accent); color:var(--accent-ink); display:flex; align-items:center; justify-content:center; font-size:12px; font-weight:700;}
+  .visit-avatar-anon{background:var(--surface-2); color:var(--ink-muted);}
+  .visit-info{flex:1; min-width:0;}
+  .visit-name{font-size:13.5px; font-weight:600; display:flex; align-items:center; gap:6px; flex-wrap:wrap;}
+  .visit-sub{font-size:11.5px; color:var(--ink-muted); overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .visit-badge{background:var(--surface-2); border-radius:999px; padding:1px 7px; font-size:9.5px; color:var(--accent); font-weight:700; text-transform:uppercase;}
+  .visit-when{flex:none; font-size:11.5px; color:var(--ink-muted); display:flex; align-items:center; gap:5px; white-space:nowrap;}
+  .visit-dot{width:7px; height:7px; border-radius:50%; flex:none;}
   .picker{display:flex; gap:8px; margin-top:10px; flex-wrap:wrap;}
   .picker select, .picker input{background:var(--surface-2); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:9px; font-family:inherit; font-size:13px;}
   .toast{position:fixed; left:50%; bottom:24px; transform:translateX(-50%); background:var(--surface-2); border:1px solid var(--line); padding:12px 20px; border-radius:999px; font-size:13.5px; z-index:80; display:none;}
@@ -278,6 +290,8 @@ async function renderCoachStats(){
     if(el) el.innerHTML = '<div class="empty">Statistiques indisponibles.</div>';
   }
 }
+let visitsAccounts = [];
+let visitsAnon = [];
 async function openVisitsModal(){
   document.getElementById('visitsOverlay').classList.add('open');
   const body = document.getElementById('visitsBody');
@@ -290,17 +304,80 @@ async function openVisitsModal(){
       const profs = await api(`/rest/v1/profiles?select=id,full_name,email,role&id=in.(${userIds.join(',')})`);
       profilesById = Object.fromEntries(profs.map(p=>[p.id,p]));
     }
-    body.innerHTML = visits.length ? visits.map(v=>{
-      const p = v.user_id ? profilesById[v.user_id] : null;
-      const label = p ? (p.full_name || p.email || 'Compte') + (p.role==='admin' ? ' (coach)' : '') : 'Invité anonyme';
-      const last = new Date(v.last_seen).toLocaleString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' });
-      const first = new Date(v.first_seen).toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' });
-      return `<div class="ex-mini"><span>${label}<br><span style="color:var(--ink-muted); font-size:11.5px;">Dernière visite : ${last} · première visite : ${first}</span></span></div>`;
-    }).join('') : '<div class="empty">Aucune visite enregistrée.</div>';
+    visitsAccounts = visits.filter(v=>v.user_id).map(v=>({ visit:v, profile: profilesById[v.user_id] || {} }));
+    visitsAnon = visits.filter(v=>!v.user_id);
+    body.innerHTML = `
+      <div class="field" style="margin-bottom:8px;"><input id="visitsSearch" type="text" placeholder="Chercher un nom ou email…" oninput="renderVisitsList()"></div>
+      <div class="visits-section-title">Comptes <span class="visits-count">${visitsAccounts.length}</span></div>
+      <div id="visitsAccountsList"></div>
+      <div class="visits-section-title visits-toggle" onclick="toggleAnonVisits()">Invités anonymes <span class="visits-count">${visitsAnon.length}</span> <span id="anonToggleIcon">▸</span></div>
+      <div id="visitsAnonList" style="display:none;"></div>
+    `;
+    renderVisitsList();
   }catch(e){
     console.error(e);
     body.innerHTML = '<div class="empty">Impossible de charger les visites.</div>';
   }
+}
+function renderVisitsList(){
+  const qEl = document.getElementById('visitsSearch');
+  const q = qEl ? qEl.value.trim().toLowerCase() : '';
+  const matches = !q ? visitsAccounts : visitsAccounts.filter(a=>
+    (a.profile.full_name||'').toLowerCase().includes(q) || (a.profile.email||'').toLowerCase().includes(q)
+  );
+  const listEl = document.getElementById('visitsAccountsList');
+  listEl.innerHTML = matches.length ? matches.map(a=> accountRowHtml(a.visit, a.profile)).join('') : '<div class="empty">Aucun compte ne correspond.</div>';
+  const anonEl = document.getElementById('visitsAnonList');
+  if(anonEl && anonEl.dataset.loaded !== '1'){
+    anonEl.innerHTML = visitsAnon.length ? visitsAnon.map(anonRowHtml).join('') : '<div class="empty">Aucun invité anonyme.</div>';
+    anonEl.dataset.loaded = '1';
+  }
+}
+function toggleAnonVisits(){
+  const el = document.getElementById('visitsAnonList');
+  const icon = document.getElementById('anonToggleIcon');
+  const show = el.style.display === 'none';
+  el.style.display = show ? 'block' : 'none';
+  icon.textContent = show ? '▾' : '▸';
+}
+function timeAgo(iso){
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const min = Math.floor(diffMs/60000);
+  if(min < 1) return "à l'instant";
+  if(min < 60) return `il y a ${min} min`;
+  const h = Math.floor(min/60);
+  if(h < 24) return `il y a ${h} h`;
+  const days = Math.floor(h/24);
+  if(days === 1) return 'hier';
+  if(days < 7) return `il y a ${days} j`;
+  return new Date(iso).toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
+}
+function initials(name){
+  return (name||'?').trim().split(/\s+/).slice(0,2).map(s=>s[0]).join('').toUpperCase() || '?';
+}
+function accountRowHtml(v, p){
+  const name = p.full_name || p.email || 'Compte';
+  const ageMs = Date.now() - new Date(v.last_seen).getTime();
+  const dotColor = ageMs < 24*3600*1000 ? '#4caf7d' : (ageMs < 7*24*3600*1000 ? '#e0a94c' : 'var(--ink-muted)');
+  return `<div class="visit-row">
+    <div class="visit-avatar">${initials(name)}</div>
+    <div class="visit-info">
+      <div class="visit-name">${name}${p.role==='admin' ? ' <span class="visit-badge">coach</span>' : ''}</div>
+      <div class="visit-sub">${p.email||''}</div>
+    </div>
+    <div class="visit-when"><span class="visit-dot" style="background:${dotColor};"></span>${timeAgo(v.last_seen)}</div>
+  </div>`;
+}
+function anonRowHtml(v){
+  const first = new Date(v.first_seen).toLocaleDateString('fr-FR', { day:'numeric', month:'short', year:'numeric' });
+  return `<div class="visit-row">
+    <div class="visit-avatar visit-avatar-anon">?</div>
+    <div class="visit-info">
+      <div class="visit-name">Invité anonyme</div>
+      <div class="visit-sub">Première visite : ${first}</div>
+    </div>
+    <div class="visit-when">${timeAgo(v.last_seen)}</div>
+  </div>`;
 }
 function paint(){ [...document.querySelectorAll('.tab')].forEach(t=> t.classList.toggle('active', t.dataset.t===currentTab)); }
 function load(){
