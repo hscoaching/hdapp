@@ -304,7 +304,18 @@ async function openVisitsModal(){
       const profs = await api(`/rest/v1/profiles?select=id,full_name,email,role&id=in.(${userIds.join(',')})`);
       profilesById = Object.fromEntries(profs.map(p=>[p.id,p]));
     }
-    visitsAccounts = visits.filter(v=>v.user_id).map(v=>({ visit:v, profile: profilesById[v.user_id] || {} }));
+    // Un même compte peut avoir visité depuis plusieurs appareils (téléphone, ordi, navigation privée...),
+    // ce qui crée une ligne par appareil : on les fusionne ici pour n'afficher le compte qu'une fois.
+    const grouped = {};
+    visits.filter(v=>v.user_id).forEach(v=>{
+      const g = grouped[v.user_id] || (grouped[v.user_id] = { user_id: v.user_id, first_seen: v.first_seen, last_seen: v.last_seen, devices: 0 });
+      g.devices++;
+      if(new Date(v.first_seen) < new Date(g.first_seen)) g.first_seen = v.first_seen;
+      if(new Date(v.last_seen) > new Date(g.last_seen)) g.last_seen = v.last_seen;
+    });
+    visitsAccounts = Object.values(grouped)
+      .map(g=>({ visit:g, profile: profilesById[g.user_id] || {} }))
+      .sort((a,b)=> new Date(b.visit.last_seen) - new Date(a.visit.last_seen));
     visitsAnon = visits.filter(v=>!v.user_id);
     body.innerHTML = `
       <div class="field" style="margin-bottom:8px;"><input id="visitsSearch" type="text" placeholder="Chercher un nom ou email…" oninput="renderVisitsList()"></div>
@@ -363,7 +374,7 @@ function accountRowHtml(v, p){
     <div class="visit-avatar">${initials(name)}</div>
     <div class="visit-info">
       <div class="visit-name">${name}${p.role==='admin' ? ' <span class="visit-badge">coach</span>' : ''}</div>
-      <div class="visit-sub">${p.email||''}</div>
+      <div class="visit-sub">${p.email||''}${v.devices>1?` · ${v.devices} appareils`:''}</div>
     </div>
     <div class="visit-when"><span class="visit-dot" style="background:${dotColor};"></span>${timeAgo(v.last_seen)}</div>
   </div>`;
