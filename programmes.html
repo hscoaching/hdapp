@@ -103,6 +103,15 @@
   .session-bar{position:sticky; bottom:0; padding:14px 0; padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));
     background:linear-gradient(0deg, var(--bg) 60%, transparent); margin-top:10px;}
   body.has-install-banner .session-bar{margin-bottom:70px;}
+  .day-block{margin-top:22px; padding-top:6px; border-top:1px solid var(--line);}
+  .day-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:4px;}
+  .day-head h2{font-size:26px;}
+  .day-count{font-size:12px; color:var(--ink-muted); flex:none;}
+  .day-tabs{display:flex; flex-wrap:wrap; gap:8px; margin:10px 0 8px;}
+  .day-chip{background:var(--surface); border:1px solid var(--line); color:var(--ink-muted); border-radius:999px; padding:9px 14px; font-size:13.5px; font-weight:600; cursor:pointer; font-family:inherit;}
+  .day-chip.active{background:var(--surface-2); border-color:var(--accent); color:var(--accent);}
+  .day-chip.add{border-style:dashed;}
+  .day-tools{display:flex; gap:8px; margin-bottom:12px;}
   .sess-timer{display:flex; align-items:center; gap:8px; margin-bottom:10px; min-height:42px;}
   .sess-elapsed{flex:none; font-size:12.5px; color:var(--ink-muted); font-variant-numeric:tabular-nums; font-weight:600;}
   .rest-chips{display:flex; gap:6px; flex:1; justify-content:flex-end; align-items:center;}
@@ -288,21 +297,22 @@ async function programExercisesFor(programId){
   // Les lignes "désactivées" (sets=0) lors d'une modification côté invité ne doivent plus s'afficher.
   return rows.filter(r => r.sets !== 0);
 }
-async function startSessionFor(programId){
+async function startSessionFor(programId, dayLabel){
   if(isLoggedIn()){
-    const res = await authedFetch('/rest/v1/sessions', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ program_id: programId }) });
+    const res = await authedFetch('/rest/v1/sessions', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ program_id: programId, day_label: dayLabel||null }) });
     const data = await res.json(); return data[0].id;
   }
-  return rpc('guest_start_session', { p_token: TOKEN, p_program_id: programId });
+  return rpc('guest_start_session_day', { p_token: TOKEN, p_program_id: programId, p_day_label: dayLabel||null });
 }
-async function lastLogsFor(programId){
+async function lastLogsFor(programId, dayLabel){
   if(isLoggedIn()){
     const s = getUserSession();
-    const sessions = await (await authedFetch(`/rest/v1/sessions?select=id&program_id=eq.${programId}&user_id=eq.${s.user.id}&order=started_at.desc&limit=1`)).json();
+    const dayFilter = dayLabel ? `&day_label=eq.${encodeURIComponent(dayLabel)}` : '&day_label=is.null';
+    const sessions = await (await authedFetch(`/rest/v1/sessions?select=id&program_id=eq.${programId}&user_id=eq.${s.user.id}${dayFilter}&order=started_at.desc&limit=1`)).json();
     if(!sessions.length) return [];
     return (await authedFetch(`/rest/v1/session_logs?select=exercise_id,set_number,reps,charge&session_id=eq.${sessions[0].id}`)).json();
   }
-  return rpc('guest_last_session_logs', { p_token: TOKEN, p_program_id: programId });
+  return rpc('guest_last_session_logs_day', { p_token: TOKEN, p_program_id: programId, p_day_label: dayLabel||null });
 }
 async function logSetFor(sessionId, exId, setNum, reps, charge){
   if(isLoggedIn()) return authedFetch('/rest/v1/session_logs', { method:'POST', body: JSON.stringify({ session_id: sessionId, exercise_id: exId, set_number: setNum, reps, charge }) });
@@ -321,14 +331,29 @@ async function createProgramFor(name, desc){
   }
   return rpc('guest_create_program', { p_token: TOKEN, p_name: name, p_description: desc });
 }
-async function addProgramExerciseFor(programId, exId, orderIdx, sets, reps, rest, notes){
+async function addProgramExerciseFor(programId, exId, orderIdx, sets, reps, rest, notes, dayLabel){
   if(isLoggedIn()){
-    const res = await authedFetch('/rest/v1/program_exercises', { method:'POST', body: JSON.stringify({ program_id: programId, exercise_id: exId, order_index: orderIdx, sets, reps, rest_seconds: rest, notes }) });
+    const res = await authedFetch('/rest/v1/program_exercises', { method:'POST', body: JSON.stringify({ program_id: programId, exercise_id: exId, order_index: orderIdx, sets, reps, rest_seconds: rest, notes, day_label: dayLabel||null }) });
     if(!res.ok){ console.error(await res.text()); throw new Error('add_program_exercise_failed'); }
     return res;
   }
-  return rpc('guest_add_program_exercise', { p_token: TOKEN, p_program_id: programId, p_exercise_id: exId, p_order_index: orderIdx, p_sets: sets, p_reps: reps, p_rest_seconds: rest, p_notes: notes });
+  return rpc('guest_add_program_exercise_day', { p_token: TOKEN, p_program_id: programId, p_exercise_id: exId, p_order_index: orderIdx, p_sets: sets, p_reps: reps, p_rest_seconds: rest, p_notes: notes, p_day_label: dayLabel||null });
 }
+
+// ---------- Séances d'un programme ----------
+// Un programme = une ou plusieurs séances. Chaque ligne d'exercice porte un day_label ;
+// les lignes sans label (anciens programmes) forment une seule séance.
+function groupByDay(items){
+  const groups = [];
+  const byLabel = {};
+  items.forEach(it=>{
+    const label = it.day_label || 'Séance 1';
+    if(!byLabel[label]){ byLabel[label] = { label, items: [] }; groups.push(byLabel[label]); }
+    byLabel[label].items.push(it);
+  });
+  return groups;
+}
+function escHtml(s){ return String(s==null?'':s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
 let exercises = [];
 let exercisesById = {};
@@ -446,7 +471,7 @@ function route(){
   const hash = location.hash.replace('#','');
   const parts = hash.split('/').filter(Boolean);
   if(parts[0]==='creer') renderCreate();
-  else if(parts[0]==='programme' && parts[1] && parts[2]==='seance') renderSession(parts[1]);
+  else if(parts[0]==='programme' && parts[1] && parts[2]==='seance') renderSession(parts[1], parts[3]);
   else if(parts[0]==='programme' && parts[1] && parts[2]==='modifier') renderEditProgram(parts[1]);
   else if(parts[0]==='programme' && parts[1]) renderProgramDetail(parts[1]);
   else renderList();
@@ -507,7 +532,9 @@ async function renderProgramDetail(programId){
   let isOfficial = true;
   try{ const all = await listPrograms(); const p = all.find(x=>x.id===programId)||{}; progName = p.name || ''; progDesc = p.description || ''; isOfficial = !!p.is_official; }catch(e){}
   currentProgramDetail = { id: programId, name: progName, description: progDesc, items, isOfficial };
-  const rows = items.map(it=>{
+  const groups = groupByDay(items);
+  const multi = groups.length > 1;
+  const exRowHtml = it=>{
     const ex = exercisesById[it.exercise_id];
     if(!ex) return '';
     return `<div class="ex-row" style="cursor:pointer" onclick="openExFiche('${ex.id}')">
@@ -516,26 +543,39 @@ async function renderProgramDetail(programId){
         <div class="ex-meta">${it.sets||'-'} séries × ${it.reps||'-'} · repos ${it.rest_seconds||'-'}s</div></div>
       </div>
     </div>`;
-  }).join('');
+  };
+  let listHtml;
+  if(!items.length) listHtml = '<div class="empty">Aucun exercice dans ce programme.</div>';
+  else if(!multi) listHtml = groups[0].items.map(exRowHtml).join('');
+  else listHtml = `<p class="subtitle" style="margin-bottom:6px;">Ce programme contient ${groups.length} séances. Choisis celle que tu veux faire.</p>` + groups.map((g,gi)=>`
+    <div class="day-block">
+      <div class="day-head"><h2>${escHtml(g.label)}</h2><span class="day-count">${g.items.length} exercice${g.items.length>1?'s':''}</span></div>
+      ${g.items.map(exRowHtml).join('')}
+      <button class="btn btn-accent" style="width:100%;justify-content:center;margin-top:10px;" onclick="location.hash='#programme/${programId}/seance/${gi}'">Démarrer « ${escHtml(g.label)} »</button>
+    </div>`).join('');
   document.getElementById('progBody').innerHTML = `
     <div class="eyebrow">PROGRAMME</div>
     <h1 class="page">${progName}</h1>
-    <div id="progExList">${rows || '<div class="empty">Aucun exercice dans ce programme.</div>'}</div>
+    <div id="progExList">${listHtml}</div>
     <div class="actions-row">
       ${isOfficial ? '' : `<button class="btn btn-ghost" onclick="location.hash='#programme/${programId}/modifier'">✏️ Modifier mon programme</button>`}
       <button class="btn btn-ghost" onclick="printProgram()">🖨️ Exporter en PDF</button>
     </div>
-    <div class="session-bar"><button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}/seance'">Démarrer la séance</button></div>
+    ${(!multi && items.length) ? `<div class="session-bar"><button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}/seance'">Démarrer la séance</button></div>` : ''}
   `;
 }
 function printProgram(){
   if(!currentProgramDetail) return;
   const { name, description, items } = currentProgramDetail;
-  const rows = items.map(it=>{
+  const pexHtml = it=>{
     const ex = exercisesById[it.exercise_id];
     if(!ex) return '';
     return `<div class="pex"><b>${ex.name}</b><span>${it.sets||'-'} séries × ${it.reps||'-'} · repos ${it.rest_seconds||'-'}s</span></div>`;
-  }).join('');
+  };
+  const pGroups = groupByDay(items);
+  const rows = pGroups.length > 1
+    ? pGroups.map(g=>`<h2 style="font-size:18px;margin:18px 0 6px;color:#000;">${escHtml(g.label)}</h2>${g.items.map(pexHtml).join('')}`).join('')
+    : items.map(pexHtml).join('');
   document.getElementById('printProgramArea').innerHTML = `
     <h1>${name}</h1>
     ${description ? `<p>${description}</p>` : ''}
@@ -547,12 +587,23 @@ function printProgram(){
 
 // ---------- Séance en temps réel ----------
 let activeSession = null;
-async function renderSession(programId){
+let activeDayLabel = null;
+async function renderSession(programId, dayIdx){
   app.innerHTML = `<a class="backlink" href="#programme/${programId}">← Retour au programme</a><div id="sessBody"><div class="empty">Préparation de la séance…</div></div>`;
-  const [items, lastLogs, sessionId] = await Promise.all([
-    programExercisesFor(programId),
-    lastLogsFor(programId),
-    startSessionFor(programId)
+  let allItems = [];
+  try{ allItems = await programExercisesFor(programId); }
+  catch(e){ document.getElementById('sessBody').innerHTML = '<div class="empty">Programme introuvable.</div>'; return; }
+  const groups = groupByDay(allItems);
+  let items = allItems, dayLabel = null;
+  if(groups.length > 1){
+    const g = groups[parseInt(dayIdx)];
+    if(!g){ location.hash = `#programme/${programId}`; return; }
+    items = g.items; dayLabel = g.label;
+  }
+  activeDayLabel = dayLabel;
+  const [lastLogs, sessionId] = await Promise.all([
+    lastLogsFor(programId, dayLabel),
+    startSessionFor(programId, dayLabel)
   ]);
   activeSession = sessionId;
   sessStart = Date.now(); sessDone = {}; restEnd = 0;
@@ -591,7 +642,7 @@ async function renderSession(programId){
   }).join('');
 
   document.getElementById('sessBody').innerHTML = `
-    <div class="eyebrow">SÉANCE EN COURS</div>
+    <div class="eyebrow">SÉANCE EN COURS${activeDayLabel ? ' · ' + escHtml(activeDayLabel).toUpperCase() : ''}</div>
     <h1 class="page" style="font-size:32px;">C'est parti 💪</h1>
     ${rows}
     <div class="session-bar">
@@ -671,7 +722,7 @@ async function finishSession(programId){
   const nSets = Object.keys(sessDone).length;
   const vol = Object.values(sessDone).reduce((a,b)=>a+b, 0);
   body.innerHTML = `
-    <div class="eyebrow">SÉANCE TERMINÉE</div>
+    <div class="eyebrow">SÉANCE TERMINÉE${activeDayLabel ? ' · ' + escHtml(activeDayLabel).toUpperCase() : ''}</div>
     <h1 class="page" style="font-size:32px;">Bravo 💪</h1>
     <div class="sess-summary">
       <div><b>${fmtClock(durationMs)}</b><span>Durée de la séance</span></div>
@@ -685,6 +736,8 @@ async function finishSession(programId){
 
 // ---------- Création / édition de programme ----------
 let draftExercises = [];
+let draftDays = ['Séance 1'];
+let activeDayIdx = 0;
 let selectedPickExId = null;
 let editingProgramId = null;
 function pickExGridHtml(list){
@@ -704,6 +757,7 @@ function selectPickEx(exId){
 }
 function renderCreate(){
   draftExercises = [];
+  draftDays = ['Séance 1']; activeDayIdx = 0;
   selectedPickExId = null;
   editingProgramId = null;
   pickRepsMode = 'reps';
@@ -734,8 +788,12 @@ async function renderEditProgram(programId){
     exercise_id: it.exercise_id,
     sets: it.sets || 3,
     reps: it.reps || '10-12',
-    name: (exercisesById[it.exercise_id]||{}).name || 'Exercice'
+    name: (exercisesById[it.exercise_id]||{}).name || 'Exercice',
+    day: it.day_label || 'Séance 1'
   }));
+  draftDays = groupByDay(items).map(g=>g.label);
+  if(!draftDays.length) draftDays = ['Séance 1'];
+  activeDayIdx = 0;
   app.innerHTML = programFormHtml({
     backHash: `#programme/${programId}`, eyebrow: 'MODIFIER LE PROGRAMME', title: prog.name,
     name: prog.name || '', desc: prog.description || '', saveLabel: 'Enregistrer les modifications'
@@ -754,7 +812,14 @@ function programFormHtml({ backHash, eyebrow, title, name, desc, saveLabel }){
     <div class="field"><label>Description (optionnel)</label><textarea id="pDesc" placeholder="Objectif, contexte...">${esc(desc)}</textarea></div>
 
     <div class="section">
-      <h2>Exercices</h2>
+      <h2>Séances</h2>
+      <p class="subtitle" style="margin-bottom:0;">Un programme peut avoir plusieurs séances (ex : Haut du corps, Bas du corps). La personne choisira laquelle faire.</p>
+      <div id="dayTabs" class="day-tabs"></div>
+      <div class="day-tools">
+        <button type="button" class="btn btn-ghost btn-sm" onclick="renameDay()">✏️ Renommer cette séance</button>
+        <button type="button" class="btn btn-ghost btn-sm" onclick="deleteDay()">🗑 Supprimer cette séance</button>
+      </div>
+      <h2 id="dayExTitle" style="font-size:22px;">Exercices</h2>
       <div class="field"><label>Chercher un exercice</label><input id="pSearch" type="text" placeholder="Nom, catégorie, muscle…" oninput="filterPickEx()"></div>
       <div id="pickExGrid" class="pick-ex-grid"></div>
       <div class="picker" style="margin-top:10px; flex-wrap:wrap;">
@@ -764,7 +829,7 @@ function programFormHtml({ backHash, eyebrow, title, name, desc, saveLabel }){
           <button type="button" class="btn btn-ghost btn-sm reps-mode-btn" data-mode="time" onclick="setRepsMode('time')">Temps</button>
         </div>
         <input id="pReps" type="text" placeholder="Reps" style="width:80px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
-        <button class="btn btn-ghost btn-sm" onclick="addDraftExercise()">Ajouter la sélection</button>
+        <button class="btn btn-ghost btn-sm" onclick="addDraftExercise()">Ajouter à cette séance</button>
       </div>
       <div id="draftList"></div>
     </div>
@@ -798,34 +863,88 @@ function addDraftExercise(){
   const repsRaw = document.getElementById('pReps').value.trim();
   const reps = pickRepsMode==='time' ? `${repsRaw || '30'}s` : (repsRaw || '10-12');
   const ex = exercisesById[exId];
-  draftExercises.push({ exercise_id: exId, sets: parseInt(sets), reps, name: ex.name });
+  draftExercises.push({ exercise_id: exId, sets: parseInt(sets), reps, name: ex.name, day: draftDays[activeDayIdx] });
+  renderDraftList();
+}
+function renderDayTabs(){
+  const box = document.getElementById('dayTabs');
+  if(!box) return;
+  box.innerHTML = draftDays.map((d,i)=>{
+    const n = draftExercises.filter(x=>x.day===d).length;
+    return `<button type="button" class="day-chip ${i===activeDayIdx?'active':''}" onclick="selectDay(${i})">${escHtml(d)} (${n})</button>`;
+  }).join('') + `<button type="button" class="day-chip add" onclick="addDay()">+ Séance</button>`;
+}
+function selectDay(i){ activeDayIdx = i; renderDraftList(); }
+function addDay(){
+  let n = draftDays.length + 1, name = `Séance ${n}`;
+  while(draftDays.includes(name)){ n++; name = `Séance ${n}`; }
+  draftDays.push(name);
+  activeDayIdx = draftDays.length - 1;
+  renderDraftList();
+}
+function renameDay(){
+  const old = draftDays[activeDayIdx];
+  const val = prompt('Nom de la séance :', old);
+  if(val === null) return;
+  const name = val.trim();
+  if(!name){ toast('Le nom ne peut pas être vide'); return; }
+  if(name !== old && draftDays.includes(name)){ toast('Une séance porte déjà ce nom'); return; }
+  draftExercises.forEach(x=>{ if(x.day===old) x.day = name; });
+  draftDays[activeDayIdx] = name;
+  renderDraftList();
+}
+function deleteDay(){
+  if(draftDays.length <= 1){ toast('Un programme doit avoir au moins une séance'); return; }
+  const name = draftDays[activeDayIdx];
+  const n = draftExercises.filter(x=>x.day===name).length;
+  if(!confirm(n ? `Supprimer « ${name} » et ses ${n} exercice${n>1?'s':''} ?` : `Supprimer « ${name} » ?`)) return;
+  draftExercises = draftExercises.filter(x=>x.day!==name);
+  draftDays.splice(activeDayIdx,1);
+  activeDayIdx = Math.max(0, activeDayIdx-1);
   renderDraftList();
 }
 function renderDraftList(){
-  document.getElementById('draftList').innerHTML = draftExercises.map((d,i)=>`
-    <div class="draft-row">${d.name} — ${d.sets}×${d.reps}<button class="rm" onclick="removeDraft(${i})">✕</button></div>
-  `).join('');
+  renderDayTabs();
+  const day = draftDays[activeDayIdx];
+  const title = document.getElementById('dayExTitle');
+  if(title) title.textContent = draftDays.length > 1 ? `Exercices de « ${day} »` : 'Exercices';
+  const rows = draftExercises.map((d,i)=>({d,i})).filter(x=>x.d.day===day);
+  document.getElementById('draftList').innerHTML = rows.length ? rows.map(({d,i})=>`
+    <div class="draft-row">${escHtml(d.name)} — ${d.sets}×${escHtml(d.reps)}<button class="rm" onclick="removeDraft(${i})">✕</button></div>
+  `).join('') : '<div class="empty" style="padding:14px 0;">Aucun exercice dans cette séance pour l\'instant.</div>';
 }
 function removeDraft(i){ draftExercises.splice(i,1); renderDraftList(); }
+// Liste à plat dans l'ordre des séances. Une seule séance => pas de label (comme avant).
+function orderedDraft(){
+  const single = draftDays.length === 1;
+  const out = [];
+  draftDays.forEach(day=>{
+    draftExercises.filter(x=>x.day===day).forEach(x=> out.push({ ...x, day_label: single ? null : day }));
+  });
+  return out;
+}
 async function saveProgram(){
   const name = document.getElementById('pName').value.trim();
   if(!name){ toast('Donne un nom à ton programme'); return; }
   if(!draftExercises.length){ toast('Ajoute au moins un exercice'); return; }
+  const emptyDay = draftDays.find(d=> !draftExercises.some(x=>x.day===d));
+  if(emptyDay){ toast(`« ${emptyDay} » est vide : ajoute-y un exercice ou supprime-la`); return; }
   const desc = document.getElementById('pDesc').value.trim();
   const btn = document.getElementById('saveProgramBtn');
   const wasEditing = !!editingProgramId;
+  const draft = orderedDraft();
   btn.disabled = true; btn.textContent = 'Enregistrement...';
   try{
     let programId;
     if(wasEditing){
       programId = editingProgramId;
       await updateProgramFor(programId, name, desc||null);
-      await saveProgramExercises(programId, draftExercises);
+      await saveProgramExercises(programId, draft);
     } else {
       programId = await createProgramFor(name, desc||null);
-      for(let i=0;i<draftExercises.length;i++){
-        const d = draftExercises[i];
-        await addProgramExerciseFor(programId, d.exercise_id, i+1, d.sets, d.reps, 90, null);
+      for(let i=0;i<draft.length;i++){
+        const d = draft[i];
+        await addProgramExerciseFor(programId, d.exercise_id, i+1, d.sets, d.reps, 90, null, d.day_label);
       }
     }
     toast(wasEditing ? 'Programme mis à jour !' : 'Programme créé !');
@@ -851,7 +970,7 @@ async function saveProgramExercises(programId, draft){
     if(!res.ok){ console.error(await res.text()); throw new Error('clear_program_exercises_failed'); }
     for(let i=0;i<draft.length;i++){
       const d = draft[i];
-      await addProgramExerciseFor(programId, d.exercise_id, i+1, d.sets, d.reps, 90, null);
+      await addProgramExerciseFor(programId, d.exercise_id, i+1, d.sets, d.reps, 90, null, d.day_label);
     }
     return;
   }
@@ -862,16 +981,16 @@ async function saveProgramExercises(programId, draft){
   const n = Math.min(existing.length, draft.length);
   for(let i=0;i<n;i++){
     const d = draft[i];
-    await rpc('guest_update_program_exercise', { p_token: TOKEN, p_id: existing[i].id, p_exercise_id: d.exercise_id, p_order_index: i+1, p_sets: d.sets, p_reps: d.reps, p_rest_seconds: existing[i].rest_seconds||90 });
+    await rpc('guest_update_program_exercise_day', { p_token: TOKEN, p_id: existing[i].id, p_exercise_id: d.exercise_id, p_order_index: i+1, p_sets: d.sets, p_reps: d.reps, p_rest_seconds: existing[i].rest_seconds||90, p_day_label: d.day_label||null });
   }
   if(draft.length > existing.length){
     for(let i=existing.length;i<draft.length;i++){
       const d = draft[i];
-      await addProgramExerciseFor(programId, d.exercise_id, i+1, d.sets, d.reps, 90, null);
+      await addProgramExerciseFor(programId, d.exercise_id, i+1, d.sets, d.reps, 90, null, d.day_label);
     }
   } else if(existing.length > draft.length){
     for(let i=draft.length;i<existing.length;i++){
-      await rpc('guest_update_program_exercise', { p_token: TOKEN, p_id: existing[i].id, p_exercise_id: existing[i].exercise_id, p_order_index: 9999, p_sets: 0, p_reps: null, p_rest_seconds: existing[i].rest_seconds||90 });
+      await rpc('guest_update_program_exercise_day', { p_token: TOKEN, p_id: existing[i].id, p_exercise_id: existing[i].exercise_id, p_order_index: 9999, p_sets: 0, p_reps: null, p_rest_seconds: existing[i].rest_seconds||90, p_day_label: existing[i].day_label||null });
     }
   }
 }

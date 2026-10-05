@@ -43,6 +43,10 @@
   .btn-ghost{background:none; border:1px solid var(--line); color:var(--ink);}
   .btn-sm{padding:8px 14px; font-size:12.5px;}
   .reps-mode-btn.active{border-color:var(--accent); color:var(--accent); background:var(--surface);}
+  .day-tabs{display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 8px;}
+  .day-chip{background:var(--surface); border:1px solid var(--line); color:var(--ink-muted); border-radius:999px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;}
+  .day-chip.active{background:var(--surface-2); border-color:var(--accent); color:var(--accent);}
+  .day-chip.add{border-style:dashed;}
   .pf-field{display:flex; flex-direction:column; gap:3px;}
   .pf-field label{font-size:10.5px; color:var(--ink-muted); text-transform:uppercase; letter-spacing:.03em;}
   .btn-danger{background:none; border:1px dashed var(--ink-muted); color:var(--ink);}
@@ -501,9 +505,12 @@ async function printClientReport(clientId){
       });
     }catch(e){}
   }
-  const exRows = exItems.length ? exItems.map(it=>
-    `<div class="pex"><b>${escapeHtml(it.exercises?.name||'Exercice')}</b><span>${escapeHtml(it.sets||'-')}×${escapeHtml(it.reps||'-')} · repos ${escapeHtml(it.rest_seconds||'-')}s</span></div>`
-  ).join('') : '<div class="empty-print">Aucun programme assigné.</div>';
+  const pexHtml = it=> `<div class="pex"><b>${escapeHtml(it.exercises?.name||'Exercice')}</b><span>${escapeHtml(it.sets||'-')}×${escapeHtml(it.reps||'-')} · repos ${escapeHtml(it.rest_seconds||'-')}s</span></div>`;
+  const dayLabels = [...new Set(exItems.map(it=>it.day_label||'Séance 1'))];
+  const exRows = !exItems.length ? '<div class="empty-print">Aucun programme assigné.</div>'
+    : (dayLabels.length > 1
+        ? dayLabels.map(l=>`<div style="font-weight:700;margin:12px 0 4px;">${escapeHtml(l)}</div>` + exItems.filter(it=>(it.day_label||'Séance 1')===l).map(pexHtml).join('')).join('')
+        : exItems.map(pexHtml).join(''));
   const sessRows = sessions.length ? sessions.map(s=>{
     const d = new Date(s.started_at);
     let duree = '';
@@ -669,6 +676,8 @@ async function renderProgramsTab(){
 }
 
 let draftItems = [];
+let draftDays = ['Séance 1'];
+let activeDayIdx = 0;
 
 async function renderProgramForm(programId, prefill){
   let program = null;
@@ -677,11 +686,14 @@ async function renderProgramForm(programId, prefill){
   if(programId){
     program = (await api(`/rest/v1/programs?select=*&id=eq.${programId}`))[0];
     const items = await api(`/rest/v1/program_exercises?select=*&program_id=eq.${programId}&order=order_index`);
-    draftItems = items.map(it=>({ exercise_id: it.exercise_id, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds }));
+    draftItems = items.map(it=>({ exercise_id: it.exercise_id, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds, day: it.day_label || 'Séance 1' }));
   } else if(prefill){
     program = { name: prefill.name, description: prefill.description, is_official: prefill.is_official, owner_user_id: prefill.owner_user_id };
-    draftItems = prefill.items.map(it=>({...it}));
+    draftItems = prefill.items.map(it=>({...it, day: it.day || 'Séance 1'}));
   }
+  draftDays = [...new Set(draftItems.map(x=>x.day))];
+  if(!draftDays.length) draftDays = ['Séance 1'];
+  activeDayIdx = 0;
   const clients = await api('/rest/v1/profiles?select=id,full_name,email&role=eq.client&order=full_name');
   const clientOptions = clients.map(c=>`<option value="${c.id}" ${program?.owner_user_id===c.id?'selected':''}>${c.full_name||c.email}</option>`).join('');
   document.getElementById('tabBody').innerHTML = `
@@ -704,7 +716,14 @@ async function renderProgramForm(programId, prefill){
       </div>
     </div>
     <div class="panel">
-      <h3 style="font-family:Inter; font-weight:700; font-size:15px; margin-bottom:8px;">Exercices</h3>
+      <h3 style="font-family:Inter; font-weight:700; font-size:15px; margin-bottom:4px;">Séances</h3>
+      <p class="empty" style="padding:0 0 4px; text-align:left;">Un programme peut contenir plusieurs séances : la personne choisit celle qu'elle veut faire.</p>
+      <div id="pfDayTabs" class="day-tabs"></div>
+      <div class="row-actions" style="margin-bottom:12px;">
+        <button class="btn btn-ghost btn-sm" type="button" onclick="renameDay()">✏️ Renommer</button>
+        <button class="btn btn-ghost btn-sm" type="button" onclick="deleteDay()">🗑 Supprimer cette séance</button>
+      </div>
+      <h3 id="pfDayTitle" style="font-family:Inter; font-weight:700; font-size:15px; margin-bottom:8px;">Exercices</h3>
       <div id="pfExList"></div>
       <div class="field"><label>Chercher un exercice</label><input id="pfSearch" type="text" placeholder="Tape un nom…" oninput="filterExPicker()"></div>
       <div class="picker" style="flex-wrap:wrap;">
@@ -717,7 +736,7 @@ async function renderProgramForm(programId, prefill){
         </div>
         <div class="pf-field"><label for="pfReps">Reps</label><input id="pfReps" type="text" placeholder="Reps" value="10-12" style="width:70px;"></div>
         <div class="pf-field"><label for="pfRest">Repos (s)</label><input id="pfRest" type="number" placeholder="Repos(s)" value="90" style="width:80px;"></div>
-        <button class="btn btn-ghost" onclick="addDraftEx()">Ajouter à la liste</button>
+        <button class="btn btn-ghost" onclick="addDraftEx()">Ajouter à cette séance</button>
       </div>
       <p class="empty" style="padding-top:10px;">Rien n'est enregistré tant que tu n'as pas cliqué sur "${programId?'Enregistrer':'Créer le programme'}" en haut.</p>
     </div>
@@ -740,11 +759,53 @@ function editSelectedPickerEx(){
   openExerciseModal(exId);
 }
 
+function renderDayTabs(){
+  const box = document.getElementById('pfDayTabs');
+  if(!box) return;
+  box.innerHTML = draftDays.map((d,i)=>{
+    const n = draftItems.filter(x=>x.day===d).length;
+    return `<button type="button" class="day-chip ${i===activeDayIdx?'active':''}" onclick="selectDay(${i})">${escapeHtml(d)} (${n})</button>`;
+  }).join('') + `<button type="button" class="day-chip add" onclick="addDay()">+ Séance</button>`;
+}
+function selectDay(i){ activeDayIdx = i; renderDraftList(); }
+function addDay(){
+  let n = draftDays.length + 1, name = `Séance ${n}`;
+  while(draftDays.includes(name)){ n++; name = `Séance ${n}`; }
+  draftDays.push(name);
+  activeDayIdx = draftDays.length - 1;
+  renderDraftList();
+}
+function renameDay(){
+  const old = draftDays[activeDayIdx];
+  const val = prompt('Nom de la séance :', old);
+  if(val === null) return;
+  const name = val.trim();
+  if(!name){ toast('Le nom ne peut pas être vide'); return; }
+  if(name !== old && draftDays.includes(name)){ toast('Une séance porte déjà ce nom'); return; }
+  draftItems.forEach(x=>{ if(x.day===old) x.day = name; });
+  draftDays[activeDayIdx] = name;
+  renderDraftList();
+}
+function deleteDay(){
+  if(draftDays.length <= 1){ toast('Un programme doit avoir au moins une séance'); return; }
+  const name = draftDays[activeDayIdx];
+  const n = draftItems.filter(x=>x.day===name).length;
+  if(!confirm(n ? `Supprimer « ${name} » et ses ${n} exercice${n>1?'s':''} ?` : `Supprimer « ${name} » ?`)) return;
+  draftItems = draftItems.filter(x=>x.day!==name);
+  draftDays.splice(activeDayIdx,1);
+  activeDayIdx = Math.max(0, activeDayIdx-1);
+  renderDraftList();
+}
 function renderDraftList(){
-  document.getElementById('pfExList').innerHTML = draftItems.length ? draftItems.map((it,i)=>{
+  renderDayTabs();
+  const day = draftDays[activeDayIdx];
+  const title = document.getElementById('pfDayTitle');
+  if(title) title.textContent = draftDays.length > 1 ? `Exercices de « ${day} »` : 'Exercices';
+  const rows = draftItems.map((it,i)=>({it,i})).filter(x=>x.it.day===day);
+  document.getElementById('pfExList').innerHTML = rows.length ? rows.map(({it,i})=>{
     const ex = exercisesById[it.exercise_id];
     return `<div class="ex-mini">
-      <span>${ex?ex.name:'Exercice'} — ${it.sets||'-'}×${it.reps||'-'} (repos ${it.rest_seconds||'-'}s)</span>
+      <span>${escapeHtml(ex?ex.name:'Exercice')} — ${it.sets||'-'}×${escapeHtml(it.reps||'-')} (repos ${it.rest_seconds||'-'}s)</span>
       <span style="display:flex;gap:8px;">
         <button onclick="openExerciseModal('${it.exercise_id}')" title="Modifier la fiche">✏️</button>
         <button onclick="moveDraft(${i},-1)" title="Monter">↑</button>
@@ -769,11 +830,13 @@ function addDraftEx(){
   const repsRaw = document.getElementById('pfReps').value.trim();
   const reps = pfRepsMode==='time' ? `${repsRaw || '30'}s` : (repsRaw || '10-12');
   const rest = parseInt(document.getElementById('pfRest').value)||90;
-  draftItems.push({ exercise_id: exId, sets, reps, rest_seconds: rest });
+  draftItems.push({ exercise_id: exId, sets, reps, rest_seconds: rest, day: draftDays[activeDayIdx] });
   renderDraftList();
 }
 function moveDraft(i, dir){
-  const j = i+dir;
+  // on échange avec le voisin le plus proche appartenant à la même séance
+  let j = i+dir;
+  while(j>=0 && j<draftItems.length && draftItems[j].day !== draftItems[i].day) j += dir;
   if(j<0 || j>=draftItems.length) return;
   const tmp = draftItems[i]; draftItems[i] = draftItems[j]; draftItems[j] = tmp;
   renderDraftList();
@@ -792,6 +855,8 @@ async function saveProgramForm(programId){
   const clientId = target==='client' ? document.getElementById('pfClient').value : null;
   if(!name){ toast('Donne un nom au programme'); return; }
   if(!draftItems.length){ toast('Ajoute au moins un exercice à la liste'); return; }
+  const emptyDay = draftDays.find(d=> !draftItems.some(x=>x.day===d));
+  if(emptyDay){ toast(`« ${emptyDay} » est vide : ajoute-y un exercice ou supprime-la`); return; }
   const btn = document.getElementById('pfSaveBtn');
   const originalLabel = btn ? btn.textContent : '';
   if(btn){ btn.disabled = true; btn.textContent = 'Enregistrement...'; }
@@ -805,7 +870,10 @@ async function saveProgramForm(programId){
       const created = await api('/rest/v1/programs', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify(body) });
       pid = created[0].id;
     }
-    const rows = draftItems.map((it,i)=>({ program_id: pid, exercise_id: it.exercise_id, order_index: i+1, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds }));
+    const single = draftDays.length === 1;
+    const ordered = [];
+    draftDays.forEach(day=> draftItems.filter(x=>x.day===day).forEach(x=> ordered.push({ ...x, day_label: single ? null : day })));
+    const rows = ordered.map((it,i)=>({ program_id: pid, exercise_id: it.exercise_id, order_index: i+1, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds, day_label: it.day_label }));
     await api('/rest/v1/program_exercises', { method:'POST', body: JSON.stringify(rows) });
     toast(programId ? 'Programme mis à jour' : 'Programme créé');
     renderProgramForm(pid);
@@ -828,7 +896,7 @@ async function duplicateProgram(programId){
     description: program.description,
     is_official: program.is_official,
     owner_user_id: program.owner_user_id,
-    items: items.map(it=>({ exercise_id: it.exercise_id, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds }))
+    items: items.map(it=>({ exercise_id: it.exercise_id, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds, day: it.day_label || 'Séance 1' }))
   });
 }
 

@@ -361,7 +361,7 @@ async function loadProgrammes(){
 }
 
 async function loadHistorique(){
-  const res = await apiFetch(`/rest/v1/sessions?select=id,started_at,completed_at,programs(name)&order=started_at.desc`);
+  const res = await apiFetch(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,programs(name)&order=started_at.desc`);
   const sessions = await res.json();
   if(!sessions.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucune séance enregistrée pour l\'instant.</div>'; return; }
   document.getElementById('tabBody').innerHTML = sessions.map(s=>{
@@ -374,7 +374,7 @@ async function loadHistorique(){
     }
     return `<div class="card" style="cursor:pointer" onclick="toggleSessionLogs(this,'${s.id}')">
       <div class="tag">${d.toLocaleDateString('fr-FR', {day:'numeric',month:'long'})}${duree}</div>
-      <h3>${s.programs?.name || 'Séance libre'}</h3>
+      <h3>${escapeHtml(s.programs?.name || 'Séance libre')}${s.day_label ? ' · ' + escapeHtml(s.day_label) : ''}</h3>
       <div class="logs" style="display:none; margin-top:12px;"></div>
     </div>`;
   }).join('');
