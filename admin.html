@@ -49,6 +49,12 @@
   .pick-ex-card .pick-ex-noimg{width:100%; aspect-ratio:1/1; border-radius:6px; background:var(--surface); display:flex; align-items:center; justify-content:center; color:var(--ink-muted); font-size:9px; text-transform:uppercase; letter-spacing:.05em; padding:4px;}
   .pick-ex-card span{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.2;}
   .pick-ex-card.selected{border-color:var(--accent); background:var(--surface);}
+  .ex-mini.in-ss{border-left:3px solid var(--accent); padding-left:10px;}
+  .ex-mini button.on{border-color:var(--accent); color:var(--accent);}
+  .ex-mini button:disabled{opacity:.35; cursor:default;}
+  .ss-chip{display:inline-block; font-size:10px; font-weight:800; letter-spacing:.06em; padding:2px 7px; border-radius:999px; border:1px solid var(--accent); color:var(--accent); vertical-align:middle;}
+  .draft-var{font-size:12px; color:var(--ink-muted); margin-top:3px;}
+  .rm-var{background:none !important; border:none !important; color:var(--ink-muted); cursor:pointer; font-size:12px; padding:0 4px; width:auto !important; height:auto !important;}
   .day-tabs{display:flex; flex-wrap:wrap; gap:8px; margin:6px 0 8px;}
   .day-chip{background:var(--surface); border:1px solid var(--line); color:var(--ink-muted); border-radius:999px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;}
   .day-chip.active{background:var(--surface-2); border-color:var(--accent); color:var(--accent);}
@@ -512,7 +518,7 @@ async function printClientReport(clientId){
       });
     }catch(e){}
   }
-  const pexHtml = it=> `<div class="pex"><b>${escapeHtml(it.exercises?.name||'Exercice')}</b><span>${escapeHtml(it.sets||'-')}×${escapeHtml(it.reps||'-')} · repos ${escapeHtml(it.rest_seconds||'-')}s</span></div>`;
+  const pexHtml = it=> `<div class="pex"><b>${it.superset_group!=null?'[Superset] ':''}${escapeHtml(it.exercises?.name||'Exercice')}${it.variant_exercise_id && exercisesById[it.variant_exercise_id] ? ' (variante : '+escapeHtml(exercisesById[it.variant_exercise_id].name)+')' : ''}</b><span>${escapeHtml(it.sets||'-')}×${escapeHtml(it.reps||'-')} · repos ${escapeHtml(it.rest_seconds||'-')}s</span></div>`;
   const dayLabels = [...new Set(exItems.map(it=>it.day_label||'Séance 1'))];
   const exRows = !exItems.length ? '<div class="empty-print">Aucun programme assigné.</div>'
     : (dayLabels.length > 1
@@ -693,10 +699,12 @@ async function renderProgramForm(programId, prefill){
   if(programId){
     program = (await api(`/rest/v1/programs?select=*&id=eq.${programId}`))[0];
     const items = await api(`/rest/v1/program_exercises?select=*&program_id=eq.${programId}&order=order_index`);
-    draftItems = items.map(it=>({ exercise_id: it.exercise_id, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds, day: it.day_label || 'Séance 1' }));
+    draftItems = items.map((it,i)=>({ exercise_id: it.exercise_id, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds, day: it.day_label || 'Séance 1',
+      linkPrev: i > 0 && it.superset_group != null && items[i-1].superset_group === it.superset_group && (items[i-1].day_label||'Séance 1') === (it.day_label||'Séance 1'),
+      variant_id: it.variant_exercise_id || null }));
   } else if(prefill){
     program = { name: prefill.name, description: prefill.description, is_official: prefill.is_official, owner_user_id: prefill.owner_user_id };
-    draftItems = prefill.items.map(it=>({...it, day: it.day || 'Séance 1'}));
+    draftItems = prefill.items.map(it=>({ linkPrev:false, variant_id:null, ...it, day: it.day || 'Séance 1'}));
   }
   draftDays = [...new Set(draftItems.map(x=>x.day))];
   if(!draftDays.length) draftDays = ['Séance 1'];
@@ -840,19 +848,45 @@ function renderDraftList(){
   const title = document.getElementById('pfDayTitle');
   if(title) title.textContent = draftDays.length > 1 ? `Exercices de « ${day} »` : 'Exercices';
   const rows = draftItems.map((it,i)=>({it,i})).filter(x=>x.it.day===day);
-  document.getElementById('pfExList').innerHTML = rows.length ? rows.map(({it,i})=>{
+  const tags = []; let letter = -1, pos = 0;
+  rows.forEach(({it},idx)=>{
+    const next = rows[idx+1];
+    const inChain = (idx > 0 && it.linkPrev) || (next && next.it.linkPrev);
+    if(!inChain){ tags.push(null); return; }
+    if(idx > 0 && it.linkPrev){ pos++; } else { letter++; pos = 1; }
+    tags.push(String.fromCharCode(65+letter) + pos);
+  });
+  document.getElementById('pfExList').innerHTML = rows.length ? rows.map(({it,i},idx)=>{
     const ex = exercisesById[it.exercise_id];
-    return `<div class="ex-mini">
-      <span>${escapeHtml(ex?ex.name:'Exercice')} — ${it.sets||'-'}×${escapeHtml(it.reps||'-')} (repos ${it.rest_seconds||'-'}s)</span>
-      <span style="display:flex;gap:8px;">
+    const vex = it.variant_id ? exercisesById[it.variant_id] : null;
+    return `<div class="ex-mini ${tags[idx]?'in-ss':''}">
+      <span>${tags[idx]?`<span class="ss-chip">SUPERSET ${tags[idx]}</span> `:''}${escapeHtml(ex?ex.name:'Exercice')} — ${it.sets||'-'}×${escapeHtml(it.reps||'-')} (repos ${it.rest_seconds||'-'}s)
+        ${vex?`<div class="draft-var">↔ Variante : ${escapeHtml(vex.name)} <button type="button" class="rm-var" title="Retirer la variante" onclick="clearVariant(${i})">✕</button></div>`:''}</span>
+      <span style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
         <button onclick="openExerciseModal('${it.exercise_id}')" title="Modifier la fiche">✏️</button>
         <button onclick="moveDraft(${i},-1)" title="Monter">↑</button>
         <button onclick="moveDraft(${i},1)" title="Descendre">↓</button>
+        <button class="${it.linkPrev?'on':''}" ${idx>0?'':'disabled'} onclick="toggleLink(${i})" title="Enchaîner avec l'exercice du dessus (superset)">🔗</button>
+        <button onclick="setVariant(${i})" title="Variante : utilise l'exercice sélectionné dans la grille">↔</button>
         <button onclick="removeDraftEx(${i})" title="Retirer">✕</button>
       </span>
     </div>`;
-  }).join('') : '<div class="empty">Aucun exercice pour l\'instant — ajoute-en un ci-dessous.</div>';
+  }).join('') + `<p class="empty" style="padding:8px 0 0;text-align:left;">🔗 enchaîne avec l'exercice du dessus (superset) · ↔ ajoute comme variante l'exercice sélectionné dans la grille</p>` : '<div class="empty">Aucun exercice pour l\'instant — ajoute-en un ci-dessous.</div>';
 }
+function toggleLink(i){
+  const day = draftItems[i].day;
+  if(!draftItems.slice(0,i).some(x=>x.day===day)){ toast('Il faut un exercice au-dessus pour créer un superset'); return; }
+  draftItems[i].linkPrev = !draftItems[i].linkPrev;
+  renderDraftList();
+}
+function setVariant(i){
+  const exId = document.getElementById('pfPickEx').value;
+  if(!exId){ toast('Choisis d\'abord l\'exercice variante dans la grille'); return; }
+  if(exId === draftItems[i].exercise_id){ toast('La variante doit être un autre exercice'); return; }
+  draftItems[i].variant_id = exId;
+  renderDraftList();
+}
+function clearVariant(i){ draftItems[i].variant_id = null; renderDraftList(); }
 let pfRepsMode = 'reps';
 function setPfRepsMode(mode){
   pfRepsMode = mode;
@@ -868,7 +902,7 @@ function addDraftEx(){
   const repsRaw = document.getElementById('pfReps').value.trim();
   const reps = pfRepsMode==='time' ? `${repsRaw || '30'}s` : (repsRaw || '10-12');
   const rest = parseInt(document.getElementById('pfRest').value)||90;
-  draftItems.push({ exercise_id: exId, sets, reps, rest_seconds: rest, day: draftDays[activeDayIdx] });
+  draftItems.push({ exercise_id: exId, sets, reps, rest_seconds: rest, day: draftDays[activeDayIdx], linkPrev: false, variant_id: null });
   renderDraftList();
 }
 function moveDraft(i, dir){
@@ -877,6 +911,7 @@ function moveDraft(i, dir){
   while(j>=0 && j<draftItems.length && draftItems[j].day !== draftItems[i].day) j += dir;
   if(j<0 || j>=draftItems.length) return;
   const tmp = draftItems[i]; draftItems[i] = draftItems[j]; draftItems[j] = tmp;
+  draftItems[i].linkPrev = false; draftItems[j].linkPrev = false; // à relier ensuite si besoin
   renderDraftList();
 }
 function removeDraftEx(i){
@@ -910,8 +945,17 @@ async function saveProgramForm(programId){
     }
     const single = draftDays.length === 1;
     const ordered = [];
-    draftDays.forEach(day=> draftItems.filter(x=>x.day===day).forEach(x=> ordered.push({ ...x, day_label: single ? null : day })));
-    const rows = ordered.map((it,i)=>({ program_id: pid, exercise_id: it.exercise_id, order_index: i+1, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds, day_label: it.day_label }));
+    let gid = 0;
+    draftDays.forEach(day=> draftItems.filter(x=>x.day===day).forEach((x,idx)=>{
+      const item = { ...x, day_label: single ? null : day, superset_group: null };
+      if(idx > 0 && x.linkPrev){
+        const prev = ordered[ordered.length-1];
+        if(prev.superset_group == null){ gid++; prev.superset_group = gid; }
+        item.superset_group = prev.superset_group;
+      }
+      ordered.push(item);
+    }));
+    const rows = ordered.map((it,i)=>({ program_id: pid, exercise_id: it.exercise_id, order_index: i+1, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds, day_label: it.day_label, superset_group: it.superset_group, variant_exercise_id: it.variant_id || null }));
     await api('/rest/v1/program_exercises', { method:'POST', body: JSON.stringify(rows) });
     toast(programId ? 'Programme mis à jour' : 'Programme créé');
     renderProgramForm(pid);
@@ -930,11 +974,12 @@ async function duplicateProgram(programId){
   const program = (await api(`/rest/v1/programs?select=*&id=eq.${programId}`))[0];
   const items = await api(`/rest/v1/program_exercises?select=*&program_id=eq.${programId}&order=order_index`);
   renderProgramForm(null, {
-    name: 'Copie de ' + program.name,
+    name: program.name,
     description: program.description,
     is_official: program.is_official,
     owner_user_id: program.owner_user_id,
-    items: items.map(it=>({ exercise_id: it.exercise_id, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds, day: it.day_label || 'Séance 1' }))
+    items: items.map((it,i)=>({ exercise_id: it.exercise_id, sets: it.sets, reps: it.reps, rest_seconds: it.rest_seconds, day: it.day_label || 'Séance 1', variant_id: it.variant_exercise_id || null,
+      linkPrev: i > 0 && it.superset_group != null && items[i-1].superset_group === it.superset_group && (items[i-1].day_label||'Séance 1') === (it.day_label||'Séance 1') }))
   });
 }
 
