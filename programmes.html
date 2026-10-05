@@ -86,6 +86,7 @@
   .ex-name{font-size:17px; font-weight:700; cursor:pointer;}
   .ex-name:hover{color:var(--accent);}
   .ex-meta{color:var(--ink-muted); font-size:12.5px; margin-top:2px;}
+  .var-link{display:inline-block; cursor:pointer; padding:6px 0; color:var(--ink);}
   .set-grid{margin-top:12px; display:flex; flex-direction:column; gap:10px;}
   .set-line{display:flex; align-items:center; gap:6px; font-size:13px;}
   .set-line .setnum{width:24px; color:var(--ink-muted); flex:none; font-weight:700;}
@@ -571,7 +572,7 @@ async function renderProgramDetail(programId){
       <div class="ex-row-top">
         <div><div class="ex-name">${tag?`<span class="ss-chip">SUPERSET ${tag}</span> `:''}${ex.name}</div>
         <div class="ex-meta">${it.sets||'-'} séries × ${it.reps||'-'} · repos ${it.rest_seconds||'-'}s</div>
-        ${vex?`<div class="ex-meta">↔ Variante : ${escHtml(vex.name)}</div>`:''}</div>
+        ${vex?`<div class="ex-meta var-link" onclick="event.stopPropagation(); openExFiche('${vex.id}')">↔ Variante : <u>${escHtml(vex.name)}</u> · voir la fiche ›</div>`:''}</div>
       </div>
     </div>`;
   };
