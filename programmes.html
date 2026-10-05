@@ -315,7 +315,7 @@ async function refreshIfNeeded(){
 async function authedFetch(path, opts={}){
   await refreshIfNeeded();
   const s = getUserSession();
-  return fetch(`${SUPABASE_URL}${path}`, { ...opts, headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s.access_token}`, 'Content-Type':'application/json', ...(opts.headers||{}) } });
+  return fetch(`${SUPABASE_URL}${path}`, { ...opts, headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s ? s.access_token : ''}`, 'Content-Type':'application/json', ...(opts.headers||{}) } });
 }
 async function listPrograms(){
   if(isLoggedIn()) return (await authedFetch('/rest/v1/programs?select=*&order=is_official.desc,created_at.desc')).json();
@@ -329,7 +329,8 @@ async function programExercisesFor(programId){
 }
 async function startSessionFor(programId, dayLabel){
   if(isLoggedIn()){
-    const res = await authedFetch('/rest/v1/sessions', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ program_id: programId, day_label: dayLabel||null }) });
+    const res = await authedFetch('/rest/v1/sessions', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ program_id: programId, day_label: dayLabel||null, user_id: getUserSession().user.id }) });
+    if(!res.ok) throw new Error('start_failed');
     const data = await res.json(); return data[0].id;
   }
   return rpc('guest_start_session_day', { p_token: TOKEN, p_program_id: programId, p_day_label: dayLabel||null });
@@ -345,7 +346,11 @@ async function lastLogsFor(programId, dayLabel){
   return rpc('guest_last_session_logs_day', { p_token: TOKEN, p_program_id: programId, p_day_label: dayLabel||null });
 }
 async function logSetFor(sessionId, exId, setNum, reps, charge){
-  if(isLoggedIn()) return authedFetch('/rest/v1/session_logs', { method:'POST', body: JSON.stringify({ session_id: sessionId, exercise_id: exId, set_number: setNum, reps, charge }) });
+  if(isLoggedIn()){
+    const res = await authedFetch('/rest/v1/session_logs', { method:'POST', body: JSON.stringify({ session_id: sessionId, exercise_id: exId, set_number: setNum, reps, charge }) });
+    if(!res.ok) throw new Error('log_failed');
+    return res;
+  }
   return rpc('guest_log_set', { p_token: TOKEN, p_session_id: sessionId, p_exercise_id: exId, p_set_number: setNum, p_reps: reps, p_charge: charge });
 }
 // durationSec == null : la séance se termine « maintenant » ; sinon durée fixée à la main (en secondes)
@@ -369,7 +374,7 @@ async function completeSessionFor(sessionId, durationSec){
 async function addPastSessionFor(programId, dayLabel, startedAtIso, durationSec){
   if(isLoggedIn()){
     const completed = new Date(Date.parse(startedAtIso) + durationSec*1000).toISOString();
-    const res = await authedFetch('/rest/v1/sessions', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ program_id: programId, day_label: dayLabel||null, started_at: startedAtIso, completed_at: completed }) });
+    const res = await authedFetch('/rest/v1/sessions', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ program_id: programId, day_label: dayLabel||null, started_at: startedAtIso, completed_at: completed, user_id: getUserSession().user.id }) });
     if(!res.ok) throw new Error('create_failed');
     const data = await res.json(); return data[0].id;
   }
@@ -707,6 +712,7 @@ async function renderSession(programId, dayIdx, manual){
   activeDayLabel = dayLabel;
   const dKey = dayIdx == null ? '' : String(dayIdx);
   let lastLogs, sessionId = null, resumed = null;
+  try{
   if(manual){
     lastLogs = await lastLogsFor(programId, dayLabel);
     activeSession = null;
@@ -722,6 +728,11 @@ async function renderSession(programId, dayIdx, manual){
       [lastLogs, sessionId] = await Promise.all([ lastLogsFor(programId, dayLabel), startSessionFor(programId, dayLabel) ]);
     }
     activeSession = sessionId;
+  }
+  }catch(e){
+    console.error(e);
+    document.getElementById('sessBody').innerHTML = `<div class="empty">Impossible de préparer la séance (connexion ou compte). <br><br><button class="btn btn-accent" onclick="renderSession('${programId}', ${dayIdx==null?'undefined':JSON.stringify(String(dayIdx))}, ${manual?'true':'false'})">Réessayer</button></div>`;
+    return;
   }
   sessDone = {}; restEnd = 0;
   sessStart = resumed ? resumed.start : Date.now();
