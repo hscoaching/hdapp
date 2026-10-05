@@ -260,6 +260,7 @@
 <div class="overlay" id="modalOverlay"><div class="sheet" id="modalSheet"></div></div>
 <div class="toast" id="toast"></div>
 
+<script src="badges.js"></script>
 <script>
 String.prototype.fold = function(){ return this.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }; // recherche sans accents
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
@@ -968,10 +969,10 @@ function finishSession(programId){
     ov.remove();
     clearActive();
     clearInterval(sessTick); sessTick = null; restEnd = 0;
-    showSessionSummary(programId, 'SÉANCE TERMINÉE', finalMs, Object.keys(sessDone).length, Object.values(sessDone).reduce((x,y)=>x+y, 0));
+    showSessionSummary(programId, 'SÉANCE TERMINÉE', finalMs, Object.keys(sessDone).length, Object.values(sessDone).reduce((x,y)=>x+y, 0), activeSession);
   };
 }
-function showSessionSummary(programId, eyebrow, durationMs, nSets, vol){
+function showSessionSummary(programId, eyebrow, durationMs, nSets, vol, sessionId){
   const body = document.getElementById('sessBody');
   if(!body){ location.hash = `#programme/${programId}`; return; }
   body.innerHTML = `
@@ -982,9 +983,22 @@ function showSessionSummary(programId, eyebrow, durationMs, nSets, vol){
       <div><b>${nSets}</b><span>${nSets>1?'Séries':'Série'} ${eyebrow.indexOf('TERMIN')>=0 ? (nSets>1?'validées':'validée') : (nSets>1?'enregistrées':'enregistrée')}</span></div>
       ${vol ? `<div><b>${Math.round(vol).toLocaleString('fr-FR')} kg</b><span>Poids total soulevé</span></div>` : ''}
     </div>
+    <div id="badgeBox"></div>
     <button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}'">Retour au programme</button>
   `;
   window.scrollTo(0,0);
+  showNewBadges(sessionId);
+}
+// Badges débloqués grâce à la séance qui vient de se terminer (comptes connectés uniquement)
+async function showNewBadges(sessionId){
+  if(!sessionId || !isLoggedIn() || typeof HSBadges === 'undefined') return;
+  try{
+    const getJson = async path => { const r = await authedFetch(path); if(!r.ok) throw new Error('load_failed'); return r.json(); };
+    const data = await HSBadges.load(getJson, getUserSession().user.id);
+    const { after, fresh } = HSBadges.newlyUnlocked(data, sessionId);
+    const box = document.getElementById('badgeBox');
+    if(box) box.innerHTML = HSBadges.renderNew(fresh, after) + '<div style="height:14px"></div>';
+  }catch(e){ console.error(e); }
 }
 // Saisie d'une séance passée : date + durée + séries renseignées
 async function saveManualSession(programId){
@@ -1011,7 +1025,7 @@ async function saveManualSession(programId){
     if(results.some(r=> r && r.ok === false)) throw new Error('log_failed');
   }catch(e){ console.error(e); toast('Erreur, réessaie'); btn.disabled = false; return; }
   const vol = entries.reduce((a,e)=> a + ((e.reps && e.charge) ? e.reps*e.charge : 0), 0);
-  showSessionSummary(programId, 'SÉANCE ENREGISTRÉE', durSec*1000, entries.length, vol);
+  showSessionSummary(programId, 'SÉANCE ENREGISTRÉE', durSec*1000, entries.length, vol, sid);
 }
 
 // ---------- Création / édition de programme ----------

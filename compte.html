@@ -134,6 +134,7 @@
 <main class="wrap" id="app"></main>
 <footer>HS Coaching · Régularité &amp; dépassement de soi · v3</footer>
 
+<script src="badges.js"></script>
 <script>
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2ZnRxZGJkaWJmeWxhdWFydGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MjEzMjIsImV4cCI6MjEwNjA5NzMyMn0._WLJkWncu1fwMnlakuPFuJr_I-uvgr_TwvMect8E-a0";
@@ -323,6 +324,7 @@ async function renderDashboard(){
       <div class="tab" data-tab="programmes">Mes programmes</div>
       <div class="tab" data-tab="historique">Historique</div>
       <div class="tab" data-tab="progression">Progression</div>
+      ${isCoachAccount ? '' : '<div class="tab" data-tab="badges">Badges</div>'}
       ${isCoachAccount ? '' : '<div class="tab" data-tab="poids">Poids</div>'}
       ${isCoachAccount ? '' : '<div class="tab" data-tab="chat">Discussion coach</div>'}
       <div class="tab" data-tab="profil">Profil</div>
@@ -342,6 +344,7 @@ function loadTab(){
   if(currentTab==='programmes') loadProgrammes();
   else if(currentTab==='historique') loadHistorique();
   else if(currentTab==='progression') loadProgression();
+  else if(currentTab==='badges') loadBadges();
   else if(currentTab==='poids') loadPoids();
   else if(currentTab==='chat') loadChat();
   else loadProfil();
@@ -360,6 +363,20 @@ async function loadProgrammes(){
   `).join('') : '<div class="empty">Aucun programme pour l\'instant. Crée-en un depuis la page Programmes.</div>';
 }
 
+async function loadBadges(){
+  const box = document.getElementById('tabBody');
+  box.innerHTML = '<div class="empty">Chargement…</div>';
+  if(typeof HSBadges === 'undefined'){ box.innerHTML = '<div class="empty">Les badges ne sont pas disponibles pour le moment.</div>'; return; }
+  try{
+    const getJson = async p => { const r = await apiFetch(p); if(!r.ok) throw new Error('load_failed'); return r.json(); };
+    const data = await HSBadges.load(getJson, getSession().user.id);
+    if(currentTab !== 'badges') return;
+    box.innerHTML = HSBadges.renderFull(HSBadges.compute(data));
+  }catch(e){
+    console.error(e);
+    if(currentTab === 'badges') box.innerHTML = '<div class="empty">Impossible de charger tes badges. Réessaie.</div>';
+  }
+}
 async function loadHistorique(){
   const res = await apiFetch(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,programs(name)&order=started_at.desc`);
   const sessions = await res.json();

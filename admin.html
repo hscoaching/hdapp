@@ -199,6 +199,7 @@
 <div id="printAreaAdmin" style="display:none;"></div>
 <div id="printClientArea"></div>
 
+<script src="badges.js"></script>
 <script>
 String.prototype.fold = function(){ return this.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }; // recherche sans accents
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
@@ -439,7 +440,7 @@ async function renderClientsTab(){
     const idList = clients.map(c=>c.id).join(',');
     [progs, sessions, convs, unreadMsgs] = await Promise.all([
       api(`/rest/v1/programs?select=id,name,owner_user_id,created_at&owner_user_id=in.(${idList})&is_official=eq.false&order=created_at.desc`),
-      api(`/rest/v1/sessions?select=user_id,started_at&user_id=in.(${idList})&order=started_at.desc`),
+      api(`/rest/v1/sessions?select=id,user_id,started_at,completed_at&user_id=in.(${idList})&order=started_at.desc&limit=5000`),
       api(`/rest/v1/conversations?select=id,user_id&user_id=in.(${idList})`),
       api('/rest/v1/messages?select=conversation_id&sender=eq.user&read=eq.false')
     ]);
@@ -451,7 +452,11 @@ async function renderClientsTab(){
   const programsByUser = {};
   progs.forEach(p=>{ (programsByUser[p.owner_user_id] = programsByUser[p.owner_user_id] || []).push(p); });
   const lastActivityByUser = {};
-  sessions.forEach(s=>{ if(s.user_id && !lastActivityByUser[s.user_id]) lastActivityByUser[s.user_id] = s.started_at; });
+  const sessionsByUser = {};
+  sessions.forEach(s=>{
+    if(s.user_id && !lastActivityByUser[s.user_id]) lastActivityByUser[s.user_id] = s.started_at;
+    if(s.user_id) (sessionsByUser[s.user_id] = sessionsByUser[s.user_id] || []).push(s);
+  });
   const convByUser = {}; convs.forEach(c=> convByUser[c.user_id] = c.id);
   const unreadByConv = {}; unreadMsgs.forEach(m=> unreadByConv[m.conversation_id] = (unreadByConv[m.conversation_id]||0)+1);
 
@@ -461,7 +466,9 @@ async function renderClientsTab(){
     const last = lastActivityByUser[c.id] || null;
     const convId = convByUser[c.id] || null;
     const unread = convId ? (unreadByConv[convId]||0) : 0;
-    return { client:c, prog, progs: progsOfUser, last, convId, unread };
+    let badgeLine = '';
+    try{ if(typeof HSBadges !== 'undefined') badgeLine = HSBadges.summaryLine(HSBadges.compute({ sessions: sessionsByUser[c.id] || [] })); }catch(e){}
+    return { client:c, prog, progs: progsOfUser, last, convId, unread, badgeLine };
   });
   clientRows.sort((a,b)=>{
     if(a.unread !== b.unread) return b.unread - a.unread;
@@ -507,15 +514,32 @@ function renderClientRows(rows){
       <p>${escapeHtml(r.client.email||'')}</p>
       <p style="margin-top:8px;">${progLine}</p>
       <p>${lastLine}</p>
+      ${r.badgeLine ? `<p>${escapeHtml(r.badgeLine)}</p>` : ''}
       <div class="row-actions" style="margin-top:10px;">
         ${r.convId
           ? `<button class="btn btn-ghost btn-sm" onclick="goToClientConversation('${r.convId}','${esc}')">💬 Message${r.unread?` (${r.unread})`:''}</button>`
           : `<button class="btn btn-ghost btn-sm" onclick="startConversationWith('${r.client.id}','${esc}',this)">💬 Écrire</button>`}
         <button class="btn btn-ghost btn-sm" onclick="goToNewProgramFor('${r.client.id}')">+ Assigner un programme</button>
+        <button class="btn btn-ghost btn-sm" onclick="openBadgesModal('${r.client.id}','${esc}')">🏅 Badges</button>
         <button class="btn btn-ghost btn-sm" onclick="printClientReport('${r.client.id}')">📄 Export PDF</button>
       </div>
     </div>`;
   }).join('') : '<div class="empty">Aucun client ne correspond à cette recherche.</div>';
+}
+async function openBadgesModal(clientId, name){
+  document.getElementById('exModalTitle').textContent = 'Badges · ' + name;
+  const body = document.getElementById('exModalBody');
+  body.innerHTML = '<div class="empty">Chargement…</div>';
+  document.getElementById('exModalOverlay').classList.add('open');
+  const closeBtn = '<div class="row-actions" style="margin-top:14px;"><button class="btn btn-ghost" onclick="closeExerciseModal()">Fermer</button></div>';
+  if(typeof HSBadges === 'undefined'){ body.innerHTML = '<div class="empty">Badges indisponibles.</div>' + closeBtn; return; }
+  try{
+    const data = await HSBadges.load(p => api(p), clientId);
+    body.innerHTML = HSBadges.renderFull(HSBadges.compute(data)) + closeBtn;
+  }catch(e){
+    console.error(e);
+    body.innerHTML = '<div class="empty">Impossible de charger les badges. Réessaie.</div>' + closeBtn;
+  }
 }
 async function printClientReport(clientId){
   const row = clientRows.find(r=> r.client.id === clientId);
