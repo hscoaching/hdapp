@@ -123,6 +123,18 @@
   .rest-stop{background:var(--surface-2); border:1px solid var(--line); color:var(--ink); border-radius:999px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;}
   .sess-timer.running .rest-chips{display:none;}
   .sess-timer.running .rest-run{display:flex;}
+  .resume-banner{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--accent); border-radius:14px; padding:12px 14px; margin-bottom:16px;}
+  .resume-banner .rb-text b{display:block; font-size:14px;}
+  .resume-banner .rb-text span{display:block; font-size:12.5px; color:var(--ink-muted); margin-top:2px;}
+  .resume-banner .rb-actions{display:flex; gap:8px;}
+  .man-meta{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin:6px 0 14px;}
+  .man-meta .field{margin:0;}
+  @media (max-width:420px){ .man-meta{grid-template-columns:1fr;} }
+  .fin-overlay{position:fixed; inset:0; z-index:90; background:rgba(0,0,0,.75); display:flex; align-items:center; justify-content:center; padding:16px;}
+  .fin-card{width:100%; max-width:380px; background:var(--surface); border:1px solid var(--line); border-radius:16px; padding:20px;}
+  .fin-card h3{font-size:18px; margin-bottom:12px;}
+  .fin-hint{font-size:12.5px; color:var(--ink-muted); margin:8px 0 14px; line-height:1.4;}
+  .fin-actions{display:flex; flex-direction:column; gap:8px;}
   .sess-summary{display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:10px; margin:18px 0 22px;}
   .sess-summary > div{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:16px 10px; text-align:center;}
   .sess-summary b{display:block; font-size:26px; font-weight:800; color:var(--accent); font-variant-numeric:tabular-nums;}
@@ -336,9 +348,59 @@ async function logSetFor(sessionId, exId, setNum, reps, charge){
   if(isLoggedIn()) return authedFetch('/rest/v1/session_logs', { method:'POST', body: JSON.stringify({ session_id: sessionId, exercise_id: exId, set_number: setNum, reps, charge }) });
   return rpc('guest_log_set', { p_token: TOKEN, p_session_id: sessionId, p_exercise_id: exId, p_set_number: setNum, p_reps: reps, p_charge: charge });
 }
-async function completeSessionFor(sessionId){
-  if(isLoggedIn()) return authedFetch(`/rest/v1/sessions?id=eq.${sessionId}`, { method:'PATCH', body: JSON.stringify({ completed_at: new Date().toISOString() }) });
+// durationSec == null : la séance se termine « maintenant » ; sinon durée fixée à la main (en secondes)
+async function completeSessionFor(sessionId, durationSec){
+  if(isLoggedIn()){
+    let completed = new Date().toISOString();
+    if(durationSec != null){
+      const r = await authedFetch(`/rest/v1/sessions?select=started_at&id=eq.${sessionId}`);
+      const rows = await r.json();
+      if(!rows[0]) throw new Error('session introuvable');
+      completed = new Date(Date.parse(rows[0].started_at) + durationSec*1000).toISOString();
+    }
+    const res = await authedFetch(`/rest/v1/sessions?id=eq.${sessionId}`, { method:'PATCH', body: JSON.stringify({ completed_at: completed }) });
+    if(res && res.ok === false) throw new Error('complete_failed');
+    return res;
+  }
+  if(durationSec != null) return rpc('guest_complete_session_dur', { p_token: TOKEN, p_session_id: sessionId, p_duration_seconds: durationSec });
   return rpc('guest_complete_session', { p_token: TOKEN, p_session_id: sessionId });
+}
+// Séance saisie après coup : date de début et durée choisies par la personne
+async function addPastSessionFor(programId, dayLabel, startedAtIso, durationSec){
+  if(isLoggedIn()){
+    const completed = new Date(Date.parse(startedAtIso) + durationSec*1000).toISOString();
+    const res = await authedFetch('/rest/v1/sessions', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ program_id: programId, day_label: dayLabel||null, started_at: startedAtIso, completed_at: completed }) });
+    if(!res.ok) throw new Error('create_failed');
+    const data = await res.json(); return data[0].id;
+  }
+  return rpc('guest_add_past_session', { p_token: TOKEN, p_program_id: programId, p_day_label: dayLabel||null, p_started_at: startedAtIso, p_duration_seconds: durationSec });
+}
+
+// Séance en cours sauvegardée sur l'appareil : si le téléphone s'éteint, on peut la reprendre.
+const ACTIVE_KEY = 'hs_active_session';
+let activeMeta = null;
+function whoAmI(){ const u = getUserSession(); return (u && u.user && u.user.id) ? u.user.id : 'guest'; }
+function loadActive(){
+  try{
+    const a = JSON.parse(localStorage.getItem(ACTIVE_KEY)||'null');
+    if(a && a.sessionId && a.who === whoAmI() && Date.now() - a.start < 24*3600*1000) return a;
+  }catch(e){}
+  return null;
+}
+function saveActive(){ if(!activeMeta) return; try{ localStorage.setItem(ACTIVE_KEY, JSON.stringify(activeMeta)); }catch(e){} }
+function clearActive(){ activeMeta = null; try{ localStorage.removeItem(ACTIVE_KEY); }catch(e){} }
+function activeBannerHtml(){
+  const a = loadActive(); if(!a) return '';
+  return `<div class="resume-banner"><div class="rb-text"><b>⏱ Séance en cours</b><span>${escHtml(a.programName||'Programme')}${a.dayLabel?' · '+escHtml(a.dayLabel):''}</span></div>
+    <div class="rb-actions"><button class="btn btn-accent btn-sm" onclick="resumeActive()">Reprendre</button><button class="btn btn-ghost btn-sm" onclick="dropActive()">Abandonner</button></div></div>`;
+}
+function resumeActive(){
+  const a = loadActive(); if(!a) return;
+  location.hash = `#programme/${a.programId}/seance${a.dayIdx!=='' ? '/'+a.dayIdx : ''}`;
+}
+function dropActive(){
+  if(!confirm('Abandonner la séance en cours ? Les séries déjà validées restent enregistrées.')) return;
+  clearActive(); route();
 }
 async function createProgramFor(name, desc){
   if(isLoggedIn()){
@@ -502,6 +564,7 @@ function route(){
   const parts = hash.split('/').filter(Boolean);
   if(parts[0]==='creer') renderCreate();
   else if(parts[0]==='programme' && parts[1] && parts[2]==='seance') renderSession(parts[1], parts[3]);
+  else if(parts[0]==='programme' && parts[1] && parts[2]==='saisie') renderSession(parts[1], parts[3], true);
   else if(parts[0]==='programme' && parts[1] && parts[2]==='modifier') renderEditProgram(parts[1]);
   else if(parts[0]==='programme' && parts[1]) renderProgramDetail(parts[1]);
   else renderList();
@@ -511,6 +574,7 @@ function route(){
 let allPrograms = [];
 async function renderList(){
   app.innerHTML = `
+    ${activeBannerHtml()}
     <div class="eyebrow">PROGRAMMES</div>
     <h1 class="page">Suis ton parcours.</h1>
     <p class="subtitle">Programmes construits par ton coach, ou crée le tien. Tes séries et charges sont sauvegardées automatiquement d'une séance à l'autre.</p>
@@ -585,14 +649,17 @@ async function renderProgramDetail(programId){
       <div class="day-head"><h2>${escHtml(g.label)}</h2><span class="day-count">${g.items.length} exercice${g.items.length>1?'s':''}</span></div>
       ${rowsHtml(g.items)}
       <button class="btn btn-accent" style="width:100%;justify-content:center;margin-top:10px;" onclick="location.hash='#programme/${programId}/seance/${gi}'">Démarrer « ${escHtml(g.label)} »</button>
+      <button class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px;" onclick="location.hash='#programme/${programId}/saisie/${gi}'">📝 Saisir une séance passée</button>
     </div>`).join('');
   document.getElementById('progBody').innerHTML = `
+    ${activeBannerHtml()}
     <div class="eyebrow">PROGRAMME</div>
     <h1 class="page">${progName}</h1>
     <div id="progExList">${listHtml}</div>
     <div class="actions-row">
       ${isOfficial ? '' : `<button class="btn btn-ghost" onclick="location.hash='#programme/${programId}/modifier'">✏️ Modifier mon programme</button>`}
       <button class="btn btn-ghost" onclick="printProgram()">🖨️ Exporter en PDF</button>
+      ${(!multi && items.length) ? `<button class="btn btn-ghost" onclick="location.hash='#programme/${programId}/saisie'">📝 Saisir une séance passée</button>` : ''}
     </div>
     ${(!multi && items.length) ? `<div class="session-bar"><button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}/seance'">Démarrer la séance</button></div>` : ''}
   `;
@@ -625,7 +692,7 @@ function printProgram(){
 // ---------- Séance en temps réel ----------
 let activeSession = null;
 let activeDayLabel = null;
-async function renderSession(programId, dayIdx){
+async function renderSession(programId, dayIdx, manual){
   app.innerHTML = `<a class="backlink" href="#programme/${programId}">← Retour au programme</a><div id="sessBody"><div class="empty">Préparation de la séance…</div></div>`;
   let allItems = [];
   try{ allItems = await programExercisesFor(programId); }
@@ -638,12 +705,35 @@ async function renderSession(programId, dayIdx){
     items = g.items; dayLabel = g.label;
   }
   activeDayLabel = dayLabel;
-  const [lastLogs, sessionId] = await Promise.all([
-    lastLogsFor(programId, dayLabel),
-    startSessionFor(programId, dayLabel)
-  ]);
-  activeSession = sessionId;
-  sessStart = Date.now(); sessDone = {}; restEnd = 0;
+  const dKey = dayIdx == null ? '' : String(dayIdx);
+  let lastLogs, sessionId = null, resumed = null;
+  if(manual){
+    lastLogs = await lastLogsFor(programId, dayLabel);
+    activeSession = null;
+  } else {
+    // Reprise d'une séance interrompue (téléphone éteint, onglet fermé…)
+    const saved = loadActive();
+    if(saved && saved.programId === programId && saved.dayIdx === dKey
+       && (Object.keys(saved.done||{}).length > 0 || Date.now() - saved.start < 30*60*1000)){
+      resumed = saved;
+      lastLogs = await lastLogsFor(programId, dayLabel);
+      sessionId = saved.sessionId;
+    } else {
+      [lastLogs, sessionId] = await Promise.all([ lastLogsFor(programId, dayLabel), startSessionFor(programId, dayLabel) ]);
+    }
+    activeSession = sessionId;
+  }
+  sessDone = {}; restEnd = 0;
+  sessStart = resumed ? resumed.start : Date.now();
+  if(!manual){
+    if(resumed){ activeMeta = resumed; }
+    else {
+      let pname = (currentProgramDetail && currentProgramDetail.id === programId) ? currentProgramDetail.name : '';
+      if(!pname){ try{ const all = await listPrograms(); pname = (all.find(x=>x.id===programId)||{}).name || ''; }catch(e){} }
+      activeMeta = { who: whoAmI(), sessionId, programId, dayIdx: dKey, dayLabel, programName: pname, start: sessStart, done: {}, cur: {} };
+      saveActive();
+    }
+  }
   const lastByKey = {};
   (lastLogs||[]).forEach(l=>{ lastByKey[`${l.exercise_id}_${l.set_number}`] = l; });
 
@@ -680,7 +770,7 @@ async function renderSession(programId, dayIdx){
         <span class="unit">reps</span>
         <input type="number" inputmode="decimal" placeholder="${phc||'kg'}" class="charge-input">
         <span class="unit">kg</span>
-        <button class="valid" onclick="validateSet(this)">✓</button>
+        ${manual ? '' : '<button class="valid" onclick="validateSet(this)">✓</button>'}
       </div>`;
   };
   const rows = blocks.map(b=>{
@@ -713,9 +803,24 @@ async function renderSession(programId, dayIdx){
     </div>`;
   }).join('');
 
-  document.getElementById('sessBody').innerHTML = `
-    <div class="eyebrow">SÉANCE EN COURS${activeDayLabel ? ' · ' + escHtml(activeDayLabel).toUpperCase() : ''}</div>
-    <h1 class="page" style="font-size:32px;">C'est parti 💪</h1>
+  const todayStr = (()=>{ const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; })();
+  const manualHead = `
+    <div class="eyebrow">SAISIE APRÈS COUP${activeDayLabel ? ' · ' + escHtml(activeDayLabel).toUpperCase() : ''}</div>
+    <h1 class="page" style="font-size:32px;">Séance passée</h1>
+    <p class="subtitle">Renseigne les séries que tu as faites (laisse vides celles que tu n'as pas faites).</p>
+    <div class="man-meta">
+      <div class="field"><label for="manDate">Date de la séance</label><input id="manDate" type="date" value="${todayStr}" max="${todayStr}"></div>
+      <div class="field"><label for="manMin">Durée (minutes, facultatif)</label><input id="manMin" type="number" inputmode="numeric" min="0" max="600" placeholder="ex. 55"></div>
+    </div>`;
+  document.getElementById('sessBody').innerHTML = manual ? `
+    ${manualHead}
+    ${rows}
+    <div class="session-bar">
+      <button class="btn btn-accent" id="manSaveBtn" style="width:100%;justify-content:center;" onclick="saveManualSession('${programId}')">Enregistrer la séance</button>
+    </div>
+  ` : `
+    <div class="eyebrow">SÉANCE EN COURS${activeDayLabel ? ' · ' + escHtml(activeDayLabel).toUpperCase() : ''}${resumed ? ' · REPRISE' : ''}</div>
+    <h1 class="page" style="font-size:32px;">${resumed ? 'On reprend 💪' : 'C\'est parti 💪'}</h1>
     ${rows}
     <div class="session-bar">
       <div class="sess-timer" id="sessTimer">
@@ -736,7 +841,21 @@ async function renderSession(programId, dayIdx){
       <button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="finishSession('${programId}')">Terminer la séance</button>
     </div>
   `;
-  clearInterval(sessTick);
+  clearInterval(sessTick); sessTick = null;
+  if(manual){ window.scrollTo(0,0); return; }
+  if(resumed){
+    // variantes choisies puis séries déjà validées
+    Object.entries(resumed.cur||{}).forEach(([k,exId])=>{ if(slotState[k] && slotState[k].cur !== exId) swapVariant(k, true); });
+    Object.entries(resumed.done||{}).forEach(([key,v])=>{
+      const [k,setNum] = key.split('|');
+      const line = document.querySelector(`.set-line[data-slot="${k}"][data-set="${setNum}"]`);
+      if(!line) return;
+      if(v.reps!=null) line.querySelector('.reps-input').value = v.reps;
+      if(v.charge!=null) line.querySelector('.charge-input').value = v.charge;
+      line.querySelector('.valid').classList.add('done');
+      sessDone[`${line.dataset.ex}_${setNum}`] = (v.reps && v.charge) ? v.reps*v.charge : 0;
+    });
+  }
   sessTick = setInterval(sessTickFn, 250);
   sessTickFn();
 }
@@ -747,7 +866,7 @@ function slotLabel(k){
   return (st.tag ? st.tag + ' · ' : '') + (ex ? ex.name : '');
 }
 function openSlotFiche(k){ const st = slotState[k]; if(st) openExFiche(st.cur); }
-function swapVariant(k){
+function swapVariant(k, silent){
   const st = slotState[k]; if(!st || !st.variant) return;
   const lines = [...document.querySelectorAll(`.set-line[data-slot="${k}"]`)];
   if(lines.some(l=>l.querySelector('.valid.done'))){ toast('Impossible de changer : une série est déjà validée'); return; }
@@ -761,7 +880,8 @@ function swapVariant(k){
   document.querySelectorAll(`[data-slotname="${k}"]`).forEach(el=>{ el.textContent = slotLabel(k); });
   const other = st.cur === st.orig ? st.variant : st.orig;
   document.querySelectorAll(`[data-slotbtn="${k}"]`).forEach(b=>{ b.textContent = '↔ ' + exercisesById[other].name; });
-  toast(st.cur === st.orig ? 'Exercice de base' : 'Variante sélectionnée');
+  if(activeMeta){ activeMeta.cur = activeMeta.cur || {}; activeMeta.cur[k] = st.cur; saveActive(); }
+  if(!silent) toast(st.cur === st.orig ? 'Exercice de base' : 'Variante sélectionnée');
 }
 async function validateSet(btn){
   const line = btn.closest('.set-line');
@@ -772,6 +892,7 @@ async function validateSet(btn){
     await logSetFor(activeSession, exId, setNum, reps, charge);
     btn.classList.add('done');
     sessDone[`${exId}_${setNum}`] = (reps && charge) ? reps*charge : 0;
+    if(activeMeta){ activeMeta.done = activeMeta.done || {}; activeMeta.done[`${line.dataset.slot}|${setNum}`] = { reps, charge }; saveActive(); }
   }catch(e){ toast('Erreur, réessaie'); }
 }
 
@@ -806,27 +927,80 @@ function endRest(alarm){
   try{ if(navigator.vibrate) navigator.vibrate([200,100,200,100,200]); }catch(e){}
   toast('Repos terminé, c\'est reparti !');
 }
-async function finishSession(programId){
+// Terminer : on demande la durée (pré-remplie avec le chrono) pour pouvoir la corriger
+// si le téléphone s'est éteint ou si le chrono n'a pas été lancé à temps.
+function finishSession(programId){
   const durationMs = Date.now() - sessStart;
-  try{
-    if(activeSession) await completeSessionFor(activeSession);
-  }catch(e){ console.error(e); toast('Erreur, réessaie'); return; }
-  clearInterval(sessTick); sessTick = null; restEnd = 0;
+  const origMin = Math.max(1, Math.round(durationMs/60000));
+  const ov = document.createElement('div');
+  ov.className = 'fin-overlay'; ov.id = 'finOverlay';
+  ov.innerHTML = `<div class="fin-card">
+      <h3>Terminer la séance</h3>
+      <div class="field"><label for="finMin">Durée de la séance (minutes)</label>
+        <input id="finMin" type="number" inputmode="numeric" min="1" max="1440" value="${origMin}"></div>
+      <p class="fin-hint">Chrono : ${fmtClock(durationMs)}. Corrige la durée si ton téléphone s'est éteint ou si tu as lancé le chrono en retard.</p>
+      <div class="fin-actions">
+        <button class="btn btn-accent" id="finOk" style="justify-content:center;">Valider</button>
+        <button class="btn btn-ghost" id="finCancel" style="justify-content:center;">Annuler</button>
+      </div></div>`;
+  document.body.appendChild(ov);
+  document.getElementById('finCancel').onclick = ()=> ov.remove();
+  document.getElementById('finOk').onclick = async ()=>{
+    const v = parseInt(document.getElementById('finMin').value);
+    if(!(v >= 1 && v <= 1440)){ toast('Durée invalide'); return; }
+    const edited = v !== origMin;
+    const finalMs = edited ? v*60000 : durationMs;
+    const okBtn = document.getElementById('finOk'); okBtn.disabled = true;
+    try{
+      if(activeSession) await completeSessionFor(activeSession, edited ? v*60 : null);
+    }catch(e){ console.error(e); toast('Erreur, réessaie'); okBtn.disabled = false; return; }
+    ov.remove();
+    clearActive();
+    clearInterval(sessTick); sessTick = null; restEnd = 0;
+    showSessionSummary(programId, 'SÉANCE TERMINÉE', finalMs, Object.keys(sessDone).length, Object.values(sessDone).reduce((x,y)=>x+y, 0));
+  };
+}
+function showSessionSummary(programId, eyebrow, durationMs, nSets, vol){
   const body = document.getElementById('sessBody');
   if(!body){ location.hash = `#programme/${programId}`; return; }
-  const nSets = Object.keys(sessDone).length;
-  const vol = Object.values(sessDone).reduce((a,b)=>a+b, 0);
   body.innerHTML = `
-    <div class="eyebrow">SÉANCE TERMINÉE${activeDayLabel ? ' · ' + escHtml(activeDayLabel).toUpperCase() : ''}</div>
+    <div class="eyebrow">${eyebrow}${activeDayLabel ? ' · ' + escHtml(activeDayLabel).toUpperCase() : ''}</div>
     <h1 class="page" style="font-size:32px;">Bravo 💪</h1>
     <div class="sess-summary">
-      <div><b>${fmtClock(durationMs)}</b><span>Durée de la séance</span></div>
-      <div><b>${nSets}</b><span>Séries validées</span></div>
+      ${durationMs ? `<div><b>${fmtClock(durationMs)}</b><span>Durée de la séance</span></div>` : ''}
+      <div><b>${nSets}</b><span>${nSets>1?'Séries':'Série'} ${eyebrow.indexOf('TERMIN')>=0 ? (nSets>1?'validées':'validée') : (nSets>1?'enregistrées':'enregistrée')}</span></div>
       ${vol ? `<div><b>${Math.round(vol).toLocaleString('fr-FR')} kg</b><span>Poids total soulevé</span></div>` : ''}
     </div>
     <button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}'">Retour au programme</button>
   `;
   window.scrollTo(0,0);
+}
+// Saisie d'une séance passée : date + durée + séries renseignées
+async function saveManualSession(programId){
+  const btn = document.getElementById('manSaveBtn');
+  const entries = [...document.querySelectorAll('#sessBody .set-line')].map(l=>({
+    exId: l.dataset.ex, setNum: parseInt(l.dataset.set),
+    reps: parseInt(l.querySelector('.reps-input').value) || null,
+    charge: parseFloat(l.querySelector('.charge-input').value) || null
+  })).filter(e=> e.reps || e.charge);
+  if(!entries.length){ toast('Renseigne au moins une série'); return; }
+  const dateVal = document.getElementById('manDate').value;
+  if(!dateVal){ toast('Choisis la date de la séance'); return; }
+  const minutes = parseFloat(document.getElementById('manMin').value);
+  const durSec = minutes > 0 ? Math.min(Math.round(minutes*60), 86400) : 0;
+  const [y,m,d] = dateVal.split('-').map(Number);
+  const now = new Date();
+  const isToday = y === now.getFullYear() && m-1 === now.getMonth() && d === now.getDate();
+  let startDt = isToday ? new Date(Date.now() - durSec*1000) : new Date(y, m-1, d, 12, 0, 0);
+  if(startDt > now) startDt = now;
+  btn.disabled = true;
+  try{
+    const sid = await addPastSessionFor(programId, activeDayLabel, startDt.toISOString(), durSec);
+    const results = await Promise.all(entries.map(e=> logSetFor(sid, e.exId, e.setNum, e.reps, e.charge)));
+    if(results.some(r=> r && r.ok === false)) throw new Error('log_failed');
+  }catch(e){ console.error(e); toast('Erreur, réessaie'); btn.disabled = false; return; }
+  const vol = entries.reduce((a,e)=> a + ((e.reps && e.charge) ? e.reps*e.charge : 0), 0);
+  showSessionSummary(programId, 'SÉANCE ENREGISTRÉE', durSec*1000, entries.length, vol);
 }
 
 // ---------- Création / édition de programme ----------

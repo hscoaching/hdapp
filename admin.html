@@ -551,7 +551,7 @@ async function printClientReport(clientId){
   const sessRows = sessions.length ? sessions.map(s=>{
     const d = new Date(s.started_at);
     let duree = '';
-    if(s.completed_at){ const min = Math.max(1, Math.round((new Date(s.completed_at)-d)/60000)); duree = ` · ${min} min`; }
+    if(s.completed_at && (new Date(s.completed_at)-d) > 2000){ const min = Math.max(1, Math.round((new Date(s.completed_at)-d)/60000)); duree = ` · ${min} min`; }
     const vol = logsBySession[s.id] ? ` · ${Math.round(logsBySession[s.id]).toLocaleString('fr-FR')} kg soulevés` : '';
     return `<div class="sess-row"><span>${d.toLocaleDateString('fr-FR',{day:'numeric',month:'long',year:'numeric'})}</span><span>${duree}${vol}</span></div>`;
   }).join('') : '<div class="empty-print">Aucune séance enregistrée.</div>';
