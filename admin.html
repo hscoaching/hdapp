@@ -443,19 +443,20 @@ async function renderClientsTab(){
     document.getElementById('tabBody').innerHTML = '<div class="empty">Impossible de charger les clients. Réessaie.</div>';
     return;
   }
-  const programByUser = {};
-  progs.forEach(p=>{ if(!programByUser[p.owner_user_id]) programByUser[p.owner_user_id] = p; });
+  const programsByUser = {};
+  progs.forEach(p=>{ (programsByUser[p.owner_user_id] = programsByUser[p.owner_user_id] || []).push(p); });
   const lastActivityByUser = {};
   sessions.forEach(s=>{ if(s.user_id && !lastActivityByUser[s.user_id]) lastActivityByUser[s.user_id] = s.started_at; });
   const convByUser = {}; convs.forEach(c=> convByUser[c.user_id] = c.id);
   const unreadByConv = {}; unreadMsgs.forEach(m=> unreadByConv[m.conversation_id] = (unreadByConv[m.conversation_id]||0)+1);
 
   clientRows = clients.map(c=>{
-    const prog = programByUser[c.id] || null;
+    const progsOfUser = programsByUser[c.id] || [];
+    const prog = progsOfUser[0] || null;
     const last = lastActivityByUser[c.id] || null;
     const convId = convByUser[c.id] || null;
     const unread = convId ? (unreadByConv[convId]||0) : 0;
-    return { client:c, prog, last, convId, unread };
+    return { client:c, prog, progs: progsOfUser, last, convId, unread };
   });
   clientRows.sort((a,b)=>{
     if(a.unread !== b.unread) return b.unread - a.unread;
@@ -477,11 +478,24 @@ function filterClientsTab(q){
   );
   renderClientRows(matches);
 }
+const expandedClients = new Set();
+function toggleMoreProgs(id){
+  if(expandedClients.has(id)) expandedClients.delete(id); else expandedClients.add(id);
+  filterClientsTab(document.getElementById('clientSearch')?.value || '');
+}
 function renderClientRows(rows){
   document.getElementById('clientsList').innerHTML = rows.length ? rows.map(r=>{
     const name = r.client.full_name || r.client.email || 'Client';
     const esc = escapeHtml(name).replace(/'/g,"\\'");
-    const progLine = r.prog ? `Programme : ${escapeHtml(r.prog.name)}` : 'Aucun programme assigné';
+    const progLine = r.progs.length
+      ? `<span style="display:block;margin-bottom:4px;">${r.progs.length>1?'Programmes':'Programme'} :</span>` + (()=>{
+        const row = p=>`<span style="display:flex;align-items:center;justify-content:space-between;gap:8px;padding:6px 0;border-top:1px solid var(--line);"><span style="min-width:0;overflow:hidden;text-overflow:ellipsis;">${escapeHtml(p.name)}</span><button class="btn btn-ghost btn-sm" style="flex:none;" onclick="goToProgramForm('${p.id}')">📋 Voir</button></span>`;
+        const LIM = 2, shown = r.progs.slice(0,LIM), rest = r.progs.slice(LIM);
+        return shown.map(row).join('') + (rest.length
+          ? `<span id="more-${r.client.id}" style="display:${expandedClients.has(r.client.id)?'block':'none'};">${rest.map(row).join('')}</span><button class="btn btn-ghost btn-sm" style="margin-top:6px;" onclick="toggleMoreProgs('${r.client.id}')">${expandedClients.has(r.client.id)?'Masquer ▴':`Voir les ${rest.length} autre${rest.length>1?'s':''} ▾`}</button>`
+          : '');
+      })()
+      : 'Aucun programme assigné';
     const lastLine = r.last ? `Dernière séance : ${new Date(r.last).toLocaleDateString('fr-FR')}` : 'Aucune séance enregistrée';
     return `<div class="card" style="cursor:default;">
       <h3>${escapeHtml(name)} ${r.unread?`<span class="badge">${r.unread}</span>`:''}</h3>
@@ -489,8 +503,10 @@ function renderClientRows(rows){
       <p style="margin-top:8px;">${progLine}</p>
       <p>${lastLine}</p>
       <div class="row-actions" style="margin-top:10px;">
-        ${r.convId ? `<button class="btn btn-ghost btn-sm" onclick="goToClientConversation('${r.convId}','${esc}')">💬 Message${r.unread?` (${r.unread})`:''}</button>` : ''}
-        ${r.prog ? `<button class="btn btn-ghost btn-sm" onclick="goToProgramForm('${r.prog.id}')">📋 Voir le programme</button>` : `<button class="btn btn-ghost btn-sm" onclick="goToNewProgramFor('${r.client.id}')">+ Assigner un programme</button>`}
+        ${r.convId
+          ? `<button class="btn btn-ghost btn-sm" onclick="goToClientConversation('${r.convId}','${esc}')">💬 Message${r.unread?` (${r.unread})`:''}</button>`
+          : `<button class="btn btn-ghost btn-sm" onclick="startConversationWith('${r.client.id}','${esc}',this)">💬 Écrire</button>`}
+        <button class="btn btn-ghost btn-sm" onclick="goToNewProgramFor('${r.client.id}')">+ Assigner un programme</button>
         <button class="btn btn-ghost btn-sm" onclick="printClientReport('${r.client.id}')">📄 Export PDF</button>
       </div>
     </div>`;
@@ -499,11 +515,14 @@ function renderClientRows(rows){
 async function printClientReport(clientId){
   const row = clientRows.find(r=> r.client.id === clientId);
   if(!row){ toast('Client introuvable'); return; }
-  const { client, prog } = row;
+  const { client } = row; const progList = row.progs || [];
   const name = client.full_name || client.email || 'Client';
-  let exItems = [];
-  if(prog){
-    try{ exItems = await api(`/rest/v1/program_exercises?select=*,exercises(name)&program_id=eq.${prog.id}&order=order_index`); }catch(e){ exItems = []; }
+  let exByProg = {};
+  if(progList.length){
+    try{
+      const all = await api(`/rest/v1/program_exercises?select=*,exercises(name)&program_id=in.(${progList.map(p=>p.id).join(',')})&order=order_index`);
+      all.forEach(it=>{ (exByProg[it.program_id] = exByProg[it.program_id] || []).push(it); });
+    }catch(e){}
   }
   let sessions = [];
   try{ sessions = await api(`/rest/v1/sessions?select=id,started_at,completed_at&user_id=eq.${clientId}&order=started_at.desc&limit=15`); }catch(e){ sessions = []; }
@@ -519,11 +538,16 @@ async function printClientReport(clientId){
     }catch(e){}
   }
   const pexHtml = it=> `<div class="pex"><b>${it.superset_group!=null?'[Superset] ':''}${escapeHtml(it.exercises?.name||'Exercice')}${it.variant_exercise_id && exercisesById[it.variant_exercise_id] ? ' (variante : '+escapeHtml(exercisesById[it.variant_exercise_id].name)+')' : ''}</b><span>${escapeHtml(it.sets||'-')}×${escapeHtml(it.reps||'-')} · repos ${escapeHtml(it.rest_seconds||'-')}s</span></div>`;
-  const dayLabels = [...new Set(exItems.map(it=>it.day_label||'Séance 1'))];
-  const exRows = !exItems.length ? '<div class="empty-print">Aucun programme assigné.</div>'
-    : (dayLabels.length > 1
-        ? dayLabels.map(l=>`<div style="font-weight:700;margin:12px 0 4px;">${escapeHtml(l)}</div>` + exItems.filter(it=>(it.day_label||'Séance 1')===l).map(pexHtml).join('')).join('')
-        : exItems.map(pexHtml).join(''));
+  const progBlock = p=>{
+    const exItems = exByProg[p.id] || [];
+    const dayLabels = [...new Set(exItems.map(it=>it.day_label||'Séance 1'))];
+    const body = !exItems.length ? '<div class="empty-print">Programme vide.</div>'
+      : (dayLabels.length > 1
+          ? dayLabels.map(l=>`<div style="font-weight:700;margin:12px 0 4px;">${escapeHtml(l)}</div>` + exItems.filter(it=>(it.day_label||'Séance 1')===l).map(pexHtml).join('')).join('')
+          : exItems.map(pexHtml).join(''));
+    return `<h2>Programme — ${escapeHtml(p.name)}</h2>${body}`;
+  };
+  const exRows = progList.length ? progList.map(progBlock).join('') : '<h2>Programme assigné</h2><div class="empty-print">Aucun programme assigné.</div>';
   const sessRows = sessions.length ? sessions.map(s=>{
     const d = new Date(s.started_at);
     let duree = '';
@@ -534,12 +558,31 @@ async function printClientReport(clientId){
   document.getElementById('printClientArea').innerHTML = `
     <h1>${escapeHtml(name)}</h1>
     <div class="pmeta">${escapeHtml(client.email||'')} · Fiche coach — HS Coaching</div>
-    <h2>Programme assigné${prog?` — ${escapeHtml(prog.name)}`:''}</h2>
     ${exRows}
     <h2>Historique des séances (15 dernières)</h2>
     ${sessRows}
   `;
   window.print();
+}
+// Le coach peut écrire à un client même si celui-ci n'a jamais envoyé de message :
+// on crée la discussion à la volée (ou on réutilise celle qui existe déjà).
+async function startConversationWith(clientId, name, btn){
+  if(btn){ if(btn.disabled) return; btn.disabled = true; }
+  try{
+    let rows = await api(`/rest/v1/conversations?select=id&user_id=eq.${clientId}&limit=1`);
+    let convId = rows && rows[0] && rows[0].id;
+    if(!convId){
+      const created = await api('/rest/v1/conversations', { method:'POST', headers:{ Prefer:'return=representation' }, body: JSON.stringify({ user_id: clientId }) });
+      convId = Array.isArray(created) ? created[0].id : created.id;
+    }
+    const row = clientRows.find(r=> r.client.id === clientId);
+    if(row) row.convId = convId;
+    await goToClientConversation(convId, name);
+  }catch(e){
+    console.error(e);
+    toast("Impossible d'ouvrir la discussion. Réessaie.");
+    if(btn) btn.disabled = false;
+  }
 }
 async function goToClientConversation(convId, name){
   currentTab = 'messages'; msgSub = 'conversations'; paint();
