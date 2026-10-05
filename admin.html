@@ -189,6 +189,7 @@
 <div id="printClientArea"></div>
 
 <script>
+String.prototype.fold = function(){ return this.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }; // recherche sans accents
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2ZnRxZGJkaWJmeWxhdWFydGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MjEzMjIsImV4cCI6MjEwNjA5NzMyMn0._WLJkWncu1fwMnlakuPFuJr_I-uvgr_TwvMect8E-a0";
 const app = document.getElementById('app');
@@ -349,9 +350,9 @@ async function openVisitsModal(){
 }
 function renderVisitsList(){
   const qEl = document.getElementById('visitsSearch');
-  const q = qEl ? qEl.value.trim().toLowerCase() : '';
+  const q = qEl ? qEl.value.trim().fold() : '';
   const matches = !q ? visitsAccounts : visitsAccounts.filter(a=>
-    (a.profile.full_name||'').toLowerCase().includes(q) || (a.profile.email||'').toLowerCase().includes(q)
+    (a.profile.full_name||'').fold().includes(q) || (a.profile.email||'').fold().includes(q)
   );
   const listEl = document.getElementById('visitsAccountsList');
   listEl.innerHTML = matches.length ? matches.map(a=> accountRowHtml(a.visit, a.profile)).join('') : '<div class="empty">Aucun compte ne correspond.</div>';
@@ -464,9 +465,9 @@ async function renderClientsTab(){
   renderClientRows(clientRows);
 }
 function filterClientsTab(q){
-  clientSearchQ = q.trim().toLowerCase();
+  clientSearchQ = q.trim().fold();
   const matches = !clientSearchQ ? clientRows : clientRows.filter(r=>
-    (r.client.full_name||'').toLowerCase().includes(clientSearchQ) || (r.client.email||'').toLowerCase().includes(clientSearchQ)
+    (r.client.full_name||'').fold().includes(clientSearchQ) || (r.client.email||'').fold().includes(clientSearchQ)
   );
   renderClientRows(matches);
 }
@@ -776,12 +777,12 @@ function selectPickEx(exId){
 function filterExPicker(){
   const grid = document.getElementById('pfPickGrid');
   if(!grid) return;
-  const q = (document.getElementById('pfSearch').value || '').trim().toLowerCase();
+  const q = (document.getElementById('pfSearch').value || '').trim().fold();
   const matches = !q ? exercises : exercises.filter(e=>
-    (e.name||'').toLowerCase().includes(q)
-    || (e.category||'').toLowerCase().includes(q)
-    || (e.primary_muscles||[]).some(m=>(m||'').toLowerCase().includes(q))
-    || (e.secondary_muscles||[]).some(m=>(m||'').toLowerCase().includes(q))
+    (e.name||'').fold().includes(q)
+    || (e.category||'').fold().includes(q)
+    || (e.primary_muscles||[]).some(m=>(m||'').fold().includes(q))
+    || (e.secondary_muscles||[]).some(m=>(m||'').fold().includes(q))
   );
   const selected = document.getElementById('pfPickEx').value;
   grid.innerHTML = matches.length ? matches.map(e=>`
@@ -950,13 +951,13 @@ async function renderExercisesTab(){
 }
 function filterExercisesTab(q){
   exSearchQ = q || '';
-  const qq = exSearchQ.trim().toLowerCase();
+  const qq = exSearchQ.trim().fold();
   const list = !qq ? exercises : exercises.filter(e=>
-    (e.name||'').toLowerCase().includes(qq)
-    || (e.category||'').toLowerCase().includes(qq)
-    || (e.short_description||'').toLowerCase().includes(qq)
-    || (e.primary_muscles||[]).some(m=>(m||'').toLowerCase().includes(qq))
-    || (e.secondary_muscles||[]).some(m=>(m||'').toLowerCase().includes(qq))
+    (e.name||'').fold().includes(qq)
+    || (e.category||'').fold().includes(qq)
+    || (e.short_description||'').fold().includes(qq)
+    || (e.primary_muscles||[]).some(m=>(m||'').fold().includes(qq))
+    || (e.secondary_muscles||[]).some(m=>(m||'').fold().includes(qq))
   );
   renderExList(list);
 }

@@ -262,6 +262,7 @@
 <div id="printArea" style="display:none;"></div>
 
 <script>
+String.prototype.fold = function(){ return this.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }; // recherche sans accents
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2ZnRxZGJkaWJmeWxhdWFydGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MjEzMjIsImV4cCI6MjEwNjA5NzMyMn0._WLJkWncu1fwMnlakuPFuJr_I-uvgr_TwvMect8E-a0";
 const GROUPS = ["Jambes","Dos","Pectoraux","Épaules","Bras","Abdos"];
@@ -420,14 +421,14 @@ function renderSubChips(){
 }
 
 function renderGrid(){
-  const q = searchEl.value.trim().toLowerCase();
+  const q = searchEl.value.trim().fold();
   const filtered = exercises.filter(ex=>{
     const matchGroup = exerciseMatchesGroup(ex, activeGroup);
     const matchMuscle = !activeMuscle || exerciseMuscleLabels(ex, activeGroup).includes(activeMuscle);
-    const matchQ = !q || ex.name.toLowerCase().includes(q) || (ex.short_description||'').toLowerCase().includes(q)
-      || (ex.category||'').toLowerCase().includes(q)
-      || (ex.primary_muscles||[]).some(m=> m.toLowerCase().includes(q))
-      || (ex.secondary_muscles||[]).some(m=> m.toLowerCase().includes(q));
+    const matchQ = !q || ex.name.fold().includes(q) || (ex.short_description||'').fold().includes(q)
+      || (ex.category||'').fold().includes(q)
+      || (ex.primary_muscles||[]).some(m=> m.fold().includes(q))
+      || (ex.secondary_muscles||[]).some(m=> m.fold().includes(q));
     return matchGroup && matchMuscle && matchQ;
   });
   grid.innerHTML = filtered.map(ex => `

@@ -232,6 +232,7 @@
 <div class="toast" id="toast"></div>
 
 <script>
+String.prototype.fold = function(){ return this.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }; // recherche sans accents
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2ZnRxZGJkaWJmeWxhdWFydGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MjEzMjIsImV4cCI6MjEwNjA5NzMyMn0._WLJkWncu1fwMnlakuPFuJr_I-uvgr_TwvMect8E-a0";
 
@@ -506,9 +507,9 @@ function renderProgramGrids(programs){
     '<div class="empty">Tu n\'as pas encore créé de programme perso.</div>';
 }
 function filterProgramList(){
-  const q = document.getElementById('progSearch').value.trim().toLowerCase();
+  const q = document.getElementById('progSearch').value.trim().fold();
   const matches = !q ? allPrograms : allPrograms.filter(p=>
-    (p.name||'').toLowerCase().includes(q) || (p.description||'').toLowerCase().includes(q)
+    (p.name||'').fold().includes(q) || (p.description||'').fold().includes(q)
   );
   renderProgramGrids(matches);
 }
@@ -838,12 +839,12 @@ function programFormHtml({ backHash, eyebrow, title, name, desc, saveLabel }){
   `;
 }
 function filterPickEx(){
-  const q = document.getElementById('pSearch').value.trim().toLowerCase();
+  const q = document.getElementById('pSearch').value.trim().fold();
   const matches = !q ? exercises : exercises.filter(e=>
-    e.name.toLowerCase().includes(q)
-    || (e.category||'').toLowerCase().includes(q)
-    || (e.primary_muscles||[]).some(m=>(m||'').toLowerCase().includes(q))
-    || (e.secondary_muscles||[]).some(m=>(m||'').toLowerCase().includes(q))
+    e.name.fold().includes(q)
+    || (e.category||'').fold().includes(q)
+    || (e.primary_muscles||[]).some(m=>(m||'').fold().includes(q))
+    || (e.secondary_muscles||[]).some(m=>(m||'').fold().includes(q))
   );
   renderPickExGrid(matches);
 }
