@@ -787,6 +787,7 @@ async function renderProgramForm(programId, prefill){
       <input type="hidden" id="pfPickEx" value="">
       <div id="pfPickGrid" class="pick-ex-grid"></div>
       <div class="picker" style="flex-wrap:wrap;">
+        <button class="btn btn-ghost" type="button" onclick="newExerciseFromBuilder()" title="Créer une nouvelle fiche exercice sans quitter le programme">➕ Nouvelle fiche</button>
         <button class="btn btn-ghost" type="button" onclick="editSelectedPickerEx()" title="Modifier la fiche de l'exercice sélectionné">✏️ Modifier la fiche</button>
         <div class="pf-field"><label for="pfSets">Séries</label><input id="pfSets" type="number" placeholder="Séries" value="3" style="width:70px;"></div>
         <div style="display:flex; gap:6px;">
@@ -1076,6 +1077,13 @@ function exerciseFormHtml(exId){
     </div>
   `;
 }
+function newExerciseFromBuilder(){
+  openExerciseModal();
+  // pré-remplit le nom avec ce qui a été tapé dans la recherche (si aucun exercice ne correspondait)
+  const q = (document.getElementById('pfSearch')?.value || '').trim();
+  const n = document.getElementById('efName');
+  if(n && q) n.value = q;
+}
 function openExerciseModal(exId){
   document.getElementById('exModalTitle').textContent = exId ? 'Modifier la fiche' : 'Nouvelle fiche';
   document.getElementById('exModalBody').innerHTML = exerciseFormHtml(exId);
@@ -1110,8 +1118,12 @@ async function saveExercise(exId){
   closeExerciseModal();
   if(document.getElementById('exList')) filterExercisesTab(exSearchQ);
   if(document.getElementById('pfPickEx')){
-    if(savedId) document.getElementById('pfPickEx').value = savedId;
+    if(savedId){
+      document.getElementById('pfPickEx').value = savedId;
+      if(!exId){ const ps = document.getElementById('pfSearch'); if(ps) ps.value = ''; }
+    }
     filterExPicker();
+    if(savedId && !exId) document.querySelector(`#pfPickGrid .pick-ex-card[data-id="${savedId}"]`)?.scrollIntoView({block:'center'});
     renderDraftList();
   }
 }
