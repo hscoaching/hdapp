@@ -68,6 +68,11 @@
   .stat-num{font-family:'Bebas Neue'; font-size:28px; color:var(--accent); line-height:1;}
   .stat-label{font-size:11px; color:var(--ink-muted); margin-top:4px; text-transform:uppercase; letter-spacing:.03em; line-height:1.3;}
   @media (max-width:480px){ .stats-row{grid-template-columns:repeat(2,1fr);} .stat-tile{padding:10px 4px;} .stat-num{font-size:22px;} .stat-label{font-size:10px;} }
+  .ex-card{display:flex; gap:12px; align-items:center;}
+  .ex-thumb{flex:none; width:84px; height:84px; border-radius:10px; overflow:hidden; background:var(--surface-2); display:flex; align-items:center; justify-content:center;}
+  .ex-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
+  .ex-thumb-empty{font-size:9px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-muted); text-align:center; padding:4px;}
+  .ex-card-text{min-width:0; flex:1;}
   .card{background:var(--surface); border:1px solid var(--line); border-radius:12px; padding:14px 16px; margin-bottom:8px; cursor:pointer;}
   .card:hover{border-color:var(--accent);}
   .card .tag{font-size:10.5px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:.07em;}
@@ -1050,11 +1055,21 @@ function filterExercisesTab(q){
   );
   renderExList(list);
 }
+// Miniature d'un exercice (animée si image de départ + position finale)
+function listThumbTag(ex){
+  const a = ex.image_start_url, b = ex.image_peak_url || ex.image_url;
+  if(a && b && a!==b) return `<img class="anim-img" data-a="${a}" data-b="${b}" data-t="0" src="${a}" alt="" loading="lazy" onerror="this.classList.remove('anim-img'); this.remove();">`;
+  const single = b || a;
+  return single ? `<img src="${single}" alt="" loading="lazy" onerror="this.remove()">` : '';
+}
 function renderExList(list){
   const box = document.getElementById('exList');
   if(!box) return;
   box.innerHTML = list.length ? list.map(e=>`
-    <div class="card" onclick="openExerciseModal('${e.id}')"><div class="tag">${e.category}</div><h3>${e.name}</h3><p>${e.short_description||''}</p></div>
+    <div class="card ex-card" onclick="openExerciseModal('${e.id}')">
+      <div class="ex-thumb">${listThumbTag(e) || `<span class="ex-thumb-empty">${escapeHtml(e.category||'')}</span>`}</div>
+      <div class="ex-card-text"><div class="tag">${escapeHtml(e.category||'')}</div><h3>${escapeHtml(e.name||'')}</h3><p>${escapeHtml(e.short_description||'')}</p></div>
+    </div>
   `).join('') : '<div class="empty">Aucune fiche ne correspond a cette recherche.</div>';
 }
 function exerciseFormHtml(exId){
