@@ -135,6 +135,7 @@
 <footer>HS Coaching · Régularité &amp; dépassement de soi · v3</footer>
 
 <script src="badges.js"></script>
+<script src="history.js"></script>
 <script>
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2ZnRxZGJkaWJmeWxhdWFydGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MjEzMjIsImV4cCI6MjEwNjA5NzMyMn0._WLJkWncu1fwMnlakuPFuJr_I-uvgr_TwvMect8E-a0";
@@ -377,11 +378,20 @@ async function loadBadges(){
     if(currentTab === 'badges') box.innerHTML = '<div class="empty">Impossible de charger tes badges. Réessaie.</div>';
   }
 }
+let HIST = [];
+async function histReq(path, opts){
+  const res = await apiFetch(path, opts);
+  if(!res.ok) throw new Error(await res.text());
+  const t = await res.text();
+  return t ? JSON.parse(t) : null;
+}
 async function loadHistorique(){
   const res = await apiFetch(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,programs(name)&user_id=eq.${getSession().user.id}&order=started_at.desc`);
   const sessions = await res.json();
+  HIST = sessions;
   if(!sessions.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucune séance enregistrée pour l\'instant.</div>'; return; }
-  document.getElementById('tabBody').innerHTML = sessions.map(s=>{
+  const exportBar = `<div style="margin-bottom:14px;"><button type="button" class="btn btn-ghost btn-block" style="margin-top:0;" onclick="exportAllHistory()">📄 Exporter tout mon historique (PDF)</button></div>`;
+  document.getElementById('tabBody').innerHTML = exportBar + sessions.map(s=>{
     const d = new Date(s.started_at);
     let duree = '';
     if(s.completed_at && (new Date(s.completed_at) - d) > 2000){
@@ -390,11 +400,21 @@ async function loadHistorique(){
       duree = ' · ' + (h ? `${h} h ${String(m).padStart(2,'0')} min ${String(sec).padStart(2,'0')} s` : (m ? `${m} min ${String(sec).padStart(2,'0')} s` : `${sec} s`));
     }
     return `<div class="card" style="cursor:pointer" onclick="toggleSessionLogs(this,'${s.id}')">
-      <div class="tag">${d.toLocaleDateString('fr-FR', {day:'numeric',month:'long'})}${duree}</div>
+      <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
+        <div class="tag">${d.toLocaleDateString('fr-FR', {day:'numeric',month:'long'})}${duree}</div>
+        <button type="button" aria-label="Supprimer cette séance" title="Supprimer" onclick="event.stopPropagation(); askDeleteSession('${s.id}')" style="background:none; border:1px solid var(--line); color:var(--ink-muted); border-radius:999px; padding:4px 10px; font-size:13px; cursor:pointer;">🗑</button>
+      </div>
       <h3>${escapeHtml(s.programs?.name || 'Séance libre')}${s.day_label ? ' · ' + escapeHtml(s.day_label) : ''}</h3>
       <div class="logs" style="display:none; margin-top:12px;"></div>
     </div>`;
   }).join('');
+}
+function askDeleteSession(id){
+  const s = HIST.find(x => x.id === id); if(!s) return;
+  HSHistory.confirmDelete({ session: s, req: histReq, userId: getSession().user.id, onDone: loadHistorique });
+}
+function exportAllHistory(){
+  HSHistory.exportPdf({ req: histReq, userId: getSession().user.id, sessions: HIST, who: getSession().user.email });
 }
 async function toggleSessionLogs(card, sessionId){
   const box = card.querySelector('.logs');

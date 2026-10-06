@@ -217,6 +217,7 @@
 <div id="printClientArea"></div>
 
 <script src="badges.js"></script>
+<script src="history.js"></script>
 <script>
 String.prototype.fold = function(){ return this.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }; // recherche sans accents
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
@@ -580,12 +581,18 @@ function renderClientSessions(){
       const dur = fmtSessDuration(s);
       const title = (s.programs && s.programs.name ? s.programs.name : 'Séance libre') + (s.day_label ? ' · ' + s.day_label : '');
       return `<div class="card" onclick="toggleClientSession(this,'${s.id}')">
-        <div class="tag">${escapeHtml(d.toLocaleDateString('fr-FR',{weekday:'short', day:'numeric', month:'long', year:'numeric'}))} · ${escapeHtml(d.toLocaleTimeString('fr-FR',{hour:'2-digit', minute:'2-digit'}))}${dur ? ' · ' + escapeHtml(dur) : ''}${s.completed_at ? '' : ' · non terminée'}</div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;"><div class="tag">${escapeHtml(d.toLocaleDateString('fr-FR',{weekday:'short', day:'numeric', month:'long', year:'numeric'}))} · ${escapeHtml(d.toLocaleTimeString('fr-FR',{hour:'2-digit', minute:'2-digit'}))}${dur ? ' · ' + escapeHtml(dur) : ''}${s.completed_at ? '' : ' · non terminée'}</div>
+        <button type="button" class="btn btn-ghost btn-sm" aria-label="Supprimer" onclick="event.stopPropagation(); askDeleteClientSession('${s.id}')">🗑</button></div>
         <h3>${escapeHtml(title)}</h3>
         <div class="cs-logs" style="display:none; margin-top:12px;"></div>
       </div>`;
     }).join('') : '<div class="empty">Aucune séance enregistrée pour ce client.</div>'}</div>
   `;
+}
+function askDeleteClientSession(id){
+  const s = csSessions.find(x => x.id === id); if(!s) return;
+  HSHistory.confirmDelete({ session: s, req: api, userId: csClient.id, who: csClient.name,
+    onDone: () => { csSessions = csSessions.filter(x => x.id !== id); renderClientSessions(); } });
 }
 async function toggleClientSession(card, sessionId){
   const box = card.querySelector('.cs-logs');
