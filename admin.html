@@ -73,6 +73,18 @@
   .set-row:last-child{border-bottom:none;}
   .set-row-num{color:var(--ink-muted);}
   .set-row-val{font-weight:600;}
+  .origin-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;}
+  .origin-pill{font-size:11.5px; font-weight:700; padding:4px 10px; border-radius:99px; border:1px solid var(--line); background:var(--surface-2);}
+  .origin-pill.coach{color:#7ee0a0; border-color:rgba(126,224,160,.4); background:rgba(126,224,160,.1);}
+  .origin-pill.client{color:#8ab4ff; border-color:rgba(138,180,255,.4); background:rgba(138,180,255,.1);}
+  .origin-pill.visitor{color:#ffb86b; border-color:rgba(255,184,107,.4); background:rgba(255,184,107,.1);}
+  .origin-pill.official{color:var(--ink); }
+  .origin-pill.unknown{color:var(--ink-muted); border-style:dashed;}
+  .origin-for{font-size:12.5px; color:var(--ink-muted);}
+  .fchips{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;}
+  .fchip{background:var(--surface); border:1px solid var(--line); color:var(--ink-muted); border-radius:99px; padding:7px 13px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit;}
+  .fchip span{opacity:.7; margin-left:3px;}
+  .fchip.active{background:var(--accent); color:var(--accent-ink,#0b0b0c); border-color:var(--accent);}
   .ex-card{display:flex; gap:12px; align-items:center;}
   .ex-thumb{flex:none; width:84px; height:84px; border-radius:10px; overflow:hidden; background:var(--surface-2); display:flex; align-items:center; justify-content:center;}
   .ex-thumb img{width:100%; height:100%; object-fit:cover; display:block;}
@@ -805,45 +817,69 @@ async function markContact(id){
 }
 
 // ================= PROGRAMMES =================
+let progsAll = [], progProfById = {}, progFilter = 'all';
+// Origine d'un programme : official | coach | client | visitor | unknown
+function progOrigin(p){
+  if(p.is_official) return 'official';
+  if(p.owner_guest_id && !p.owner_user_id) return 'visitor';
+  if(!p.owner_user_id) return 'visitor';
+  if(!p.created_by) return 'unknown';
+  if(p.created_by === p.owner_user_id) return 'client';
+  return 'coach';
+}
+function progOwnerName(p){
+  const pr = progProfById[p.owner_user_id];
+  return pr ? (pr.full_name || pr.email || 'Client') : 'Client';
+}
+function progOriginHtml(p){
+  const o = progOrigin(p);
+  const pill = (cls, txt) => `<span class="origin-pill ${cls}">${txt}</span>`;
+  if(o === 'official') return pill('official', '⭐ Programme officiel') + '<span class="origin-for">visible par tous les visiteurs</span>';
+  if(o === 'visitor') return pill('visitor', '👻 Créé par un visiteur');
+  const O = escapeHtml(progOwnerName(p));
+  if(o === 'client') return pill('client', `👤 Créé par ${O}`);
+  if(o === 'coach') return pill('coach', '🧑‍🏫 Créé par toi') + `<span class="origin-for">pour ${O}</span>`;
+  return pill('unknown', '❔ Créateur inconnu') + `<span class="origin-for">programme de ${O}</span>`;
+}
+function setProgFilter(f){ progFilter = f; paintProgList(); }
+function paintProgList(){
+  const counts = { all: progsAll.length };
+  progsAll.forEach(p => { const o = progOrigin(p); counts[o] = (counts[o]||0) + 1; });
+  const chips = [['all','Tous'],['official','Officiels'],['coach','Créés par moi'],['client','Clients'],['visitor','Visiteurs'],['unknown','Inconnus']]
+    .filter(([k]) => k === 'all' || counts[k])
+    .map(([k,l]) => `<button type="button" class="fchip ${progFilter===k?'active':''}" onclick="setProgFilter('${k}')">${l} <span>${counts[k]||0}</span></button>`).join('');
+  const list = progFilter === 'all' ? progsAll : progsAll.filter(p => progOrigin(p) === progFilter);
+  document.getElementById('progList').innerHTML = `<div class="fchips">${chips}</div>` + (list.length ? list.map(p=>`
+    <div class="card">
+      <div onclick="renderProgramForm('${p.id}')" style="cursor:pointer;">
+        <div class="origin-row">${progOriginHtml(p)}</div>
+        <h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description||'')}</p>
+      </div>
+      <div class="row-actions" style="margin-top:10px;">
+        <button class="btn btn-ghost btn-sm" onclick="duplicateProgram('${p.id}')">Dupliquer</button>
+      </div>
+    </div>`).join('') : '<div class="empty">Aucun programme dans cette catégorie.</div>');
+}
 async function renderProgramsTab(){
   document.getElementById('tabBody').innerHTML = `
     <div class="row-actions"><button class="btn btn-accent" onclick="renderProgramForm()">+ Nouveau programme</button></div>
     <div id="progList" style="margin-top:16px;"><div class="empty">Chargement…</div></div>
   `;
-  let progs, profById = {};
   try{
-    progs = await api('/rest/v1/programs?select=*&order=is_official.desc,created_at.desc');
-    const ownerIds = [...new Set(progs.flatMap(p=>[p.owner_user_id, p.created_by]).filter(Boolean))];
-    if(ownerIds.length){
-      const profs = await api(`/rest/v1/profiles?select=id,full_name,email,role&id=in.(${ownerIds.join(',')})`);
-      profById = Object.fromEntries(profs.map(p=>[p.id,p]));
+    progsAll = await api('/rest/v1/programs?select=*&order=is_official.desc,created_at.desc');
+    progProfById = {};
+    const ids = [...new Set(progsAll.flatMap(p=>[p.owner_user_id, p.created_by]).filter(Boolean))];
+    if(ids.length){
+      const profs = await api(`/rest/v1/profiles?select=id,full_name,email,role&id=in.(${ids.join(',')})`);
+      progProfById = Object.fromEntries(profs.map(p=>[p.id,p]));
     }
   }catch(e){
     console.error(e);
     document.getElementById('progList').innerHTML = '<div class="empty">Impossible de charger les programmes. Réessaie.</div>';
     return;
   }
-  document.getElementById('progList').innerHTML = progs.length ? progs.map(p=>{
-    const nameOf = id => { const pr = profById[id]; return pr ? (pr.full_name || pr.email || 'Client') : 'Client'; };
-    let tagTxt;
-    if(p.is_official) tagTxt = 'Officiel — tous les visiteurs';
-    else if(p.owner_guest_id && !p.owner_user_id) tagTxt = 'Créé par : Visiteur';
-    else if(p.owner_user_id){
-      const O = nameOf(p.owner_user_id);
-      if(!p.created_by) tagTxt = `Programme de ${O} · créateur non enregistré`;
-      else if(p.created_by === p.owner_user_id) tagTxt = `Créé par ${O} (client)`;
-      else tagTxt = `Créé par ${profById[p.created_by]?.role==='admin' ? 'le coach' : nameOf(p.created_by)} · pour ${O}`;
-    } else tagTxt = 'Visiteur';
-    return `<div class="card">
-      <div onclick="renderProgramForm('${p.id}')" style="cursor:pointer;">
-        <div class="tag">${escapeHtml(tagTxt)}</div>
-        <h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description||'')}</p>
-      </div>
-      <div class="row-actions" style="margin-top:10px;">
-        <button class="btn btn-ghost btn-sm" onclick="duplicateProgram('${p.id}')">Dupliquer</button>
-      </div>
-    </div>`;
-  }).join('') : '<div class="empty">Aucun programme.</div>';
+  progFilter = 'all';
+  paintProgList();
 }
 
 let draftItems = [];

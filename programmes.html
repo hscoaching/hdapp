@@ -123,6 +123,17 @@
   .rest-stop{background:var(--surface-2); border:1px solid var(--line); color:var(--ink); border-radius:999px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer; font-family:inherit;}
   .sess-timer.running .rest-chips{display:none;}
   .sess-timer.running .rest-run{display:flex;}
+  .origin-row{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-bottom:6px;}
+  .origin-pill{font-size:11.5px; font-weight:700; padding:4px 10px; border-radius:99px; border:1px solid var(--line); background:var(--surface-2); text-transform:none; letter-spacing:0;}
+  .origin-pill.coach{color:#7ee0a0; border-color:rgba(126,224,160,.4); background:rgba(126,224,160,.1);}
+  .origin-pill.client{color:#8ab4ff; border-color:rgba(138,180,255,.4); background:rgba(138,180,255,.1);}
+  .origin-pill.visitor{color:#ffb86b; border-color:rgba(255,184,107,.4); background:rgba(255,184,107,.1);}
+  .origin-pill.unknown{color:var(--ink-muted); border-style:dashed;}
+  .origin-for{font-size:12.5px; color:var(--ink-muted);}
+  .fchips{display:flex; gap:8px; flex-wrap:wrap; margin-bottom:14px;}
+  .fchip{background:var(--surface); border:1px solid var(--line); color:var(--ink-muted); border-radius:99px; padding:7px 13px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit;}
+  .fchip span{opacity:.7; margin-left:3px;}
+  .fchip.active{background:var(--accent); color:var(--accent-ink); border-color:var(--accent);}
   .resume-banner{display:flex; align-items:center; justify-content:space-between; gap:10px; flex-wrap:wrap; background:var(--surface); border:1px solid var(--accent); border-radius:14px; padding:12px 14px; margin-bottom:16px;}
   .resume-banner .rb-text b{display:block; font-size:14px;}
   .resume-banner .rb-text span{display:block; font-size:12.5px; color:var(--ink-muted); margin-top:2px;}
@@ -611,11 +622,21 @@ async function renderList(){
 }
 function renderProgramGrids(programs){
   const official = programs.filter(p=>p.is_official);
-  const mine = programs.filter(p=>!p.is_official);
+  let mine = programs.filter(p=>!p.is_official);
+  let chips = '';
+  if(isCoachView()){
+    const counts = { all: mine.length };
+    mine.forEach(p => { const o = progOrigin(p); counts[o] = (counts[o]||0) + 1; });
+    chips = '<div class="fchips">' + [['all','Tous'],['coach','Créés par moi'],['client','Clients'],['visitor','Visiteurs'],['unknown','Inconnus']]
+      .filter(([k]) => k === 'all' || counts[k])
+      .map(([k,l]) => `<button type="button" class="fchip ${coachFilter===k?'active':''}" onclick="setCoachFilter('${k}')">${l} <span>${counts[k]||0}</span></button>`).join('') + '</div>';
+    if(coachFilter !== 'all') mine = mine.filter(p => progOrigin(p) === coachFilter);
+  }
   document.getElementById('officialGrid').innerHTML = official.length ? official.map(cardHtml).join('') :
     '<div class="empty">Aucun programme du coach pour le moment.</div>';
-  document.getElementById('mineGrid').innerHTML = mine.length ? mine.map(cardHtml).join('') :
-    '<div class="empty">Tu n\'as pas encore créé de programme perso.</div>';
+  if(chips) document.getElementById('mineGrid').style.display = 'block';
+  document.getElementById('mineGrid').innerHTML = chips + (mine.length ? '<div class="prog-grid" style="margin:0;">' + mine.map(cardHtml).join('') + '</div>' :
+    '<div class="empty">Tu n\'as pas encore créé de programme perso.</div>');
 }
 function filterProgramList(){
   const q = document.getElementById('progSearch').value.trim().fold();
@@ -624,23 +645,30 @@ function filterProgramList(){
   );
   renderProgramGrids(matches);
 }
-let creatorProfiles = {};
+let creatorProfiles = {}, coachFilter = 'all';
 function isCoachView(){ return isLoggedIn() && localStorage.getItem('hs_role') === 'admin'; }
-function creatorLabel(p){
-  if(p.is_official) return 'Coach';
-  const nameOf = id => { const r = creatorProfiles[id]; return r ? (r.full_name || r.email || 'Client') : 'Client'; };
-  if(p.owner_guest_id && !p.owner_user_id) return 'Visiteur';
-  if(p.owner_user_id){
-    const O = nameOf(p.owner_user_id);
-    if(!p.created_by) return `Programme de ${O}`;
-    if(p.created_by === p.owner_user_id) return `Créé par ${O}`;
-    return `Créé par ${creatorProfiles[p.created_by] && creatorProfiles[p.created_by].role === 'admin' ? 'le coach' : nameOf(p.created_by)} · pour ${O}`;
-  }
-  return 'Visiteur';
+function progOrigin(p){
+  if(p.is_official) return 'official';
+  if(!p.owner_user_id) return 'visitor';
+  if(!p.created_by) return 'unknown';
+  if(p.created_by === p.owner_user_id) return 'client';
+  return 'coach';
 }
+function originHtml(p){
+  const o = progOrigin(p);
+  const pill = (cls, txt) => `<span class="origin-pill ${cls}">${txt}</span>`;
+  const pr = creatorProfiles[p.owner_user_id];
+  const O = escHtml(pr ? (pr.full_name || pr.email || 'Client') : 'Client');
+  if(o === 'visitor') return pill('visitor', '👻 Créé par un visiteur');
+  if(o === 'client') return pill('client', `👤 Créé par ${O}`);
+  if(o === 'coach') return pill('coach', '🧑‍🏫 Créé par toi') + `<span class="origin-for">pour ${O}</span>`;
+  return pill('unknown', '❔ Créateur inconnu') + `<span class="origin-for">programme de ${O}</span>`;
+}
+function setCoachFilter(f){ coachFilter = f; renderProgramGrids(allPrograms); }
 function cardHtml(p){
+  const coachTag = isCoachView() && !p.is_official;
   return `<button class="prog-card" onclick="location.hash='#programme/${p.id}'">
-    <div class="tag">${p.is_official ? 'Coach' : (isCoachView() ? escHtml(creatorLabel(p)) : 'Perso')}</div>
+    ${coachTag ? `<div class="origin-row">${originHtml(p)}</div>` : `<div class="tag">${p.is_official?'Coach':'Perso'}</div>`}
     <h3>${p.name}</h3>
     <p>${p.description||''}</p>
   </button>`;
