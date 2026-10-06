@@ -322,7 +322,7 @@ async function renderDashboard(){
   const isCoachAccount = role === 'admin';
   app.innerHTML = `
     <div class="eyebrow">MON COMPTE</div>
-    <h1 class="page">Salut 👋</h1>
+    <h1 class="page" id="hello">Salut 👋</h1>
     <div class="tabs">
       <div class="tab" data-tab="programmes">Mes programmes</div>
       <div class="tab" data-tab="historique">Historique</div>
@@ -339,6 +339,33 @@ async function renderDashboard(){
   });
   paintTabs();
   loadTab();
+  refreshNameBadge();
+}
+let NAME_CHIP = '';
+async function refreshNameBadge(){
+  const h = document.getElementById('hello'); if(!h) return;
+  try{
+    const uid = getSession().user.id;
+    const p = ((await (await apiFetch(`/rest/v1/profiles?select=full_name,featured_badge&id=eq.${uid}`)).json()) || [])[0] || {};
+    const first = (p.full_name || '').trim().split(/\s+/)[0];
+    const set = chip => { NAME_CHIP = chip; const el = document.getElementById('hello'); if(el) el.innerHTML = 'Salut' + (first ? ' ' + escapeHtml(first) : '') + ' 👋' + chip; };
+    set('');
+    if(p.featured_badge && typeof HSBadges !== 'undefined'){
+      const getJson = async x => { const r = await apiFetch(x); if(!r.ok) throw new Error('load_failed'); return r.json(); };
+      const res = HSBadges.compute(await HSBadges.load(getJson, uid));
+      const c = HSBadges.chip(res, p.featured_badge);
+      set(c);
+      if(!c) apiFetch(`/rest/v1/profiles?id=eq.${uid}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ featured_badge: null }) }).catch(()=>{});
+    } else if(first){ set(''); }
+  }catch(e){ console.error(e); }
+}
+async function pickBadge(id){
+  try{
+    const r = await apiFetch(`/rest/v1/profiles?id=eq.${getSession().user.id}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ featured_badge: id }) });
+    if(!r.ok) throw new Error(await r.text());
+    if(window.HSHistory && HSHistory.toast) HSHistory.toast(id ? 'Badge affiché à côté de ton nom ✓' : 'Badge retiré');
+  }catch(e){ console.error(e); alert('Impossible de changer le badge pour le moment.'); return; }
+  refreshNameBadge(); loadBadges();
 }
 function paintTabs(){
   [...document.querySelectorAll('.tab')].forEach(t=> t.classList.toggle('active', t.dataset.tab===currentTab));
@@ -372,9 +399,10 @@ async function loadBadges(){
   if(typeof HSBadges === 'undefined'){ box.innerHTML = '<div class="empty">Les badges ne sont pas disponibles pour le moment.</div>'; return; }
   try{
     const getJson = async p => { const r = await apiFetch(p); if(!r.ok) throw new Error('load_failed'); return r.json(); };
-    const data = await HSBadges.load(getJson, getSession().user.id);
+    const uid = getSession().user.id;
+    const [data, prof] = await Promise.all([HSBadges.load(getJson, uid), getJson(`/rest/v1/profiles?select=featured_badge&id=eq.${uid}`).catch(() => [])]);
     if(currentTab !== 'badges') return;
-    box.innerHTML = HSBadges.renderFull(HSBadges.compute(data));
+    box.innerHTML = HSBadges.renderFull(HSBadges.compute(data), { pick: 'pickBadge', featured: (prof && prof[0] && prof[0].featured_badge) || null });
   }catch(e){
     console.error(e);
     if(currentTab === 'badges') box.innerHTML = '<div class="empty">Impossible de charger tes badges. Réessaie.</div>';
@@ -824,7 +852,7 @@ async function loadProfil(){
   const p = profiles[0] || {};
   document.getElementById('tabBody').innerHTML = `
     <div class="card">
-      <div class="profile-row"><span>Nom</span><b>${escapeHtml(p.full_name || '—')}</b></div>
+      <div class="profile-row"><span>Nom</span><b>${escapeHtml(p.full_name || '—')}${NAME_CHIP}</b></div>
       <div class="profile-row"><span>Email</span><b>${escapeHtml(s.user.email)}</b></div>
       <div class="profile-row"><span>Statut</span><b>${p.role==='admin' ? 'Coach (admin)' : 'Client'}</b></div>
     </div>

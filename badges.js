@@ -190,6 +190,10 @@
       .bdg-act{margin-top:8px; font-family:inherit; font-size:12px; font-weight:700; padding:6px 12px; border-radius:999px; border:1px solid var(--line,#2c2c30); background:var(--surface-2,#1f2024); color:var(--ink,#f5f5f5); cursor:pointer;}
       .bdg-act.warn{border-color:#c0504d; color:#ff8a85;}
       .bdg-rule{font-size:12px; color:var(--ink-muted,#9a9a9e); margin-top:8px; line-height:1.4;}
+      .bdg-chip{display:inline-flex; align-items:center; gap:4px; font-size:12px; font-weight:700; padding:2px 9px; border-radius:999px; border:1px solid var(--accent,#fff); background:var(--surface-2,#1f2024); vertical-align:middle; margin-left:6px; white-space:nowrap; letter-spacing:0; font-family:'Inter',system-ui,sans-serif;}
+      .bdg.featured{border-color:var(--accent,#fff);}
+      .bdg-feat{margin-top:8px; font-family:inherit; font-size:12px; font-weight:700; padding:6px 12px; border-radius:999px; border:1px solid var(--accent,#fff); background:none; color:var(--ink,#f5f5f5); cursor:pointer;}
+      .bdg-feat.on{background:var(--accent,#fff); color:var(--accent-ink,#0b0b0c);}
       .bdg-mini{font-size:12.5px; color:var(--ink-muted,#9a9a9e); margin-top:6px;}
     `;
     document.head.appendChild(st);
@@ -219,7 +223,9 @@
       }
       if(b.unlocked){
         const d = b.unlockedAt ? new Date(b.unlockedAt).toLocaleDateString('fr-FR', {day:'numeric', month:'short', year:'numeric'}) : '';
-        return `<div class="bdg"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div>${d ? `<div class="bdg-date">${d}</div>` : ''}${coach ? `<button type="button" class="bdg-act warn" onclick="revokeBadgeAdmin('${b.id}')">Annuler ce badge</button>` : ''}</div>`;
+        const isF = opts.featured === b.id;
+        const pickBtn = (!coach && opts.pick) ? `<button type="button" class="bdg-feat ${isF ? 'on' : ''}" onclick="${opts.pick}(${isF ? 'null' : `'${b.id}'`})">${isF ? '★ Affiché à côté de ton nom' : 'Afficher à côté de mon nom'}</button>` : '';
+        return `<div class="bdg${isF ? ' featured' : ''}"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div>${d ? `<div class="bdg-date">${d}</div>` : ''}${pickBtn}${coach ? `<button type="button" class="bdg-act warn" onclick="revokeBadgeAdmin('${b.id}')">Annuler ce badge</button>` : ''}</div>`;
       }
       const pct = b.needsLogs ? 0 : Math.max(0, Math.min(100, Math.round(b.cur / b.target * 100)));
       const prog = b.needsLogs ? '' : (b.kind === 'comeback' ? '' : `<div class="bdg-bar"><i style="width:${pct}%"></i></div><div class="bdg-prog">${fmtVal(b, b.cur)} / ${fmtVal(b, b.target)}</div>`);
@@ -247,6 +253,15 @@
     if(!fresh.length) return `<div class="bdg-new" style="border-color:var(--line,#2c2c30)">${week}</div>`;
     return `<div class="bdg-new"><h3>🎉 ${fresh.length > 1 ? 'Nouveaux badges' : 'Nouveau badge'} !</h3>
       <div class="bdg-new-list">${fresh.map(b => `<div class="bdg-new-item"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div></div>`).join('')}</div>${week}</div>`;
+  }
+
+  // Petite pastille « icône + titre » à afficher à côté d'un nom (uniquement si le badge est réellement acquis et non annulé)
+  function chip(res, id){
+    if(!id || !res) return '';
+    const b = res.badges.find(x => x.id === id);
+    if(!b || !b.unlocked) return '';
+    ensureCss();
+    return `<span class="bdg-chip" title="${esc(b.desc)}">${b.icon} ${esc(b.title)}</span>`;
   }
 
   // Résumé d'une ligne (liste des clients côté coach)
@@ -279,5 +294,5 @@
     return { sessions, logs, revoked };
   }
 
-  window.HSBadges = { compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, WEEKLY_GOAL };
+  window.HSBadges = { chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, WEEKLY_GOAL };
 })();

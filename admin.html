@@ -484,7 +484,7 @@ async function renderClientsTab(){
   document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
   let clients, progs, sessions, convs, unreadMsgs, revs = [], editReqs = [];
   try{
-    clients = await api('/rest/v1/profiles?select=id,full_name,email&role=eq.client&order=full_name');
+    clients = await api('/rest/v1/profiles?select=id,full_name,email,featured_badge&role=eq.client&order=full_name');
     if(!clients.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucun client pour le moment.</div>'; return; }
     const idList = clients.map(c=>c.id).join(',');
     [progs, sessions, convs, unreadMsgs] = await Promise.all([
@@ -517,9 +517,9 @@ async function renderClientsTab(){
     const last = lastActivityByUser[c.id] || null;
     const convId = convByUser[c.id] || null;
     const unread = convId ? (unreadByConv[convId]||0) : 0;
-    let badgeLine = '';
-    try{ if(typeof HSBadges !== 'undefined') badgeLine = HSBadges.summaryLine(HSBadges.compute({ sessions: sessionsByUser[c.id] || [], revoked: revs.filter(r => r.user_id === c.id) })); }catch(e){}
-    return { client:c, prog, progs: progsOfUser, last, convId, unread, badgeLine };
+    let badgeLine = '', badgeChip = '';
+    try{ if(typeof HSBadges !== 'undefined'){ const bres = HSBadges.compute({ sessions: sessionsByUser[c.id] || [], revoked: revs.filter(r => r.user_id === c.id) }); badgeLine = HSBadges.summaryLine(bres); badgeChip = HSBadges.chip(bres, c.featured_badge); } }catch(e){}
+    return { client:c, prog, progs: progsOfUser, last, convId, unread, badgeLine, badgeChip };
   });
   clientRows.sort((a,b)=>{
     if(a.unread !== b.unread) return b.unread - a.unread;
@@ -564,7 +564,7 @@ function renderClientRows(rows){
       : 'Aucun programme assigné';
     const lastLine = r.last ? `Dernière séance : ${new Date(r.last).toLocaleDateString('fr-FR')}` : 'Aucune séance enregistrée';
     return `<div class="card" style="cursor:default;">
-      <h3>${escapeHtml(name)} ${r.unread?`<span class="badge">${r.unread}</span>`:''}</h3>
+      <h3>${escapeHtml(name)}${r.badgeChip || ''} ${r.unread?`<span class="badge">${r.unread}</span>`:''}</h3>
       <p>${escapeHtml(r.client.email||'')}</p>
       <p style="margin-top:8px;">${progLine}</p>
       <p>${lastLine}</p>
