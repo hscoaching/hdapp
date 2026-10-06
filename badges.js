@@ -12,24 +12,53 @@
     { id:'s25',  group:'Séances',  icon:'⭐', title:'Assidu',               desc:'25 séances terminées',               kind:'sessions', target:25 },
     { id:'s50',  group:'Séances',  icon:'🏅', title:'Pilier',               desc:'50 séances terminées',               kind:'sessions', target:50 },
     { id:'s100', group:'Séances',  icon:'👑', title:'Centurion',            desc:'100 séances terminées',              kind:'sessions', target:100 },
+    { id:'s250', group:'Séances',  icon:'🔱', title:'Légende',              desc:'250 séances terminées',              kind:'sessions', target:250 },
     { id:'w2',   group:'Régularité', icon:'🔥', title:'Dans le rythme',     desc:`2 semaines d'affilée à ${WEEKLY_GOAL} séances`,  kind:'streak', target:2 },
     { id:'w4',   group:'Régularité', icon:'⚡', title:'Mois parfait',       desc:'4 semaines d\'affilée',              kind:'streak', target:4 },
     { id:'w8',   group:'Régularité', icon:'🚀', title:'Machine',            desc:'8 semaines d\'affilée',              kind:'streak', target:8 },
     { id:'w12',  group:'Régularité', icon:'💎', title:'Inarrêtable',        desc:'12 semaines d\'affilée',             kind:'streak', target:12 },
-    { id:'cb',   group:'Dépassement', icon:'💪', title:'Retour en force',   desc:`Une séance après ${COMEBACK_DAYS} jours ou plus de pause`, kind:'comeback', target:1 },
-    { id:'t1',   group:'Bonus muscu · Poids soulevé', icon:'🏋️', title:'1 tonne',         desc:'1 000 kg soulevés au total',         bonus:true, kind:'tonnage', target:1000 },,
-    { id:'t10',  group:'Bonus muscu · Poids soulevé', icon:'🦾', title:'10 tonnes',       desc:'10 000 kg soulevés au total',        bonus:true, kind:'tonnage', target:10000 },,
-    { id:'t50',  group:'Bonus muscu · Poids soulevé', icon:'🏗️', title:'50 tonnes',       desc:'50 000 kg soulevés au total',        bonus:true, kind:'tonnage', target:50000 },,
-    { id:'t100', group:'Bonus muscu · Poids soulevé', icon:'🏔️', title:'100 tonnes',      desc:'100 000 kg soulevés au total',       bonus:true, kind:'tonnage', target:100000 },,
-    { id:'p1',   group:'Bonus muscu · Records', icon:'🏆', title:'Record battu',      desc:'Une charge supérieure à ta meilleure marque', bonus:true, kind:'pr', target:1 },,
-    { id:'p10',  group:'Bonus muscu · Records', icon:'🥇', title:'Chasseur de records', desc:'10 records battus',               bonus:true, kind:'pr', target:10 },,
-    { id:'c1',   group:'Bonus cardio', icon:'⏱️', title:'Premier souffle',  desc:'1 h de cardio au total',             kind:'cardiotime', bonus:true, target:3600 },
-    { id:'c10',  group:'Bonus cardio', icon:'🏃', title:'Endurant',         desc:'10 h de cardio au total',            kind:'cardiotime', bonus:true, target:36000 },
-    { id:'c50',  group:'Bonus cardio', icon:'🚴', title:'Grand fond',       desc:'50 h de cardio au total',            kind:'cardiotime', bonus:true, target:180000 },
-    { id:'c100', group:'Bonus cardio', icon:'🫀', title:'Cœur d\'acier',    desc:'100 h de cardio au total',           kind:'cardiotime', bonus:true, target:360000 },
-    { id:'cs10', group:'Bonus cardio', icon:'🌬️', title:'Cardio régulier',  desc:'10 séances avec au moins 10 min de cardio', kind:'cardiosessions', bonus:true, target:10 },
-    { id:'cs25', group:'Bonus cardio', icon:'🔄', title:'Cardio fidèle',    desc:'25 séances avec au moins 10 min de cardio', kind:'cardiosessions', bonus:true, target:25 }
+    { id:'w26',  group:'Régularité', icon:'🌋', title:'Un semestre de feu', desc:'26 semaines d\'affilée',             kind:'streak', target:26 },
+    { id:'w52',  group:'Régularité', icon:'🏛️', title:'Une année entière',  desc:'52 semaines d\'affilée',             kind:'streak', target:52 },
+    { id:'cb',   group:'Retour en force', icon:'💪', title:'Retour en force',   desc:`Une séance après ${COMEBACK_DAYS} jours ou plus de pause`, kind:'comeback', bonus:true, target:1 },
+    { id:'t1',   group:'Poids soulevé', tag:'muscu', icon:'🏋️', title:'1 tonne',         desc:'1 000 kg soulevés au total',         bonus:true, kind:'tonnage', target:1000 },
+    { id:'t10',  group:'Poids soulevé', tag:'muscu', icon:'🦾', title:'10 tonnes',       desc:'10 000 kg soulevés au total',        bonus:true, kind:'tonnage', target:10000 },
+    { id:'t50',  group:'Poids soulevé', tag:'muscu', icon:'🏗️', title:'50 tonnes',       desc:'50 000 kg soulevés au total',        bonus:true, kind:'tonnage', target:50000 },
+    { id:'t100', group:'Poids soulevé', tag:'muscu', icon:'🏔️', title:'100 tonnes',      desc:'100 000 kg soulevés au total',       bonus:true, kind:'tonnage', target:100000 },
+    { id:'p1',   group:'Records', tag:'muscu', icon:'🏆', title:'Record battu',      desc:'Une charge supérieure à ta meilleure marque', bonus:true, kind:'pr', target:1 },
+    { id:'p10',  group:'Records', tag:'muscu', icon:'🥇', title:'Chasseur de records', desc:'10 records battus',               bonus:true, kind:'pr', target:10 },
+    { id:'c1',   group:'Cardio', tag:'cardio', icon:'⏱️', title:'Premier souffle',  desc:'1 h de cardio au total',             kind:'cardiotime', bonus:true, target:3600 },
+    { id:'c10',  group:'Cardio', tag:'cardio', icon:'🏃', title:'Endurant',         desc:'10 h de cardio au total',            kind:'cardiotime', bonus:true, target:36000 },
+    { id:'c50',  group:'Cardio', tag:'cardio', icon:'🚴', title:'Grand fond',       desc:'50 h de cardio au total',            kind:'cardiotime', bonus:true, target:180000 },
+    { id:'c100', group:'Cardio', tag:'cardio', icon:'🫀', title:'Cœur d\'acier',    desc:'100 h de cardio au total',           kind:'cardiotime', bonus:true, target:360000 },
+    { id:'cs10', group:'Cardio', tag:'cardio', icon:'🌬️', title:'Cardio régulier',  desc:'10 séances avec au moins 10 min de cardio', kind:'cardiosessions', bonus:true, target:10 },
+    { id:'cs25', group:'Cardio', tag:'cardio', icon:'🔄', title:'Cardio fidèle',    desc:'25 séances avec au moins 10 min de cardio', kind:'cardiosessions', bonus:true, target:25 }
   ];
+
+  // Niveaux : calculés avec les badges principaux (séances + régularité), jamais avec les bonus
+  const TIERS = [
+    { n:'Recrue',  at:0,  t:0 }, { n:'Bronze', at:1,  t:1 }, { n:'Argent', at:3,  t:2 },
+    { n:'Or',      at:6,  t:3 }, { n:'Platine', at:9, t:4 }, { n:'Diamant', at:12, t:5 }
+  ];
+  const TIER_NAMES = ['', 'Bronze', 'Argent', 'Or', 'Platine'];
+  // Titres par profil (même palier = même difficulté, vocabulaire du domaine)
+  const LADDERS = {
+    muscu:  ['Recrue', 'Initié', 'Costaud', 'Athlète de force', 'Colosse', 'Titan'],
+    cardio: ['Recrue', 'Marcheur', 'Joggeur', 'Coureur', 'Fondeur', 'Marathonien'],
+    hybrid: ['Recrue', 'Touche-à-tout', 'Polyvalent', 'Athlète complet', 'Hybride confirmé', 'Athlète hybride']
+  };
+  const PROFILE_NAMES = { muscu: 'Force', cardio: 'Endurance', hybrid: 'Hybride' };
+  function profileOf(st){
+    const tot = st.total || 0, cs = st.cardioSessions || 0, ms = st.muscuSessions || 0;
+    if(!st.hasCardio || !tot) return 'muscu';
+    if(cs >= 3 && ms >= 3 && Math.min(cs, ms) / tot >= 0.25) return 'hybrid';
+    return cs > ms ? 'cardio' : 'muscu';
+  }
+  function levelOf(pts, profile){
+    let i = 0; TIERS.forEach((t, k) => { if(pts >= t.at) i = k; });
+    const lad = LADDERS[profile] || LADDERS.muscu;
+    return { name: lad[i], tierName: TIERS[i].n, t: TIERS[i].t, pts, profile, profileName: PROFILE_NAMES[profile] || '', ladder: lad, next: TIERS[i+1] ? { at: TIERS[i+1].at, n: lad[i+1], tierName: TIERS[i+1].n } : null, tiers: TIERS };
+  }
+  function famTier(done, total){ if(!done) return 0; const f = done / total; return f >= 1 ? 4 : f >= .7 ? 3 : f >= .4 ? 2 : 1; }
 
   // Lundi (heure locale) de la semaine d'une date, exprimé en numéro de semaine absolu
   function weekIndex(d){
@@ -53,16 +82,18 @@
     // secondes de cardio par séance
     const cardioBySession = {};
     if(hasCardio) logs.forEach(l => { if(l.duration_seconds && cardioSet.has(l.exercise_id)) cardioBySession[l.session_id] = (cardioBySession[l.session_id] || 0) + l.duration_seconds; });
-    return { sessions, logs, hasLogs, hasCardio, cardioBySession };
+    const muscuBySession = {};
+    if(hasLogs) logs.forEach(l => { if(!l.duration_seconds && l.reps && l.charge) muscuBySession[l.session_id] = (muscuBySession[l.session_id] || 0) + 1; });
+    return { sessions, logs, hasLogs, hasCardio, cardioBySession, muscuBySession };
   }
 
   // Statistiques « à la date asOf » sur les séances données
-  function stats(sessions, logs, hasLogs, asOf, cardioBySession, hasCardio){
+  function stats(sessions, logs, hasLogs, asOf, cardioBySession, hasCardio, muscuBySession){
     const upTo = sessions.filter(s => s.t <= asOf);
     const idSet = new Set(upTo.map(s => s.id));
     const total = upTo.length;
-    let cardioSec = 0, cardioSessions = 0;
-    upTo.forEach(s => { const c = (cardioBySession && cardioBySession[s.id]) || 0; cardioSec += c; if(c >= 600) cardioSessions++; });
+    let cardioSec = 0, cardioSessions = 0, muscuSessions = 0;
+    upTo.forEach(s => { const c = (cardioBySession && cardioBySession[s.id]) || 0; cardioSec += c; if(c >= 600) cardioSessions++; if(muscuBySession && muscuBySession[s.id]) muscuSessions++; });
 
     // Semaines
     const perWeek = {};
@@ -107,7 +138,7 @@
         });
       });
     }
-    return { total, best, current, thisWeek, comebacks, tonnage, prs, hasLogs, hasCardio, cardioSec, cardioSessions };
+    return { total, best, current, thisWeek, comebacks, tonnage, prs, hasLogs, hasCardio, cardioSec, cardioSessions, muscuSessions };
   }
 
   function value(def, st){
@@ -126,11 +157,11 @@
     let asOf = now || new Date();
     // l'horloge du téléphone peut retarder de quelques minutes sur le serveur : on ne laisse jamais une séance « dans le futur »
     if(p.sessions.length && p.sessions[p.sessions.length-1].t > asOf) asOf = p.sessions[p.sessions.length-1].t;
-    const st = stats(p.sessions, p.logs, p.hasLogs, asOf, p.cardioBySession, p.hasCardio);
+    const st = stats(p.sessions, p.logs, p.hasLogs, asOf, p.cardioBySession, p.hasCardio, p.muscuBySession);
     const unlockedAt = {};
     // date de déblocage : première séance après laquelle le badge est acquis
     p.sessions.forEach(s => {
-      const sst = stats(p.sessions, p.logs, p.hasLogs, s.t, p.cardioBySession, p.hasCardio);
+      const sst = stats(p.sessions, p.logs, p.hasLogs, s.t, p.cardioBySession, p.hasCardio, p.muscuBySession);
       DEFS.forEach(d => {
         if(!unlockedAt[d.id] && value(d, sst) >= d.target) unlockedAt[d.id] = s.t;
       });
@@ -149,7 +180,7 @@
       });
     });
     const core = badges.filter(b => !b.bonus), bonus = badges.filter(b => b.bonus);
-    return { stats: st, badges, unlockedCount: core.filter(b => b.unlocked).length, coreTotal: core.length, bonusUnlocked: bonus.filter(b => b.unlocked).length, bonusTotal: bonus.length, goal: WEEKLY_GOAL };
+    return { stats: st, badges, unlockedCount: core.filter(b => b.unlocked).length, coreTotal: core.length, level: levelOf(core.filter(b => b.unlocked).length, profileOf(st)), bonusUnlocked: bonus.filter(b => b.unlocked).length, bonusTotal: bonus.length, goal: WEEKLY_GOAL };
   }
 
   // Badges débloqués grâce à une séance précise (comparaison avant / après)
@@ -214,6 +245,28 @@
       .bdg.featured{border-color:var(--accent,#fff);}
       .bdg-feat{margin-top:8px; font-family:inherit; font-size:12px; font-weight:700; padding:6px 12px; border-radius:999px; border:1px solid var(--accent,#fff); background:none; color:var(--ink,#f5f5f5); cursor:pointer;}
       .bdg-feat.on{background:var(--accent,#fff); color:var(--accent-ink,#0b0b0c);}
+      .medal{--c1:#555;--c2:#2a2a2d;--rim:#3a3a3e;width:var(--s,64px);height:var(--s,64px);border-radius:50%;display:grid;place-items:center;position:relative;flex:none;margin:0 auto;background:radial-gradient(circle at 30% 25%,var(--c1),var(--c2) 75%);border:3px solid var(--rim);box-shadow:0 2px 10px rgba(0,0,0,.5),inset 0 0 0 3px rgba(0,0,0,.18);font-size:calc(var(--s,64px)*.42);line-height:1}
+      .medal::after{content:"";position:absolute;inset:6px;border-radius:50%;border:1px dashed rgba(255,255,255,.25)}
+      .medal.t0{filter:grayscale(1);opacity:.45}
+      .medal.t1{--c1:#e7a26b;--c2:#8a4f27;--rim:#c2773b}
+      .medal.t2{--c1:#f1f3f6;--c2:#8d95a3;--rim:#c9cfd9}
+      .medal.t3{--c1:#ffe27a;--c2:#b8860b;--rim:#f2c744}
+      .medal.t4{--c1:#b8f3ff;--c2:#2f8fae;--rim:#7fdcf2}
+      .medal.t5{--c1:#e5c8ff;--c2:#7a3fd1;--rim:#b784f5;box-shadow:0 0 18px rgba(155,100,255,.55),inset 0 0 0 3px rgba(0,0,0,.18)}
+      .lvl-hero{background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:18px;padding:18px;display:flex;gap:16px;align-items:center;margin-bottom:10px}
+      .lvl-hero .lv{font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted,#9a9a9e);font-weight:700}
+      .lvl-hero .nm{font-size:28px;font-weight:800;line-height:1.1}
+      .lvl-bar{height:7px;border-radius:99px;background:var(--surface-2,#1f2024);margin:10px 0 4px;overflow:hidden}.lvl-bar i{display:block;height:100%;background:var(--ink,#f5f5f5);border-radius:99px}
+      .lvl-steps{display:flex;gap:6px;background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:18px;padding:12px 14px;margin-bottom:14px}
+      .lvl-steps span{flex:1;text-align:center;font-size:11px;color:var(--ink-muted,#9a9a9e)}.lvl-steps .medal{--s:30px;margin:0 auto 3px;font-size:13px}.lvl-steps .medal::after{display:none}
+      .fam{background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:14px;margin-bottom:10px;overflow:hidden}
+      .fam>summary{display:flex;gap:12px;align-items:center;padding:12px;cursor:pointer;list-style:none}.fam>summary::-webkit-details-marker{display:none}
+      .fam>summary .medal{margin:0}
+      .fam .tt{font-weight:700}.fam .tl{font-size:12px;color:var(--ink-muted,#9a9a9e)}.fam .chev{margin-left:auto;color:var(--ink-muted,#9a9a9e)}
+      .fam .bdg-grid{padding:0 12px 12px;border-top:1px solid var(--line,#2c2c30);padding-top:12px}
+      .fam .bdg-ico{margin-bottom:8px}.fam .bdg-ico .medal{--s:52px}.fam .bdg-ico .medal::after{display:none}
+      .bdg-chip .medal{--s:18px;border-width:2px;font-size:10px;margin:0 2px 0 -6px}.bdg-chip .medal::after{display:none}
+      .bdg-pill{display:flex;gap:8px;align-items:center;flex-wrap:wrap;font-size:12.5px;color:var(--ink-muted,#9a9a9e);margin:0 0 14px}
       .bdg-mini{font-size:12.5px; color:var(--ink-muted,#9a9a9e); margin-top:6px;}
     `;
     document.head.appendChild(st);
@@ -229,39 +282,63 @@
   function renderFull(res, opts){
     ensureCss();
     opts = opts || {};
-    const st = res.stats;
+    const st = res.stats, L = res.level;
     const streakTxt = st.current > 0
       ? `🔥 ${st.current} semaine${st.current > 1 ? 's' : ''} de suite`
       : (st.total ? 'Relance ta série cette semaine 💪' : 'Fais ta 1re séance pour démarrer');
     const weekLine = `Cette semaine : ${Math.min(st.thisWeek, 99)}/${res.goal} séance${res.goal > 1 ? 's' : ''}` + (st.thisWeek >= res.goal ? ' ✅' : '');
-    const groups = [];
-    res.badges.forEach(b => { if(groups.indexOf(b.group) < 0) groups.push(b.group); });
     const coach = !!opts.coach;
-    const badgeHtml = b => {
+    const medal = (t, icon, size) => `<div class="medal t${t}"${size ? ` style="--s:${size}px"` : ''}>${icon}</div>`;
+    const tierOf = (b, list) => b.unlocked ? famTier(list.indexOf(b) + 1, list.length) : 0;
+    const badgeHtml = (b, list) => {
       if(b.revoked){
-        return `<div class="bdg revoked"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div><div class="bdg-rev">Annulé par le coach${b.revokedReason ? `<small>${esc(b.revokedReason)}</small>` : ''}</div>${coach ? `<button type="button" class="bdg-act" onclick="restoreBadgeAdmin('${b.id}')">Rétablir</button>` : ''}</div>`;
+        return `<div class="bdg revoked"><div class="bdg-ico">${medal(0, b.icon)}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div><div class="bdg-rev">Annulé par le coach${b.revokedReason ? `<small>${esc(b.revokedReason)}</small>` : ''}</div>${coach ? `<button type="button" class="bdg-act" onclick="restoreBadgeAdmin('${b.id}')">Rétablir</button>` : ''}</div>`;
       }
       if(b.unlocked){
         const d = b.unlockedAt ? new Date(b.unlockedAt).toLocaleDateString('fr-FR', {day:'numeric', month:'short', year:'numeric'}) : '';
         const isF = opts.featured === b.id;
-        const pickBtn = (!coach && opts.pick) ? `<button type="button" class="bdg-feat ${isF ? 'on' : ''}" onclick="${opts.pick}(${isF ? 'null' : `'${b.id}'`})">${isF ? '★ Affiché à côté de ton nom' : 'Afficher à côté de mon nom'}</button>` : '';
-        return `<div class="bdg${isF ? ' featured' : ''}"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div>${d ? `<div class="bdg-date">${d}</div>` : ''}${pickBtn}${coach ? `<button type="button" class="bdg-act warn" onclick="revokeBadgeAdmin('${b.id}')">Annuler ce badge</button>` : ''}</div>`;
+        const pickBtn = (!coach && opts.pick) ? `<button type="button" class="bdg-feat ${isF ? 'on' : ''}" onclick="${opts.pick}(${isF ? "'level'" : `'${b.id}'`})">${isF ? '★ Affiché à côté de ton nom' : 'Afficher à côté de mon nom'}</button>` : '';
+        return `<div class="bdg${isF ? ' featured' : ''}"><div class="bdg-ico">${medal(tierOf(b, list), b.icon)}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div>${d ? `<div class="bdg-date">${d}</div>` : ''}${pickBtn}${coach ? `<button type="button" class="bdg-act warn" onclick="revokeBadgeAdmin('${b.id}')">Annuler ce badge</button>` : ''}</div>`;
       }
       const pct = b.needsLogs ? 0 : Math.max(0, Math.min(100, Math.round(b.cur / b.target * 100)));
       const prog = b.needsLogs ? '' : (b.kind === 'comeback' ? '' : `<div class="bdg-bar"><i style="width:${pct}%"></i></div><div class="bdg-prog">${fmtVal(b, b.cur)} / ${fmtVal(b, b.target)}</div>`);
-      return `<div class="bdg locked"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div>${prog}</div>`;
+      return `<div class="bdg locked"><div class="bdg-ico">${medal(0, b.icon)}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div>${prog}</div>`;
     };
+    const famNames = [];
+    res.badges.forEach(b => { if(famNames.indexOf(b.group) < 0) famNames.push(b.group); });
+    const famHtml = name => {
+      const list = res.badges.filter(b => b.group === name);
+      const done = list.filter(b => b.unlocked).length, t = famTier(done, list.length);
+      const best = list.slice().reverse().find(b => b.unlocked) || list[0];
+      const tag = list[0].tag ? ` · bonus ${list[0].tag}` : '';
+      return `<details class="fam"><summary>${medal(t, best.icon, 54)}<div><div class="tt">${esc(name)}</div><div class="tl">${done}/${list.length} · ${t ? TIER_NAMES[t] : 'à débloquer'}${tag}</div></div><span class="chev">▾</span></summary><div class="bdg-grid">${list.map(b => badgeHtml(b, list)).join('')}</div></details>`;
+    };
+    const coreFams = famNames.filter(n => !res.badges.find(b => b.group === n).bonus);
+    const bonusFams = famNames.filter(n => res.badges.find(b => b.group === n).bonus);
+    const steps = TIERS.slice(1).map(t => `<span>${medal(L.t >= t.t ? t.t : 0, '★')}${esc(L.ladder[t.t])}</span>`).join('');
+    const pts = L.pts, pct = L.next ? Math.round((pts - TIERS[L.t].at) / (L.next.at - TIERS[L.t].at) * 100) : 100;
+    const f = opts.featured, onLevel = !f || f === 'level', onNone = f === 'none';
+    const pill = opts.pick ? `<div class="bdg-pill">Pastille à côté de ton nom :
+        <button type="button" class="bdg-feat ${onLevel ? 'on' : ''}" style="margin:0" onclick="${opts.pick}('level')">Mon niveau</button>
+        <button type="button" class="bdg-feat ${onNone ? 'on' : ''}" style="margin:0" onclick="${opts.pick}('none')">Aucune</button>
+        <span style="font-size:12px;">ou choisis un badge ci-dessous</span></div>` : '';
     return `
+      <div class="lvl-hero">${medal(L.t, '★', 84)}<div style="flex:1"><div class="lv">Niveau ${esc(L.tierName)}${L.t ? ' · profil ' + esc(L.profileName) : ''}</div><div class="nm">${esc(L.name)}</div>
+        <div class="lvl-bar"><i style="width:${pct}%"></i></div>
+        <div class="bdg-mini" style="margin:0">${L.next ? `${pts}/${L.next.at} badges principaux pour devenir <b>${esc(L.next.n)}</b>` : 'Niveau maximum atteint 🎉'}</div></div></div>
+      <div class="lvl-steps">${steps}</div>
       <div class="bdg-hero">
         <div class="bdg-hero-top">
           <div class="bdg-streak">${streakTxt}<small>Meilleure série : ${st.best} semaine${st.best > 1 ? 's' : ''} · ${st.total} séance${st.total > 1 ? 's' : ''} comptée${st.total > 1 ? 's' : ''}</small></div>
-          <div class="bdg-count"><b>${res.unlockedCount}/${res.coreTotal}</b>badges${res.bonusUnlocked ? `<small style="display:block;font-size:12px;">+ ${res.bonusUnlocked} bonus</small>` : ''}</div>
+          <div class="bdg-count"><b>${res.unlockedCount}/${res.coreTotal}</b>badges principaux${res.bonusUnlocked ? `<small style="display:block;font-size:12px;">+ ${res.bonusUnlocked} bonus</small>` : ''}</div>
         </div>
         <div class="bdg-week">${weekLine}<div class="bdg-dots">${weekDots(st.thisWeek, res.goal)}</div></div>
         <div class="bdg-mini">Objectif : ${res.goal} séances par semaine. Une semaine de pause par mois ne casse pas ta série.</div>
-        <div class="bdg-rule">Une séance compte pour les badges si elle est faite en direct, dure au moins 10 minutes, avec au moins 4 séries ou au moins 10 minutes de cardio, et une seule par jour. Les séances saisies après coup ou importées restent dans ton historique mais ne comptent pas. Les badges « bonus » sont facultatifs : muscu ou cardio, pas besoin de faire les deux.</div>
+        <div class="bdg-rule">Une séance compte pour les badges si elle est faite en direct, dure au moins 10 minutes, avec au moins 4 séries ou au moins 10 minutes de cardio, et une seule par jour. Les séances saisies après coup ou importées restent dans ton historique mais ne comptent pas. Les badges « bonus » sont facultatifs : muscu, cardio ou retour après une pause, pas besoin de tous les faire.</div>
       </div>
-      ${groups.map(g => `<div class="bdg-group">${esc(g)}${/^Bonus/.test(g) ? ' <span style="text-transform:none;letter-spacing:0;font-weight:500;">· facultatif</span>' : ''}</div><div class="bdg-grid">${res.badges.filter(b => b.group === g).map(badgeHtml).join('')}</div>`).join('')}
+      ${pill}
+      <div class="bdg-group">Badges principaux</div>${coreFams.map(famHtml).join('')}
+      <div class="bdg-group">Bonus · facultatifs</div>${bonusFams.map(famHtml).join('')}
     `;
   }
 
@@ -275,19 +352,23 @@
       <div class="bdg-new-list">${fresh.map(b => `<div class="bdg-new-item"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div></div>`).join('')}</div>${week}</div>`;
   }
 
-  // Petite pastille « icône + titre » à afficher à côté d'un nom (uniquement si le badge est réellement acquis et non annulé)
+  // Petite pastille à afficher à côté d'un nom : par défaut le niveau, ou un badge précis (s'il est réellement acquis et non annulé), ou rien ('none')
   function chip(res, id){
-    if(!id || !res) return '';
+    if(!res || id === 'none') return '';
+    ensureCss();
+    if(!id || id === 'level'){
+      const L = res.level; if(!L || !L.t) return '';
+      return `<span class="bdg-chip" title="Niveau ${esc(L.tierName)}"><div class="medal t${L.t}">★</div>${esc(L.name)}</span>`;
+    }
     const b = res.badges.find(x => x.id === id);
     if(!b || !b.unlocked) return '';
-    ensureCss();
     return `<span class="bdg-chip" title="${esc(b.desc)}">${b.icon} ${esc(b.title)}</span>`;
   }
 
   // Résumé d'une ligne (liste des clients côté coach)
   function summaryLine(res){
     const st = res.stats;
-    return `🔥 ${st.current} sem. de suite · ${st.total} séance${st.total > 1 ? 's' : ''}` + (st.hasLogs ? ` · 🏅 ${res.unlockedCount}/${res.coreTotal}${res.bonusUnlocked ? ' +' + res.bonusUnlocked : ''}` : '');
+    return `🔥 ${st.current} sem. de suite · ${st.total} séance${st.total > 1 ? 's' : ''}` + (st.hasLogs ? ` · 🏅 ${res.unlockedCount}/${res.coreTotal}${res.bonusUnlocked ? ' +' + res.bonusUnlocked : ''}` : '') + (res.level && res.level.t ? ` · ${res.level.name}` : '');
   }
 
   // Chargement des séances (et des séries) d'un utilisateur, par pages de 1000 lignes.

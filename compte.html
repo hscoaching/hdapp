@@ -350,20 +350,20 @@ async function refreshNameBadge(){
     const first = (p.full_name || '').trim().split(/\s+/)[0];
     const set = chip => { NAME_CHIP = chip; const el = document.getElementById('hello'); if(el) el.innerHTML = 'Salut' + (first ? ' ' + escapeHtml(first) : '') + ' 👋' + chip; };
     set('');
-    if(p.featured_badge && typeof HSBadges !== 'undefined'){
+    if(p.featured_badge !== 'none' && typeof HSBadges !== 'undefined'){
       const getJson = async x => { const r = await apiFetch(x); if(!r.ok) throw new Error('load_failed'); return r.json(); };
       const res = HSBadges.compute(await HSBadges.load(getJson, uid));
       const c = HSBadges.chip(res, p.featured_badge);
       set(c);
-      if(!c) apiFetch(`/rest/v1/profiles?id=eq.${uid}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ featured_badge: null }) }).catch(()=>{});
+      if(!c && p.featured_badge) apiFetch(`/rest/v1/profiles?id=eq.${uid}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ featured_badge: null }) }).catch(()=>{});
     } else if(first){ set(''); }
   }catch(e){ console.error(e); }
 }
 async function pickBadge(id){
   try{
-    const r = await apiFetch(`/rest/v1/profiles?id=eq.${getSession().user.id}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ featured_badge: id }) });
+    const r = await apiFetch(`/rest/v1/profiles?id=eq.${getSession().user.id}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ featured_badge: id === 'level' ? null : id }) });
     if(!r.ok) throw new Error(await r.text());
-    if(window.HSHistory && HSHistory.toast) HSHistory.toast(id ? 'Badge affiché à côté de ton nom ✓' : 'Badge retiré');
+    if(window.HSHistory && HSHistory.toast) HSHistory.toast(id === 'none' ? 'Pastille retirée' : (id === 'level' ? 'Ton niveau est affiché à côté de ton nom ✓' : 'Badge affiché à côté de ton nom ✓'));
   }catch(e){ console.error(e); alert('Impossible de changer le badge pour le moment.'); return; }
   refreshNameBadge(); loadBadges();
 }
