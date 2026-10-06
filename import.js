@@ -148,28 +148,14 @@
 
     const WARN = '<div class="imp-warn">ℹ️ Les séances importées comptent pour ta <b>progression</b> (courbes, records, volume) mais <b>pas pour les badges</b>. La date est facultative.</div>';
     function stepInput(msg){
-      box.innerHTML = `<h2>Importer d'anciennes séances</h2><p>Colle tes notes (tableau Notes, Excel…) ou ajoute des captures d'écran, même d'autres applis.</p>${WARN}${msg ? `<p class="imp-flag">${esc(msg)}</p>` : ''}
+      box.innerHTML = `<h2>Importer d'anciennes séances</h2><p>Colle tes notes (tableau Notes, Excel…).</p>${WARN}${msg ? `<p class="imp-flag">${esc(msg)}</p>` : ''}
         <textarea id="impTxt" placeholder="Colle ici ton tableau…" spellcheck="false"></textarea>
         <div class="imp-row"><button type="button" class="btn btn-accent" id="impGo">Analyser le texte</button>
-        <label class="btn btn-ghost" style="cursor:pointer;">📷 Ajouter des captures<input type="file" id="impImg" accept="image/*" multiple hidden></label>
         <button type="button" class="btn btn-ghost" id="impX">Annuler</button></div><div id="impSt" class="imp-flag" style="margin-top:8px"></div>`;
       box.querySelector('#impX').onclick = close;
       box.querySelector('#impGo').onclick = async () => {
         const t = box.querySelector('#impTxt').value; if(!t.trim()){ toast('Colle d\'abord ton texte'); return; }
         data = parseText(t); await stepPreview(); };
-      box.querySelector('#impImg').onchange = async ev => {
-        const files = [...ev.target.files].slice(0, 4); if(!files.length) return;
-        const st = box.querySelector('#impSt'); st.textContent = 'Lecture des captures en cours… (jusqu\'à une minute)';
-        try{
-          const images = await Promise.all(files.map(shrink));
-          const res = await o.fn('parse-screenshot', { images });
-          if(res.status === 404 || res.status === 501){ st.textContent = 'La lecture de captures n\'est pas activée pour le moment. Tu peux coller du texte.'; return; }
-          if(!res.ok){ st.textContent = 'Impossible de lire cette capture. Réessaie avec une image plus nette ou colle le texte.'; return; }
-          const j = await res.json(); data = { list: fromVision(j.sessions), issues: [] };
-          if(!data.list.length){ st.textContent = 'Aucune séance repérée sur cette image.'; return; }
-          await stepPreview();
-        }catch(e){ console.error(e); st.textContent = 'Lecture impossible pour le moment.'; }
-      };
     }
     async function stepPreview(){
       box.innerHTML = '<p>Chargement…</p>';
