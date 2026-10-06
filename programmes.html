@@ -1013,6 +1013,11 @@ function swapVariant(k, silent){
   if(!silent) toast(st.cur === st.orig ? 'Exercice de base' : 'Variante sélectionnée');
 }
 async function validateSet(btn){
+  if(btn.dataset.busy === '1') return;   // un seul envoi à la fois (évite les doubles appuis)
+  btn.dataset.busy = '1';
+  try{ await validateSetInner(btn); } finally { btn.dataset.busy = ''; }
+}
+async function validateSetInner(btn){
   const line = btn.closest('.set-line');
   const exId = line.dataset.ex; const setNum = parseInt(line.dataset.set);
   const reps = parseInt(line.querySelector('.reps-input').value) || null;

@@ -473,6 +473,10 @@ async function toggleSessionLogs(card, sessionId){
   }catch(e){ console.error(e); box.innerHTML = '<div class="empty">Impossible de charger le détail.</div>'; return; }
   const editBlock = s.completed_at ? histEditHtml(s) : '';
   if(!logs.length){ box.innerHTML = '<div class="empty">Pas de détail pour cette séance.</div>' + editBlock; return; }
+  // lignes vides en double (anciens doublons neutralisés) : on les masque
+  const keyOf = x => (x.exercises?.name || '') + '|' + x.set_number;
+  const hasValue = new Set(logs.filter(x => x.reps != null || x.charge != null).map(keyOf));
+  logs = logs.filter(x => x.reps != null || x.charge != null || !hasValue.has(keyOf(x)));
   const byExercise = {};
   let totalVolume = 0;
   logs.forEach(l=>{
