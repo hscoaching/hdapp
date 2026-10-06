@@ -47,6 +47,28 @@
     hybrid: ['Recrue', 'Touche-à-tout', 'Polyvalent', 'Athlète complet', 'Hybride confirmé', 'Athlète hybride']
   };
   const PROFILE_NAMES = { muscu: 'Force', cardio: 'Endurance', hybrid: 'Hybride' };
+  // Comparaison mythologique débloquée à chaque niveau
+  const MYTHS = {
+    muscu: [null,
+      { who:'Un hoplite athénien',   txt:"Comme un hoplite athénien, tu viens d'enfiler ton armure. La force se construit une séance après l'autre." },
+      { who:'Les Spartiates',         txt:"Comme les Spartiates de Léonidas, tu t'entraînes sans te plaindre. Ta discipline commence à se voir." },
+      { who:'Achille',                txt:"Comme Achille, le plus grand guerrier de Troie, tu as la force et la détermination des héros. Rien ne t'arrête." },
+      { who:'Atlas',                  txt:"Comme Atlas, qui porte le ciel sur ses épaules, tu soulèves ce que d'autres n'osent même pas approcher." },
+      { who:'Héraclès',               txt:"Comme Héraclès, tu as accompli tes douze travaux : des années de régularité. Tu es entré dans la légende." }],
+    cardio: [null,
+      { who:'Les dolichodromes d\'Olympie', txt:"Comme les coureurs de fond des Jeux d'Olympie, tu viens de prendre le départ d'une longue course." },
+      { who:'Les Argonautes',         txt:"Comme les Argonautes qui ont ramé jusqu'en Colchide, tu avances sans relâche vers ton objectif." },
+      { who:'Atalante',               txt:"Comme Atalante, la coureuse que personne ne rattrapait, ton souffle te porte plus loin que les autres." },
+      { who:'Hermès',                 txt:"Comme Hermès, le messager aux sandales ailées, tu es rapide et infatigable : la route est ton terrain." },
+      { who:'Phidippidès',            txt:"Comme Phidippidès, qui a couru de Marathon à Athènes pour annoncer la victoire, tu es allé au bout de l'effort. Légendaire." }],
+    hybrid: [null,
+      { who:'Les pentathlètes d\'Olympie', txt:"Comme les pentathlètes d'Olympie, tu ne choisis pas : course, force, souplesse, tu t'essaies à tout." },
+      { who:'Thésée',                 txt:"Comme Thésée, tu relèves tous les défis : la force pour affronter le Minotaure, l'agilité pour sortir du labyrinthe." },
+      { who:'Persée',                 txt:"Comme Persée, tu combines puissance, vitesse et ruse : un athlète qui s'adapte à tout." },
+      { who:'Ulysse',                 txt:"Comme Ulysse, l'homme aux mille ruses, tu as l'endurance du voyage et la force du combat. Rien ne te prend au dépourvu." },
+      { who:'Zeus',                   txt:"Comme Zeus, maître de l'Olympe, tu règnes sur tous les domaines : force, endurance et régularité. Le sommet." }]
+  };
+  function mythOf(L){ return L && L.t ? ((MYTHS[L.profile] || MYTHS.muscu)[L.t] || null) : null; }
   function profileOf(st){
     const tot = st.total || 0, cs = st.cardioSessions || 0, ms = st.muscuSessions || 0;
     if(!st.hasCardio || !tot) return 'muscu';
@@ -56,7 +78,7 @@
   function levelOf(pts, profile){
     let i = 0; TIERS.forEach((t, k) => { if(pts >= t.at) i = k; });
     const lad = LADDERS[profile] || LADDERS.muscu;
-    return { name: lad[i], tierName: TIERS[i].n, t: TIERS[i].t, pts, profile, profileName: PROFILE_NAMES[profile] || '', ladder: lad, next: TIERS[i+1] ? { at: TIERS[i+1].at, n: lad[i+1], tierName: TIERS[i+1].n } : null, tiers: TIERS };
+    return { name: lad[i], myth: mythOf({ profile, t: TIERS[i].t }), tierName: TIERS[i].n, t: TIERS[i].t, pts, profile, profileName: PROFILE_NAMES[profile] || '', ladder: lad, next: TIERS[i+1] ? { at: TIERS[i+1].at, n: lad[i+1], tierName: TIERS[i+1].n } : null, tiers: TIERS };
   }
   function famTier(done, total){ if(!done) return 0; const f = done / total; return f >= 1 ? 4 : f >= .7 ? 3 : f >= .4 ? 2 : 1; }
 
@@ -192,7 +214,7 @@
       revoked: data.revoked
     });
     const had = new Set(before.badges.filter(b => b.unlocked).map(b => b.id));
-    return { after, fresh: after.badges.filter(b => b.unlocked && !had.has(b.id)) };
+    return { after, before, fresh: after.badges.filter(b => b.unlocked && !had.has(b.id)), levelUp: after.level.t > before.level.t ? after.level : null };
   }
 
   const nf = n => Math.round(n).toLocaleString('fr-FR');
@@ -283,6 +305,7 @@
     ensureCss();
     opts = opts || {};
     const st = res.stats, L = res.level;
+    window.__hsLvl = L;
     const streakTxt = st.current > 0
       ? `🔥 ${st.current} semaine${st.current > 1 ? 's' : ''} de suite`
       : (st.total ? 'Relance ta série cette semaine 💪' : 'Fais ta 1re séance pour démarrer');
@@ -323,9 +346,9 @@
         <button type="button" class="bdg-feat ${onNone ? 'on' : ''}" style="margin:0" onclick="${opts.pick}('none')">Aucune</button>
         <span style="font-size:12px;">ou choisis un badge ci-dessous</span></div>` : '';
     return `
-      <div class="lvl-hero">${medal(L.t, '★', 84)}<div style="flex:1"><div class="lv">Niveau ${esc(L.tierName)}${L.t ? ' · profil ' + esc(L.profileName) : ''}</div><div class="nm">${esc(L.name)}</div>
+      <div class="lvl-hero" style="cursor:pointer" onclick="HSBadges.showLevel()">${medal(L.t, '★', 84)}<div style="flex:1"><div class="lv">Niveau ${esc(L.tierName)}${L.t ? ' · profil ' + esc(L.profileName) : ''}</div><div class="nm">${esc(L.name)}</div>
         <div class="lvl-bar"><i style="width:${pct}%"></i></div>
-        <div class="bdg-mini" style="margin:0">${L.next ? `${pts}/${L.next.at} badges principaux pour devenir <b>${esc(L.next.n)}</b>` : 'Niveau maximum atteint 🎉'}</div></div></div>
+        <div class="bdg-mini" style="margin:0">${L.next ? `${pts}/${L.next.at} badges principaux pour devenir <b>${esc(L.next.n)}</b>` : 'Niveau maximum atteint 🎉'}</div>${L.t ? '<div class="bdg-mini" style="margin-top:6px"><b>Touche pour découvrir ta légende ›</b></div>' : ''}</div></div>
       <div class="lvl-steps">${steps}</div>
       <div class="bdg-hero">
         <div class="bdg-hero-top">
@@ -343,22 +366,25 @@
   }
 
   // Carte « nouveaux badges » affichée en fin de séance
-  function renderNew(fresh, res){
+  function renderNew(fresh, res, levelUp){
     ensureCss();
+    window.__hsLvl = res.level;
+    const up = levelUp ? `<div class="bdg-new" style="margin-bottom:10px;cursor:pointer" onclick="HSBadges.showLevel(true)"><div class="medal t${levelUp.t}" style="--s:64px;margin-bottom:8px">★</div><h3>⬆️ Nouveau niveau : ${esc(levelUp.name)}</h3><div class="bdg-mini">${levelUp.myth ? 'Tu rejoins ' + esc(levelUp.myth.who) + '. ' : ''}<b>Touche pour découvrir ta légende</b></div></div>` : '';
     const st = res.stats;
     const week = `<div class="bdg-mini">${st.current > 0 ? `🔥 ${st.current} semaine${st.current > 1 ? 's' : ''} de suite · ` : ''}Cette semaine : ${st.thisWeek}/${res.goal} séance${res.goal > 1 ? 's' : ''}${st.thisWeek >= res.goal ? ' ✅' : ''}</div>`;
-    if(!fresh.length) return `<div class="bdg-new" style="border-color:var(--line,#2c2c30)">${week}</div>`;
-    return `<div class="bdg-new"><h3>🎉 ${fresh.length > 1 ? 'Nouveaux badges' : 'Nouveau badge'} !</h3>
+    if(!fresh.length) return up + `<div class="bdg-new" style="border-color:var(--line,#2c2c30)">${week}</div>`;
+    return up + `<div class="bdg-new"><h3>🎉 ${fresh.length > 1 ? 'Nouveaux badges' : 'Nouveau badge'} !</h3>
       <div class="bdg-new-list">${fresh.map(b => `<div class="bdg-new-item"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div></div>`).join('')}</div>${week}</div>`;
   }
 
   // Petite pastille à afficher à côté d'un nom : par défaut le niveau, ou un badge précis (s'il est réellement acquis et non annulé), ou rien ('none')
-  function chip(res, id){
+  function chip(res, id, clickable){
     if(!res || id === 'none') return '';
     ensureCss();
     if(!id || id === 'level'){
       const L = res.level; if(!L || !L.t) return '';
-      return `<span class="bdg-chip" title="Niveau ${esc(L.tierName)}"><div class="medal t${L.t}">★</div>${esc(L.name)}</span>`;
+      if(clickable) window.__hsLvl = L;
+      return `<span class="bdg-chip" title="Niveau ${esc(L.tierName)}"${clickable ? ' style="cursor:pointer" onclick="HSBadges.showLevel()"' : ''}><div class="medal t${L.t}">★</div>${esc(L.name)}</span>`;
     }
     const b = res.badges.find(x => x.id === id);
     if(!b || !b.unlocked) return '';
@@ -397,5 +423,33 @@
     return { sessions, logs, revoked, cardioIds };
   }
 
-  window.HSBadges = { chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, WEEKLY_GOAL };
+  // Fenêtre « ta légende » : comparaison mythologique du niveau actuel
+  function showLevel(celebrate){
+    const L = window.__hsLvl; if(!L) return;
+    ensureCss();
+    const m = L.myth;
+    const old = document.getElementById('hsLvlOv'); if(old) old.remove();
+    const ov = document.createElement('div'); ov.id = 'hsLvlOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1200;display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto';
+    ov.onclick = e => { if(e.target === ov) ov.remove(); };
+    ov.innerHTML = `<div style="max-width:420px;width:100%;background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:20px;padding:24px 20px;text-align:center">
+      ${celebrate ? '<div style="font-size:13px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted,#9a9a9e);margin-bottom:10px">🎉 Nouveau niveau</div>' : ''}
+      <div class="medal t${L.t}" style="--s:110px;margin-bottom:12px">★</div>
+      <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted,#9a9a9e);font-weight:700">Niveau ${esc(L.tierName)} · profil ${esc(L.profileName)}</div>
+      <div style="font-size:28px;font-weight:800;line-height:1.15;margin:4px 0 14px">${esc(L.name)}</div>
+      ${m ? `<div style="border-top:1px solid var(--line,#2c2c30);padding-top:14px"><div style="font-size:12px;color:var(--ink-muted,#9a9a9e);margin-bottom:4px">Ta légende</div><div style="font-size:20px;font-weight:700;margin-bottom:8px">${esc(m.who)}</div><div style="font-size:14.5px;line-height:1.5">${esc(m.txt)}</div></div>` : '<div style="font-size:14px;color:var(--ink-muted,#9a9a9e)">Débloque ton premier badge de séances pour entrer dans la légende.</div>'}
+      ${L.next ? `<div style="margin-top:16px;font-size:12.5px;color:var(--ink-muted,#9a9a9e)">Prochain palier : <b style="color:var(--ink,#f5f5f5)">${esc(L.next.n)}</b> (${L.pts}/${L.next.at} badges principaux)</div>` : '<div style="margin-top:16px;font-size:12.5px;color:var(--ink-muted,#9a9a9e)">Tu as atteint le sommet 🏛️</div>'}
+      <button type="button" style="margin-top:18px;font-family:inherit;font-weight:700;font-size:14px;padding:12px 26px;border-radius:999px;border:0;background:var(--accent,#fff);color:var(--accent-ink,#0b0b0c);cursor:pointer" onclick="document.getElementById('hsLvlOv').remove()">Fermer</button></div>`;
+    document.body.appendChild(ov);
+  }
+  // Niveau déjà « fêté » sur cet appareil : renvoie true si le niveau vient de monter
+  function levelUpSeen(uid, L){
+    try{
+      const k = 'hs_lvl_' + uid, prev = localStorage.getItem(k);
+      localStorage.setItem(k, String(L.t));
+      return prev !== null && L.t > parseInt(prev, 10);
+    }catch(e){ return false; }
+  }
+
+  window.HSBadges = { showLevel, levelUpSeen, chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, WEEKLY_GOAL };
 })();
