@@ -137,6 +137,7 @@
 <script src="badges.js"></script>
 <script src="export.js"></script>
 <script src="history.js"></script>
+<script src="import.js"></script>
 <script>
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
 const SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InJ2ZnRxZGJkaWJmeWxhdWFydGlpIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA1MjEzMjIsImV4cCI6MjEwNjA5NzMyMn0._WLJkWncu1fwMnlakuPFuJr_I-uvgr_TwvMect8E-a0";
@@ -394,12 +395,13 @@ function histDurSec(s){
 function histBadgeNote(s){
   if(!s.completed_at) return '';
   if(s.badge_eligible) return '<div style="font-size:12px; color:var(--accent); margin-top:6px;">🏅 Compte pour les badges</div>';
+  if(s.imported) return '<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">📥 Séance importée · compte pour ta progression, pas pour les badges</div>';
   if(s.source === 'manual') return '<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">✍️ Saisie après coup · ne compte pas pour les badges</div>';
   return '<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">Ne compte pas pour les badges (moins de 4 séries, moins de 10 min, ou déjà une séance comptée ce jour)</div>';
 }
 async function loadHistorique(){
   const uid = getSession().user.id;
-  const res = await apiFetch(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,declared_seconds,badge_eligible,source,edit_unlocked,programs(name)&user_id=eq.${uid}&order=started_at.desc`);
+  const res = await apiFetch(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,declared_seconds,badge_eligible,source,edit_unlocked,imported,date_unknown,programs(name)&user_id=eq.${uid}&order=started_at.desc`);
   const sessions = await res.json();
   HIST = Array.isArray(sessions) ? sessions : [];
   HISTREQ = {};
@@ -407,8 +409,9 @@ async function loadHistorique(){
     const reqs = await histReq(`/rest/v1/session_edit_requests?select=id,session_id,status,message,created_at&user_id=eq.${uid}&order=created_at.desc`);
     (reqs || []).forEach(r => { if(!HISTREQ[r.session_id]) HISTREQ[r.session_id] = r; });
   }catch(e){ console.error(e); }
-  if(!HIST.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucune séance enregistrée pour l\'instant.</div>'; return; }
-  const exportBar = `<div style="margin-bottom:14px;"><button type="button" class="btn btn-ghost btn-block" style="margin-top:0;" onclick="exportAllHistory()">📄 Exporter tout mon historique (PDF)</button></div>`;
+  const importBtn = `<div style="margin-bottom:10px;"><button type="button" class="btn btn-ghost btn-block" style="margin-top:0;" onclick="openImport()">📥 Importer d'anciennes séances</button></div>`;
+  if(!HIST.length){ document.getElementById('tabBody').innerHTML = importBtn + '<div class="empty">Aucune séance enregistrée pour l\'instant.</div>'; return; }
+  const exportBar = importBtn + `<div style="margin-bottom:14px;"><button type="button" class="btn btn-ghost btn-block" style="margin-top:0;" onclick="exportAllHistory()">📄 Exporter tout mon historique (PDF)</button></div>`;
   document.getElementById('tabBody').innerHTML = exportBar + HIST.map(s=>{
     const d = new Date(s.started_at);
     let duree = '';
@@ -419,7 +422,7 @@ async function loadHistorique(){
     }
     return `<div class="card" style="cursor:pointer" onclick="toggleSessionLogs(this,'${s.id}')">
       <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;">
-        <div class="tag">${d.toLocaleDateString('fr-FR', {day:'numeric',month:'long'})}${duree}</div>
+        <div class="tag">${s.date_unknown ? 'Date inconnue' : d.toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'})}${duree}${s.imported ? ' · 📥 importée' : ''}</div>
         <button type="button" aria-label="Supprimer cette séance" title="Supprimer" onclick="event.stopPropagation(); askDeleteSession('${s.id}')" style="background:none; border:1px solid var(--line); color:var(--ink-muted); border-radius:999px; padding:4px 10px; font-size:13px; cursor:pointer;">🗑</button>
       </div>
       <h3>${escapeHtml(s.programs?.name || 'Séance libre')}${s.day_label ? ' · ' + escapeHtml(s.day_label) : ''}</h3>
@@ -431,6 +434,14 @@ async function loadHistorique(){
 function askDeleteSession(id){
   const s = HIST.find(x => x.id === id); if(!s) return;
   HSHistory.confirmDelete({ session: s, req: histReq, userId: getSession().user.id, onDone: loadHistorique });
+}
+function openImport(){
+  HSImport.open({
+    userId: getSession().user.id,
+    req: histReq,
+    fn: (name, body) => apiFetch('/functions/v1/' + name, { method:'POST', body: JSON.stringify(body) }),
+    onDone: loadHistorique
+  });
 }
 function exportAllHistory(){
   HSHistory.exportPdf({ req: histReq, userId: getSession().user.id, sessions: HIST, who: getSession().user.email });
@@ -512,8 +523,8 @@ async function loadProgression(){
   try{
     // Toujours filtrer sur MON compte : un compte coach a le droit de lire les données de tous les clients.
     const myId = encodeURIComponent(getSession().user.id);
-    sessions = await (await apiFetch(`/rest/v1/sessions?select=id,started_at&user_id=eq.${myId}&order=started_at`)).json();
-    rows = await (await apiFetch(`/rest/v1/session_logs?select=exercise_id,charge,reps,duration_seconds,session_id,sessions!inner(started_at),exercises(name)&sessions.user_id=eq.${myId}&limit=10000`)).json();
+    sessions = await (await apiFetch(`/rest/v1/sessions?select=id,started_at,date_unknown&user_id=eq.${myId}&order=started_at`)).json();
+    rows = await (await apiFetch(`/rest/v1/session_logs?select=exercise_id,charge,reps,duration_seconds,session_id,sessions!inner(started_at,date_unknown),exercises(name)&sessions.user_id=eq.${myId}&limit=10000`)).json();
   }catch(e){ document.getElementById('tabBody').innerHTML = '<div class="empty">Impossible de charger ta progression pour le moment.</div>'; return; }
   if(!Array.isArray(sessions) || !sessions.length){
     document.getElementById('tabBody').innerHTML = '<div class="empty">Pas encore de séance enregistrée. Ton suivi apparaîtra ici dès ta première séance.</div>';
@@ -555,6 +566,7 @@ function frequencyCardHtml(sessions){
   const counts = {};
   weeks.forEach(w=> counts[w]=0);
   sessions.forEach(s=>{
+    if(s.date_unknown) return;
     const wk = weekKey(s.started_at);
     if(wk in counts) counts[wk]++;
   });
@@ -579,7 +591,7 @@ function frequencyCardHtml(sessions){
 function volumeCardHtml(rows){
   const bySession = {};
   rows.forEach(r=>{
-    if(r.duration_seconds || r.reps==null || r.charge==null || !r.sessions || !r.sessions.started_at) return;
+    if(r.duration_seconds || (r.sessions && r.sessions.date_unknown) || r.reps==null || r.charge==null || !r.sessions || !r.sessions.started_at) return;
     if(!bySession[r.session_id]) bySession[r.session_id] = { date: r.sessions.started_at, vol:0 };
     bySession[r.session_id].vol += r.reps * r.charge;
   });

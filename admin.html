@@ -315,9 +315,9 @@ async function renderCoachStats(){
     const monday = new Date(now); monday.setDate(now.getDate()-day); monday.setHours(0,0,0,0);
     const weekAgo = new Date(now.getTime() - 7*24*60*60*1000);
     const [weekSessions, allClients, recentSessions, unread, visits] = await Promise.all([
-      api(`/rest/v1/sessions?select=id&started_at=gte.${monday.toISOString()}`),
+      api(`/rest/v1/sessions?select=id&imported=is.false&started_at=gte.${monday.toISOString()}`),
       api('/rest/v1/profiles?select=id&role=eq.client'),
-      api(`/rest/v1/sessions?select=user_id&started_at=gte.${weekAgo.toISOString()}`),
+      api(`/rest/v1/sessions?select=user_id&imported=is.false&started_at=gte.${weekAgo.toISOString()}`),
       api('/rest/v1/messages?select=id&sender=eq.user&read=eq.false'),
       api('/rest/v1/app_visits?select=user_id')
     ]);
@@ -489,7 +489,7 @@ async function renderClientsTab(){
     const idList = clients.map(c=>c.id).join(',');
     [progs, sessions, convs, unreadMsgs] = await Promise.all([
       api(`/rest/v1/programs?select=id,name,owner_user_id,created_at&owner_user_id=in.(${idList})&is_official=eq.false&order=created_at.desc`),
-      api(`/rest/v1/sessions?select=id,user_id,started_at,completed_at,badge_eligible&user_id=in.(${idList})&order=started_at.desc&limit=5000`),
+      api(`/rest/v1/sessions?select=id,user_id,started_at,completed_at,badge_eligible&imported=is.false&user_id=in.(${idList})&order=started_at.desc&limit=5000`),
       api(`/rest/v1/conversations?select=id,user_id&user_id=in.(${idList})`),
       api('/rest/v1/messages?select=conversation_id&sender=eq.user&read=eq.false')
     ]);
@@ -596,7 +596,7 @@ async function openClientSessions(clientId, name){
   csClient = { id: clientId, name }; csShowAll = false;
   document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
   try{
-    csSessions = await api(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,declared_seconds,badge_eligible,source,edit_unlocked,programs(name)&user_id=eq.${clientId}&order=started_at.desc&limit=300`);
+    csSessions = await api(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,declared_seconds,badge_eligible,source,edit_unlocked,imported,date_unknown,programs(name)&user_id=eq.${clientId}&order=started_at.desc&limit=300`);
   }catch(e){
     console.error(e);
     document.getElementById('tabBody').innerHTML = '<a class="backlink" onclick="renderClientsTab()">← Clients</a><div class="empty">Impossible de charger les séances. Réessaie.</div>';
@@ -619,7 +619,7 @@ function renderClientSessions(){
       const dur = fmtSessDuration(s);
       const title = (s.programs && s.programs.name ? s.programs.name : 'Séance libre') + (s.day_label ? ' · ' + s.day_label : '');
       return `<div class="card" onclick="toggleClientSession(this,'${s.id}')">
-        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;"><div class="tag">${escapeHtml(d.toLocaleDateString('fr-FR',{weekday:'short', day:'numeric', month:'long', year:'numeric'}))} · ${escapeHtml(d.toLocaleTimeString('fr-FR',{hour:'2-digit', minute:'2-digit'}))}${dur ? ' · ' + escapeHtml(dur) : ''}${s.completed_at ? '' : ' · non terminée'}</div>
+        <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;"><div class="tag">${s.date_unknown ? 'Date inconnue · 📥 importée' : escapeHtml(d.toLocaleDateString('fr-FR',{weekday:'short', day:'numeric', month:'long', year:'numeric'})) + (s.imported ? ' · 📥 importée' : ' · ' + escapeHtml(d.toLocaleTimeString('fr-FR',{hour:'2-digit', minute:'2-digit'})))}${dur ? ' · ' + escapeHtml(dur) : ''}${s.completed_at ? '' : ' · non terminée'}</div>
         <button type="button" class="btn btn-ghost btn-sm" aria-label="Supprimer" onclick="event.stopPropagation(); askDeleteClientSession('${s.id}')">🗑</button></div>
         <h3>${escapeHtml(title)}</h3>
         ${s.completed_at ? (s.badge_eligible ? '<div style="font-size:12px; color:var(--accent); margin-top:6px;">🏅 Compte pour les badges</div>' : `<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">${s.source === 'manual' ? '✍️ Saisie après coup · ne compte pas pour les badges' : 'Ne compte pas pour les badges (&lt; 4 séries, &lt; 10 min ou 2e séance du jour)'}</div>`) : ''}
@@ -703,7 +703,7 @@ async function openClientProgress(clientId, name){
   let sessions, rows;
   try{
     const id = encodeURIComponent(clientId);
-    sessions = await api(`/rest/v1/sessions?select=id,started_at,completed_at&user_id=eq.${id}&completed_at=not.is.null&order=started_at`);
+    sessions = await api(`/rest/v1/sessions?select=id,started_at,completed_at,date_unknown&user_id=eq.${id}&completed_at=not.is.null&order=started_at`);
     rows = [];
     for(let i=0;i<20;i++){
       const part = await api(`/rest/v1/session_logs?select=exercise_id,charge,reps,duration_seconds,session_id,sessions!inner(started_at),exercises(name)&sessions.user_id=eq.${id}&order=id&limit=1000&offset=${i*1000}`);
@@ -718,7 +718,7 @@ async function openClientProgress(clientId, name){
   if(!sessions.length){ tb.innerHTML = head + '<div class="empty">Aucune séance terminée pour ce client pour l\'instant.</div>'; return; }
   // Fréquence : 8 dernières semaines
   const now = cpWeekKey(new Date()), WEEK = 7*864e5, counts = {};
-  sessions.forEach(s => { const k = cpWeekKey(s.started_at); counts[k] = (counts[k]||0)+1; });
+  sessions.forEach(s => { if(s.date_unknown) return; const k = cpWeekKey(s.started_at); counts[k] = (counts[k]||0)+1; });
   const weeks = []; for(let i=7;i>=0;i--){ const k = new Date(now); k.setDate(k.getDate()-7*i); k.setHours(0,0,0,0); weeks.push({ k:k.getTime(), n: counts[k.getTime()]||0 }); }
   const maxN = Math.max(2, ...weeks.map(w=>w.n));
   const freq = `<div class="card"><h3>Régularité · 8 dernières semaines</h3>
@@ -798,7 +798,7 @@ async function printClientReport(clientId){
       const allSessions = await api(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,declared_seconds,source,programs(name)&user_id=eq.${clientId}&order=started_at.desc&limit=2000`);
       let allLogs = [];
       for(let i = 0; i < 40; i++){
-        const part = await api(`/rest/v1/session_logs?select=id,session_id,set_number,reps,charge,completed_at,exercises(name),sessions!inner(user_id)&sessions.user_id=eq.${clientId}&order=id&limit=1000&offset=${i*1000}`);
+        const part = await api(`/rest/v1/session_logs?select=id,session_id,set_number,reps,charge,duration_seconds,completed_at,exercises(name),sessions!inner(user_id)&sessions.user_id=eq.${clientId}&order=id&limit=1000&offset=${i*1000}`);
         allLogs = allLogs.concat(part || []);
         if(!part || part.length < 1000) break;
       }
