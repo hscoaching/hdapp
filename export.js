@@ -106,6 +106,19 @@
     const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60);
     return h ? h + ' h ' + String(m).padStart(2, '0') : (m ? m + ' min' : sec + ' s');
   }
+  // Texte d'une série : durée (ex. « 20 min ») et/ou reps · charge
+  function durFmt(sec){
+    sec = Math.round(sec || 0); const m = Math.floor(sec / 60), r = sec % 60;
+    return m ? (r ? m + ' min ' + String(r).padStart(2, '0') + ' s' : m + ' min') : r + ' s';
+  }
+  function setTxt(l){
+    const parts = [];
+    if(l.duration_seconds) parts.push(durFmt(l.duration_seconds));
+    if(l.reps != null) parts.push(l.reps + ' reps');
+    if(l.charge != null) parts.push(l.charge + ' kg');
+    return parts.join(' · ') || '–';
+  }
+  const vol1 = l => (!l.duration_seconds && l.reps && l.charge) ? l.reps * l.charge : 0;
   // Blocs « séances réalisées » : un tableau récapitulatif + le détail série par série de chaque séance
   function sessionBlocks(sessions, logs){
     const by = {};
@@ -113,8 +126,8 @@
     const list = (sessions || []).filter(s => s.completed_at || by[s.id]).sort((a, b) => new Date(b.started_at) - new Date(a.started_at));
     if(!list.length) return [{ type: 'p', text: 'Aucune séance enregistrée.' }];
     const stat = s => {
-      const ls = (by[s.id] || []).filter(l => l.reps != null || l.charge != null);
-      const vol = ls.reduce((a, l) => a + ((l.reps && l.charge) ? l.reps * l.charge : 0), 0);
+      const ls = (by[s.id] || []).filter(l => l.reps != null || l.charge != null || l.duration_seconds);
+      const vol = ls.reduce((a, l) => a + vol1(l), 0);
       return { ls, vol };
     };
     const fd = (s, long) => new Date(s.started_at).toLocaleDateString('fr-FR', long ? { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' } : { day: '2-digit', month: '2-digit', year: 'numeric' });
@@ -135,12 +148,12 @@
       blocks.push({ type: 'h', small: true, text: fd(s, true) + ' - ' + ((s.programs && s.programs.name) || 'Séance libre') + (s.day_label ? ' - ' + s.day_label : '') });
       if(meta) blocks.push({ type: 'p', text: meta });
       const body = [];
-      exs.forEach(n => byEx[n].sort((a, b) => a.set_number - b.set_number).forEach((l, i) => body.push([i === 0 ? n : '', String(l.set_number), l.reps != null ? String(l.reps) : '', l.charge != null ? num(l.charge, 1) : '', (l.reps && l.charge) ? num(l.reps * l.charge) : ''])));
-      if(body.length) blocks.push({ type: 'table', head: ['Exercice', 'Série', 'Reps', 'Charge (kg)', 'Volume (kg)'], body, align: [null, 'right', 'right', 'right', 'right'], widths: [190] });
+      exs.forEach(n => byEx[n].sort((a, b) => a.set_number - b.set_number).forEach((l, i) => body.push([i === 0 ? n : '', String(l.set_number), l.reps != null ? String(l.reps) : '', l.duration_seconds ? durFmt(l.duration_seconds) : '', l.charge != null ? num(l.charge, 1) : '', vol1(l) ? num(vol1(l)) : ''])));
+      if(body.length) blocks.push({ type: 'table', head: ['Exercice', 'Série', 'Reps', 'Durée', 'Charge (kg)', 'Volume (kg)'], body, align: [null, 'right', 'right', 'right', 'right', 'right'], widths: [190] });
       else blocks.push({ type: 'p', text: 'Aucune série enregistrée pour cette séance.' });
     });
     return blocks;
   }
 
-  window.HSExport = { pdf, clean, num, fileName, ready, sessionBlocks, durTxt };
+  window.HSExport = { pdf, clean, num, fileName, ready, sessionBlocks, durTxt, setTxt, durFmt };
 })();

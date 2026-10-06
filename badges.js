@@ -80,7 +80,7 @@
       const bySession = {};
       logs.forEach(l => {
         if(!idSet.has(l.session_id)) return;
-        if(l.reps != null && l.charge != null) tonnage += l.reps * l.charge;
+        if(!l.duration_seconds && l.reps != null && l.charge != null) tonnage += l.reps * l.charge;
         if(l.charge == null) return;
         const m = bySession[l.session_id] = bySession[l.session_id] || {};
         if(!(l.exercise_id in m) || l.charge > m[l.exercise_id]) m[l.exercise_id] = l.charge;
@@ -272,7 +272,7 @@
     const sessions = await pageAll(getJson, `/rest/v1/sessions?select=id,started_at,completed_at,badge_eligible&user_id=eq.${uid}&order=started_at`);
     let logs;
     if(withLogs !== false){
-      logs = await pageAll(getJson, `/rest/v1/session_logs?select=id,session_id,exercise_id,reps,charge,sessions!inner(user_id)&sessions.user_id=eq.${uid}&order=id`);
+      logs = await pageAll(getJson, `/rest/v1/session_logs?select=id,session_id,exercise_id,reps,charge,duration_seconds,sessions!inner(user_id)&sessions.user_id=eq.${uid}&order=id`);
     }
     let revoked = [];
     try{ const r = await getJson(`/rest/v1/badge_revocations?select=badge_id,reason&user_id=eq.${uid}`); if(Array.isArray(r)) revoked = r; }catch(e){ revoked = []; }

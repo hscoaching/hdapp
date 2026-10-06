@@ -634,6 +634,43 @@ function askDeleteClientSession(id){
   HSHistory.confirmDelete({ session: s, req: api, userId: csClient.id, who: csClient.name,
     onDone: () => { csSessions = csSessions.filter(x => x.id !== id); renderClientSessions(); } });
 }
+function renderClientLogs(box, logs){
+  const keyOf = x => ((x.exercises && x.exercises.name) || '') + '|' + x.set_number;
+  const hasVal = new Set(logs.filter(x => x.reps != null || x.charge != null || x.duration_seconds).map(keyOf));
+  logs = logs.filter(x => x.reps != null || x.charge != null || x.duration_seconds || !hasVal.has(keyOf(x)));
+  box._logs = logs;
+  const byEx = {}; let vol = 0;
+  logs.forEach(l=>{
+    const n = (l.exercises && l.exercises.name) || 'Exercice';
+    (byEx[n] = byEx[n] || []).push(l);
+    if(!l.duration_seconds && l.reps && l.charge) vol += l.reps * l.charge;
+  });
+  const inp = (cls, v, ph, w, step) => `<input class="${cls}" type="number" inputmode="decimal" ${step?`step="${step}"`:''} min="0" value="${v ?? ''}" placeholder="${ph}" style="width:${w}px;padding:6px 8px;">`;
+  box.innerHTML = '<div style="font-size:12px;color:var(--ink-muted);margin-bottom:10px;">✏️ Tu peux corriger chaque série (reps, kg ou durée en min/s) puis appuyer sur Enregistrer.</div>' +
+  Object.entries(byEx).map(([n, sets])=>{
+    const body = `<div class="set-rows">${sets.map(x=>{
+      const m = x.duration_seconds ? Math.floor(x.duration_seconds/60) : '', sc = x.duration_seconds ? x.duration_seconds%60 : '';
+      return `<div class="set-row cs-edit" data-id="${x.id}" style="flex-wrap:wrap;gap:6px;"><span class="set-row-num">Série ${x.set_number}</span><span class="set-row-val" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;">${inp('c-reps',x.reps,'reps',58)}<span>reps</span>${inp('c-kg',x.charge,'kg',66,'0.5')}<span>kg</span>${inp('c-min',m,'min',54)}<span>min</span>${inp('c-sec',sc,'s',50)}<span>s</span><button type="button" class="btn btn-accent btn-sm" onclick="saveClientLog(this)">Enregistrer</button></span></div>`;
+    }).join('')}</div>`;
+    return `<div style="margin-bottom:14px;"><div style="font-weight:700;font-size:14px;margin-bottom:6px;">${escapeHtml(n)}</div>${body}</div>`;
+  }).join('') + `<div class="cs-total" style="border-top:1px solid var(--line);padding-top:10px;font-size:13.5px;display:${vol?'flex':'none'};justify-content:space-between;"><span>Poids total soulevé</span><b>${Math.round(vol).toLocaleString('fr-FR')} kg</b></div>`;
+}
+async function saveClientLog(btn){
+  const row = btn.closest('.cs-edit'), box = btn.closest('.cs-logs');
+  const g = c => row.querySelector(c).value.trim();
+  const reps = g('.c-reps'), kg = g('.c-kg'), mn = g('.c-min'), sc = g('.c-sec');
+  const dur = (parseInt(mn)||0)*60 + (parseInt(sc)||0);
+  const body = { reps: reps === '' ? null : parseInt(reps), charge: kg === '' ? null : parseFloat(kg), duration_seconds: dur > 0 ? Math.min(dur, 86400) : null };
+  btn.disabled = true;
+  try{
+    await api(`/rest/v1/session_logs?id=eq.${row.dataset.id}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify(body) });
+    const l = (box._logs||[]).find(x => String(x.id) === row.dataset.id); if(l) Object.assign(l, body);
+    let vol = 0; (box._logs||[]).forEach(x => { if(!x.duration_seconds && x.reps && x.charge) vol += x.reps*x.charge; });
+    const t = box.querySelector('.cs-total'); if(t){ t.style.display = vol ? 'flex' : 'none'; t.querySelector('b').textContent = Math.round(vol).toLocaleString('fr-FR') + ' kg'; }
+    toast('Série modifiée ✓');
+  }catch(e){ console.error(e); toast('Modification impossible, réessaie'); }
+  btn.disabled = false;
+}
 async function toggleClientSession(card, sessionId){
   const box = card.querySelector('.cs-logs');
   if(box.style.display === 'block'){ box.style.display = 'none'; return; }
@@ -641,21 +678,10 @@ async function toggleClientSession(card, sessionId){
   if(box.dataset.loaded) return;
   box.innerHTML = '<div class="empty" style="padding:6px 0;">Chargement…</div>';
   try{
-    const logs = await api(`/rest/v1/session_logs?select=set_number,reps,charge,exercises(name)&session_id=eq.${sessionId}&order=set_number`);
+    const logs = await api(`/rest/v1/session_logs?select=id,set_number,reps,charge,duration_seconds,exercises(name)&session_id=eq.${sessionId}&order=set_number,id`);
     if(!logs.length){ box.innerHTML = '<div class="empty" style="padding:6px 0;">Aucune série enregistrée pour cette séance.</div>'; box.dataset.loaded = '1'; return; }
-    const byEx = {}; let vol = 0;
-    logs.forEach(l=>{
-      const n = (l.exercises && l.exercises.name) || 'Exercice';
-      (byEx[n] = byEx[n] || []).push(l);
-      if(l.reps && l.charge) vol += l.reps * l.charge;
-    });
-    box.innerHTML = Object.entries(byEx).map(([n, sets])=>{
-      const filled = sets.filter(x => x.reps != null || x.charge != null);
-      const body = filled.length
-        ? `<div class="set-rows">${filled.map(x=>`<div class="set-row"><span class="set-row-num">Série ${x.set_number}</span><span class="set-row-val">${x.reps!=null ? x.reps+' reps' : '–'}${x.charge!=null ? ' · '+x.charge+' kg' : ''}</span></div>`).join('')}</div>`
-        : '<div style="font-size:13px;color:var(--ink-muted);">Rien noté pour cet exercice.</div>';
-      return `<div style="margin-bottom:14px;"><div style="font-weight:700;font-size:14px;margin-bottom:6px;">${escapeHtml(n)}</div>${body}</div>`;
-    }).join('') + (vol ? `<div style="border-top:1px solid var(--line);padding-top:10px;font-size:13.5px;display:flex;justify-content:space-between;"><span>Poids total soulevé</span><b>${Math.round(vol).toLocaleString('fr-FR')} kg</b></div>` : '');
+    box.onclick = ev => ev.stopPropagation();
+    renderClientLogs(box, logs);
     box.dataset.loaded = '1';
   }catch(e){
     console.error(e);
@@ -680,7 +706,7 @@ async function openClientProgress(clientId, name){
     sessions = await api(`/rest/v1/sessions?select=id,started_at,completed_at&user_id=eq.${id}&completed_at=not.is.null&order=started_at`);
     rows = [];
     for(let i=0;i<20;i++){
-      const part = await api(`/rest/v1/session_logs?select=exercise_id,charge,reps,session_id,sessions!inner(started_at),exercises(name)&sessions.user_id=eq.${id}&order=id&limit=1000&offset=${i*1000}`);
+      const part = await api(`/rest/v1/session_logs?select=exercise_id,charge,reps,duration_seconds,session_id,sessions!inner(started_at),exercises(name)&sessions.user_id=eq.${id}&order=id&limit=1000&offset=${i*1000}`);
       rows = rows.concat(part); if(part.length < 1000) break;
     }
   }catch(e){
@@ -699,7 +725,7 @@ async function openClientProgress(clientId, name){
     <div style="display:flex; gap:6px; align-items:flex-end; height:70px; margin:12px 0 6px;">${weeks.map(w=>`<div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%;"><span style="font-size:11px; color:var(--ink-muted);">${w.n||''}</span><div style="width:100%; height:${Math.max(3, w.n/maxN*48)}px; border-radius:4px; background:${w.n>=2?'var(--accent)':(w.n?'var(--ink-muted)':'var(--line)')};"></div></div>`).join('')}</div>
     <p style="font-size:12px; color:var(--ink-muted);">${sessions.length} séance${sessions.length>1?'s':''} au total · objectif : 2 par semaine (barre colorée = atteint)</p></div>`;
   // Volume par séance
-  const vol = {}; rows.forEach(r => { if(r.reps && r.charge) vol[r.session_id] = (vol[r.session_id]||0) + r.reps*r.charge; });
+  const vol = {}; rows.forEach(r => { if(!r.duration_seconds && r.reps && r.charge) vol[r.session_id] = (vol[r.session_id]||0) + r.reps*r.charge; });
   const volPts = sessions.filter(s => vol[s.id]).slice(-10);
   const tonnage = Math.round(Object.values(vol).reduce((a,b)=>a+b,0));
   const volCard = `<div class="card"><h3>Volume soulevé</h3><p style="font-size:14px; margin:6px 0;">${tonnage.toLocaleString('fr-FR')} kg au total${volPts.length ? ` · dernière séance : ${Math.round(vol[volPts[volPts.length-1].id]).toLocaleString('fr-FR')} kg` : ''}</p>${cpSpark(volPts.map(s=>({charge:vol[s.id]})))}</div>`;
@@ -805,10 +831,10 @@ async function printClientReport(clientId){
   if(sessions.length){
     try{
       const idList = sessions.map(s=>s.id).join(',');
-      const logs = await api(`/rest/v1/session_logs?select=session_id,reps,charge&session_id=in.(${idList})`);
+      const logs = await api(`/rest/v1/session_logs?select=session_id,reps,charge,duration_seconds&session_id=in.(${idList})`);
       logs.forEach(l=>{
         if(l.reps==null || l.charge==null) return;
-        logsBySession[l.session_id] = (logsBySession[l.session_id]||0) + l.reps*l.charge;
+        logsBySession[l.session_id] = (logsBySession[l.session_id]||0) + (l.duration_seconds ? 0 : l.reps*l.charge);
       });
     }catch(e){}
   }

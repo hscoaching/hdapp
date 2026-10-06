@@ -72,9 +72,9 @@
     try{
       if(o.sessionId){
         sessions = sessions.filter(s => s.id === o.sessionId);
-        logs = await req_(o, `/rest/v1/session_logs?select=session_id,set_number,reps,charge,completed_at,exercises(name)&session_id=eq.${encodeURIComponent(o.sessionId)}&order=completed_at,id`);
+        logs = await req_(o, `/rest/v1/session_logs?select=session_id,set_number,reps,charge,duration_seconds,completed_at,exercises(name)&session_id=eq.${encodeURIComponent(o.sessionId)}&order=completed_at,id`);
       } else {
-        logs = await pageAll(o.req, `/rest/v1/session_logs?select=id,session_id,set_number,reps,charge,completed_at,exercises(name),sessions!inner(user_id)&sessions.user_id=eq.${encodeURIComponent(o.userId)}&order=id`);
+        logs = await pageAll(o.req, `/rest/v1/session_logs?select=id,session_id,set_number,reps,charge,duration_seconds,completed_at,exercises(name),sessions!inner(user_id)&sessions.user_id=eq.${encodeURIComponent(o.userId)}&order=id`);
       }
     }catch(e){ console.error(e); toast("Export impossible pour le moment."); return false; }
     if(window.HSExport){
@@ -98,7 +98,7 @@
         const n = (l.exercises && l.exercises.name) || 'Exercice';
         if(!byEx[n]){ byEx[n] = []; order.push(n); }
         byEx[n].push(l);
-        if(l.reps && l.charge) vol += l.reps * l.charge;
+        if(!l.duration_seconds && l.reps && l.charge) vol += l.reps * l.charge;
       });
       const body = order.map(n => {
         const rows = byEx[n].filter(l => l.reps != null || l.charge != null).sort((a, b) => a.set_number - b.set_number);

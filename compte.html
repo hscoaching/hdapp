@@ -469,21 +469,21 @@ async function toggleSessionLogs(card, sessionId){
   box.innerHTML = '<div class="empty" style="padding:6px 0;">Chargement…</div>';
   let logs;
   try{
-    logs = await histReq(`/rest/v1/session_logs?select=id,set_number,reps,charge,exercises(name)&session_id=eq.${sessionId}&order=set_number`);
+    logs = await histReq(`/rest/v1/session_logs?select=id,set_number,reps,charge,duration_seconds,exercises(name)&session_id=eq.${sessionId}&order=set_number`);
   }catch(e){ console.error(e); box.innerHTML = '<div class="empty">Impossible de charger le détail.</div>'; return; }
   const editBlock = s.completed_at ? histEditHtml(s) : '';
   if(!logs.length){ box.innerHTML = '<div class="empty">Pas de détail pour cette séance.</div>' + editBlock; return; }
   // lignes vides en double (anciens doublons neutralisés) : on les masque
   const keyOf = x => (x.exercises?.name || '') + '|' + x.set_number;
-  const hasValue = new Set(logs.filter(x => x.reps != null || x.charge != null).map(keyOf));
-  logs = logs.filter(x => x.reps != null || x.charge != null || !hasValue.has(keyOf(x)));
+  const hasValue = new Set(logs.filter(x => x.reps != null || x.charge != null || x.duration_seconds).map(keyOf));
+  logs = logs.filter(x => x.reps != null || x.charge != null || x.duration_seconds || !hasValue.has(keyOf(x)));
   const byExercise = {};
   let totalVolume = 0;
   logs.forEach(l=>{
     const name = l.exercises?.name || 'Exercice';
     if(!byExercise[name]) byExercise[name] = [];
     byExercise[name].push(l);
-    if(l.reps && l.charge) totalVolume += l.reps * l.charge;
+    if(!l.duration_seconds && l.reps && l.charge) totalVolume += l.reps * l.charge;
   });
   const editing = !!s.edit_unlocked;
   const rows = Object.entries(byExercise).map(([name, sets])=>{
@@ -493,10 +493,10 @@ async function toggleSessionLogs(card, sessionId){
         `<div class="set-row edit-row" data-id="${x.id}"><span class="set-row-num">Série ${x.set_number}</span><span class="set-row-val"><input class="e-reps" type="number" inputmode="numeric" value="${x.reps ?? ''}" placeholder="reps" style="width:64px;" onchange="saveLogEdit(this)"> × <input class="e-charge" type="number" inputmode="decimal" step="0.5" value="${x.charge ?? ''}" placeholder="kg" style="width:72px;" onchange="saveLogEdit(this)"> kg</span></div>`
       ).join('')}</div>`;
     } else {
-      const filled = sets.filter(x => x.reps!=null || x.charge!=null);
+      const filled = sets.filter(x => x.reps!=null || x.charge!=null || x.duration_seconds);
       body = !filled.length ? `<div class="set-rows-empty">Rien noté pour cet exercice.</div>` :
         `<div class="set-rows">${filled.map(x =>
-          `<div class="set-row"><span class="set-row-num">Série ${x.set_number}</span><span class="set-row-val">${x.reps!=null ? x.reps+' reps' : '–'}${x.charge!=null ? ' · '+x.charge+' kg' : ''}</span></div>`
+          `<div class="set-row"><span class="set-row-num">Série ${x.set_number}</span><span class="set-row-val">${HSExport.setTxt(x)}</span></div>`
         ).join('')}</div>`;
     }
     return `<div style="margin-bottom:16px;"><div style="font-weight:700;font-size:15px;margin-bottom:6px;">${escapeHtml(name)}</div>${body}</div>`;
@@ -513,7 +513,7 @@ async function loadProgression(){
     // Toujours filtrer sur MON compte : un compte coach a le droit de lire les données de tous les clients.
     const myId = encodeURIComponent(getSession().user.id);
     sessions = await (await apiFetch(`/rest/v1/sessions?select=id,started_at&user_id=eq.${myId}&order=started_at`)).json();
-    rows = await (await apiFetch(`/rest/v1/session_logs?select=exercise_id,charge,reps,session_id,sessions!inner(started_at),exercises(name)&sessions.user_id=eq.${myId}&limit=10000`)).json();
+    rows = await (await apiFetch(`/rest/v1/session_logs?select=exercise_id,charge,reps,duration_seconds,session_id,sessions!inner(started_at),exercises(name)&sessions.user_id=eq.${myId}&limit=10000`)).json();
   }catch(e){ document.getElementById('tabBody').innerHTML = '<div class="empty">Impossible de charger ta progression pour le moment.</div>'; return; }
   if(!Array.isArray(sessions) || !sessions.length){
     document.getElementById('tabBody').innerHTML = '<div class="empty">Pas encore de séance enregistrée. Ton suivi apparaîtra ici dès ta première séance.</div>';
@@ -579,7 +579,7 @@ function frequencyCardHtml(sessions){
 function volumeCardHtml(rows){
   const bySession = {};
   rows.forEach(r=>{
-    if(r.reps==null || r.charge==null || !r.sessions || !r.sessions.started_at) return;
+    if(r.duration_seconds || r.reps==null || r.charge==null || !r.sessions || !r.sessions.started_at) return;
     if(!bySession[r.session_id]) bySession[r.session_id] = { date: r.sessions.started_at, vol:0 };
     bySession[r.session_id].vol += r.reps * r.charge;
   });
