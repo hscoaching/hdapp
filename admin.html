@@ -539,6 +539,7 @@ function renderClientRows(rows){
           : `<button class="btn btn-ghost btn-sm" onclick="startConversationWith('${r.client.id}','${esc}',this)">💬 Écrire</button>`}
         <button class="btn btn-ghost btn-sm" onclick="goToNewProgramFor('${r.client.id}')">+ Assigner un programme</button>
         <button class="btn btn-ghost btn-sm" onclick="openClientSessions('${r.client.id}','${esc}')">📅 Séances</button>
+        <button class="btn btn-ghost btn-sm" onclick="openClientProgress('${r.client.id}','${esc}')">📈 Progression</button>
         <button class="btn btn-ghost btn-sm" onclick="openBadgesModal('${r.client.id}','${esc}')">🏅 Badges</button>
         <button class="btn btn-ghost btn-sm" onclick="printClientReport('${r.client.id}')">📄 Export PDF</button>
       </div>
@@ -621,6 +622,61 @@ async function toggleClientSession(card, sessionId){
     console.error(e);
     box.innerHTML = '<div class="empty" style="padding:6px 0;">Impossible de charger le détail.</div>';
   }
+}
+// ---- Progression d'un client (consultation coach) ----
+function cpWeekKey(d){ const x = new Date(d); x.setDate(x.getDate() - ((x.getDay()+6)%7)); x.setHours(0,0,0,0); return x.getTime(); }
+function cpSpark(pts){
+  if(pts.length < 2) return '';
+  const w = 280, h = 64, pad = 8, ch = pts.map(p=>p.charge), min = Math.min(...ch), max = Math.max(...ch), range = (max-min) || 1, step = (w-2*pad)/(pts.length-1);
+  const co = pts.map((p,i)=>[pad+i*step, h-pad-((p.charge-min)/range)*(h-2*pad)]);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}" style="max-width:100%"><polyline points="${co.map(c=>c[0].toFixed(1)+','+c[1].toFixed(1)).join(' ')}" style="fill:none; stroke:var(--accent); stroke-width:2;" stroke-linecap="round" stroke-linejoin="round"/>${co.map(c=>`<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="2.5" style="fill:var(--accent);"/>`).join('')}</svg>`;
+}
+async function openClientProgress(clientId, name){
+  const tb = document.getElementById('tabBody');
+  const back = '<a class="backlink" onclick="renderClientsTab()">← Clients</a>';
+  tb.innerHTML = back + '<div class="empty">Chargement…</div>';
+  let sessions, rows;
+  try{
+    const id = encodeURIComponent(clientId);
+    sessions = await api(`/rest/v1/sessions?select=id,started_at,completed_at&user_id=eq.${id}&completed_at=not.is.null&order=started_at`);
+    rows = [];
+    for(let i=0;i<20;i++){
+      const part = await api(`/rest/v1/session_logs?select=exercise_id,charge,reps,session_id,sessions!inner(started_at),exercises(name)&sessions.user_id=eq.${id}&order=id&limit=1000&offset=${i*1000}`);
+      rows = rows.concat(part); if(part.length < 1000) break;
+    }
+  }catch(e){
+    console.error(e);
+    tb.innerHTML = back + '<div class="empty">Impossible de charger la progression. Réessaie.</div>';
+    return;
+  }
+  const head = `${back}<h3 style="font-family:Inter; font-weight:700; font-size:18px; margin:6px 0 4px;">Progression · ${escapeHtml(name)}</h3>`;
+  if(!sessions.length){ tb.innerHTML = head + '<div class="empty">Aucune séance terminée pour ce client pour l\'instant.</div>'; return; }
+  // Fréquence : 8 dernières semaines
+  const now = cpWeekKey(new Date()), WEEK = 7*864e5, counts = {};
+  sessions.forEach(s => { const k = cpWeekKey(s.started_at); counts[k] = (counts[k]||0)+1; });
+  const weeks = []; for(let i=7;i>=0;i--){ const k = new Date(now); k.setDate(k.getDate()-7*i); k.setHours(0,0,0,0); weeks.push({ k:k.getTime(), n: counts[k.getTime()]||0 }); }
+  const maxN = Math.max(2, ...weeks.map(w=>w.n));
+  const freq = `<div class="card"><h3>Régularité · 8 dernières semaines</h3>
+    <div style="display:flex; gap:6px; align-items:flex-end; height:70px; margin:12px 0 6px;">${weeks.map(w=>`<div style="flex:1; display:flex; flex-direction:column; justify-content:flex-end; align-items:center; height:100%;"><span style="font-size:11px; color:var(--ink-muted);">${w.n||''}</span><div style="width:100%; height:${Math.max(3, w.n/maxN*48)}px; border-radius:4px; background:${w.n>=2?'var(--accent)':(w.n?'var(--ink-muted)':'var(--line)')};"></div></div>`).join('')}</div>
+    <p style="font-size:12px; color:var(--ink-muted);">${sessions.length} séance${sessions.length>1?'s':''} au total · objectif : 2 par semaine (barre colorée = atteint)</p></div>`;
+  // Volume par séance
+  const vol = {}; rows.forEach(r => { if(r.reps && r.charge) vol[r.session_id] = (vol[r.session_id]||0) + r.reps*r.charge; });
+  const volPts = sessions.filter(s => vol[s.id]).slice(-10);
+  const tonnage = Math.round(Object.values(vol).reduce((a,b)=>a+b,0));
+  const volCard = `<div class="card"><h3>Volume soulevé</h3><p style="font-size:14px; margin:6px 0;">${tonnage.toLocaleString('fr-FR')} kg au total${volPts.length ? ` · dernière séance : ${Math.round(vol[volPts[volPts.length-1].id]).toLocaleString('fr-FR')} kg` : ''}</p>${cpSpark(volPts.map(s=>({charge:vol[s.id]})))}</div>`;
+  // Charges par exercice
+  const byEx = {};
+  rows.forEach(r => {
+    if(r.charge == null || !r.sessions || !r.sessions.started_at) return;
+    const e = byEx[r.exercise_id] = byEx[r.exercise_id] || { name:(r.exercises && r.exercises.name) || 'Exercice', by:{} };
+    const c = e.by[r.session_id]; if(!c || r.charge > c.charge) e.by[r.session_id] = { date:r.sessions.started_at, charge:r.charge };
+  });
+  const cards = Object.values(byEx).map(e => ({ name:e.name, pts:Object.values(e.by).sort((a,b)=>new Date(a.date)-new Date(b.date)) })).filter(e=>e.pts.length).sort((a,b)=>b.pts.length-a.pts.length).map(e => {
+    const f = e.pts[0].charge, l = e.pts[e.pts.length-1].charge, best = Math.max(...e.pts.map(p=>p.charge)), d = Math.round((l-f)*10)/10;
+    const dTxt = e.pts.length < 2 ? '1 séance notée' : (d>0 ? `<span style="color:var(--accent); font-weight:700;">+${d} kg</span> depuis la première séance` : (d<0 ? `${d} kg depuis la première séance` : 'Charge stable'));
+    return `<div class="card"><h3>${escapeHtml(e.name)}</h3><p style="font-size:13.5px; margin:4px 0 8px;">${dTxt}</p>${cpSpark(e.pts)}<p style="margin-top:8px; color:var(--ink-muted); font-size:12px;">Dernière : ${l} kg · Record : ${best} kg · ${e.pts.length} séance${e.pts.length>1?'s':''}</p></div>`;
+  }).join('');
+  tb.innerHTML = head + freq + volCard + (cards || '<div class="empty">Aucune charge notée pour l\'instant.</div>');
 }
 async function openBadgesModal(clientId, name){
   document.getElementById('exModalTitle').textContent = 'Badges · ' + name;
