@@ -351,7 +351,7 @@ function loadTab(){
 }
 
 async function loadProgrammes(){
-  const res = await apiFetch(`/rest/v1/programs?select=*&order=is_official.desc,created_at.desc`);
+  const res = await apiFetch(`/rest/v1/programs?select=*&or=(is_official.eq.true,owner_user_id.eq.${getSession().user.id})&order=is_official.desc,created_at.desc`);
   const programs = await res.json();
   try{
     const seen = new Set(JSON.parse(localStorage.getItem('hs_seen_programs')||'[]'));
@@ -378,7 +378,7 @@ async function loadBadges(){
   }
 }
 async function loadHistorique(){
-  const res = await apiFetch(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,programs(name)&order=started_at.desc`);
+  const res = await apiFetch(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,programs(name)&user_id=eq.${getSession().user.id}&order=started_at.desc`);
   const sessions = await res.json();
   if(!sessions.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucune séance enregistrée pour l\'instant.</div>'; return; }
   document.getElementById('tabBody').innerHTML = sessions.map(s=>{
@@ -440,8 +440,10 @@ async function loadProgression(){
   document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
   let sessions = [], rows = [];
   try{
-    sessions = await (await apiFetch(`/rest/v1/sessions?select=id,started_at&order=started_at`)).json();
-    rows = await (await apiFetch(`/rest/v1/session_logs?select=exercise_id,charge,reps,session_id,sessions(started_at),exercises(name)`)).json();
+    // Toujours filtrer sur MON compte : un compte coach a le droit de lire les données de tous les clients.
+    const myId = encodeURIComponent(getSession().user.id);
+    sessions = await (await apiFetch(`/rest/v1/sessions?select=id,started_at&user_id=eq.${myId}&order=started_at`)).json();
+    rows = await (await apiFetch(`/rest/v1/session_logs?select=exercise_id,charge,reps,session_id,sessions!inner(started_at),exercises(name)&sessions.user_id=eq.${myId}&limit=10000`)).json();
   }catch(e){ document.getElementById('tabBody').innerHTML = '<div class="empty">Impossible de charger ta progression pour le moment.</div>'; return; }
   if(!Array.isArray(sessions) || !sessions.length){
     document.getElementById('tabBody').innerHTML = '<div class="empty">Pas encore de séance enregistrée. Ton suivi apparaîtra ici dès ta première séance.</div>';
