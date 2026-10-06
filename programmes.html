@@ -1361,7 +1361,13 @@ function renderDraftList(){
     </div>`;
   }).join('') + `<p class="subtitle" style="margin-top:10px;font-size:12px;">🔗 enchaîne avec l'exercice du dessus (superset) · ↔ ajoute comme variante l'exercice sélectionné dans la grille</p>` : '<div class="empty" style="padding:14px 0;">Aucun exercice dans cette séance pour l\'instant.</div>';
 }
-function removeDraft(i){ draftExercises.splice(i,1); renderDraftList(); }
+function removeDraft(i){
+  // Si on retire la tête d'un superset, l'exercice suivant du superset devient la nouvelle tête
+  // (sinon il se retrouverait enchaîné à l'exercice qui précède le superset).
+  const j = sameDayNeighbor(i, 1);
+  if(!draftExercises[i].linkPrev && j >= 0 && draftExercises[j].linkPrev) draftExercises[j].linkPrev = false;
+  draftExercises.splice(i,1); renderDraftList();
+}
 function sameDayNeighbor(i, dir){
   let j = i + dir;
   while(j >= 0 && j < draftExercises.length && draftExercises[j].day !== draftExercises[i].day) j += dir;

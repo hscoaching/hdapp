@@ -1279,6 +1279,11 @@ function moveDraft(i, dir){
 function removeDraftEx(i){
   const ex = exercisesById[draftItems[i]?.exercise_id];
   if(!confirm(`Retirer "${ex?ex.name:'cet exercice'}" du programme ?`)) return;
+  // Si on retire la tête d'un superset, l'exercice suivant du superset devient la nouvelle tête
+  // (sinon il se retrouverait enchaîné à l'exercice qui précède le superset).
+  let j = i + 1;
+  while(j < draftItems.length && draftItems[j].day !== draftItems[i].day) j++;
+  if(!draftItems[i].linkPrev && j < draftItems.length && draftItems[j].linkPrev) draftItems[j].linkPrev = false;
   draftItems.splice(i,1);
   renderDraftList();
 }
