@@ -37,7 +37,7 @@
     if(isMobile() && navigator.canShare && navigator.share){
       try{
         const file = new File([blob], filename, { type: 'application/pdf' });
-        if(navigator.canShare({ files: [file] })){ await navigator.share({ files: [file], title: filename }); return true; }
+        if(navigator.canShare({ files: [file] })){ await navigator.share({ files: [file] }); return true; }
       }catch(e){ if(e && e.name === 'AbortError') return true; }
     }
     const url = URL.createObjectURL(blob);

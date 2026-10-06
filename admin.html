@@ -761,7 +761,7 @@ async function printClientReport(clientId){
   let exByProg = {};
   if(progList.length){
     try{
-      const all = await api(`/rest/v1/program_exercises?select=*,exercises(name)&program_id=in.(${progList.map(p=>p.id).join(',')})&order=order_index`);
+      const all = await api(`/rest/v1/program_exercises?select=*,exercises:exercises!program_exercises_exercise_id_fkey(name)&program_id=in.(${progList.map(p=>p.id).join(',')})&order=order_index`);
       all.forEach(it=>{ (exByProg[it.program_id] = exByProg[it.program_id] || []).push(it); });
     }catch(e){}
   }
