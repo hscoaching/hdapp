@@ -813,9 +813,9 @@ async function renderProgramsTab(){
   let progs, profById = {};
   try{
     progs = await api('/rest/v1/programs?select=*&order=is_official.desc,created_at.desc');
-    const ownerIds = [...new Set(progs.map(p=>p.owner_user_id).filter(Boolean))];
+    const ownerIds = [...new Set(progs.flatMap(p=>[p.owner_user_id, p.created_by]).filter(Boolean))];
     if(ownerIds.length){
-      const profs = await api(`/rest/v1/profiles?select=id,full_name,email&id=in.(${ownerIds.join(',')})`);
+      const profs = await api(`/rest/v1/profiles?select=id,full_name,email,role&id=in.(${ownerIds.join(',')})`);
       profById = Object.fromEntries(profs.map(p=>[p.id,p]));
     }
   }catch(e){
@@ -824,10 +824,19 @@ async function renderProgramsTab(){
     return;
   }
   document.getElementById('progList').innerHTML = progs.length ? progs.map(p=>{
-    const owner = p.owner_user_id ? escapeHtml(profById[p.owner_user_id]?.full_name || profById[p.owner_user_id]?.email || 'client') : null;
+    const nameOf = id => { const pr = profById[id]; return pr ? (pr.full_name || pr.email || 'Client') : 'Client'; };
+    let tagTxt;
+    if(p.is_official) tagTxt = 'Officiel — tous les visiteurs';
+    else if(p.owner_guest_id && !p.owner_user_id) tagTxt = 'Créé par : Visiteur';
+    else if(p.owner_user_id){
+      const O = nameOf(p.owner_user_id);
+      if(!p.created_by) tagTxt = `Programme de ${O} · créateur non enregistré`;
+      else if(p.created_by === p.owner_user_id) tagTxt = `Créé par ${O} (client)`;
+      else tagTxt = `Créé par ${profById[p.created_by]?.role==='admin' ? 'le coach' : nameOf(p.created_by)} · pour ${O}`;
+    } else tagTxt = 'Visiteur';
     return `<div class="card">
       <div onclick="renderProgramForm('${p.id}')" style="cursor:pointer;">
-        <div class="tag">${p.is_official ? 'Officiel — tous les visiteurs' : (owner ? 'Assigné à '+owner : 'Perso visiteur')}</div>
+        <div class="tag">${escapeHtml(tagTxt)}</div>
         <h3>${escapeHtml(p.name)}</h3><p>${escapeHtml(p.description||'')}</p>
       </div>
       <div class="row-actions" style="margin-top:10px;">

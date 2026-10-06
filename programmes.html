@@ -594,6 +594,18 @@ async function renderList(){
   `;
   allPrograms = [];
   try{ allPrograms = await listPrograms(); }catch(e){ console.error(e); }
+  // Vue coach : on indique qui a créé chaque programme (nom du client, « Visiteur », ou le coach)
+  creatorProfiles = {};
+  if(isCoachView()){
+    const h = document.querySelector('#mineGrid')?.previousElementSibling; if(h) h.textContent = 'Programmes des clients et visiteurs';
+    try{
+      const ids = [...new Set(allPrograms.flatMap(p=>[p.owner_user_id, p.created_by]).filter(Boolean))];
+      if(ids.length){
+        const rows = await (await authedFetch(`/rest/v1/profiles?select=id,full_name,email,role&id=in.(${ids.join(',')})`)).json();
+        if(Array.isArray(rows)) rows.forEach(r=> creatorProfiles[r.id] = r);
+      }
+    }catch(e){ console.error(e); }
+  }
   markProgramsSeen(allPrograms);
   renderProgramGrids(allPrograms);
 }
@@ -612,9 +624,23 @@ function filterProgramList(){
   );
   renderProgramGrids(matches);
 }
+let creatorProfiles = {};
+function isCoachView(){ return isLoggedIn() && localStorage.getItem('hs_role') === 'admin'; }
+function creatorLabel(p){
+  if(p.is_official) return 'Coach';
+  const nameOf = id => { const r = creatorProfiles[id]; return r ? (r.full_name || r.email || 'Client') : 'Client'; };
+  if(p.owner_guest_id && !p.owner_user_id) return 'Visiteur';
+  if(p.owner_user_id){
+    const O = nameOf(p.owner_user_id);
+    if(!p.created_by) return `Programme de ${O}`;
+    if(p.created_by === p.owner_user_id) return `Créé par ${O}`;
+    return `Créé par ${creatorProfiles[p.created_by] && creatorProfiles[p.created_by].role === 'admin' ? 'le coach' : nameOf(p.created_by)} · pour ${O}`;
+  }
+  return 'Visiteur';
+}
 function cardHtml(p){
   return `<button class="prog-card" onclick="location.hash='#programme/${p.id}'">
-    <div class="tag">${p.is_official?'Coach':'Perso'}</div>
+    <div class="tag">${p.is_official ? 'Coach' : (isCoachView() ? escHtml(creatorLabel(p)) : 'Perso')}</div>
     <h3>${p.name}</h3>
     <p>${p.description||''}</p>
   </button>`;
