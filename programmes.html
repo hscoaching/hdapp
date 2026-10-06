@@ -64,6 +64,13 @@
   .actions-row{display:flex; gap:10px; flex-wrap:wrap; margin-top:18px;}
 
   .empty{color:var(--ink-muted); font-size:13.5px; padding:16px 0;}
+  .promo{margin:34px 0 8px; padding:24px 22px; border-radius:20px; border:1px solid var(--accent); background:linear-gradient(160deg, var(--surface-2,#1f2024), var(--surface,#16171a));}
+  .promo .cat{color:var(--accent); font-weight:700; font-size:12px; letter-spacing:.1em; margin-bottom:6px;}
+  .promo h2{font-family:'Bebas Neue'; font-size:30px; line-height:1.05; margin:0 0 10px; letter-spacing:.01em;}
+  .promo p{color:var(--ink-muted); font-size:14px; line-height:1.5; margin:0 0 14px;}
+  .promo ul{list-style:none; margin:0 0 18px; padding:0; display:grid; gap:8px; font-size:14px;}
+  .promo li::before{content:'✓'; color:var(--accent); font-weight:800; margin-right:9px;}
+  .promo .btn{width:100%; justify-content:center;}
 
   #printProgramArea{display:none;}
   @media print{
@@ -602,6 +609,17 @@ async function renderList(){
     <div class="field"><label>Chercher un programme</label><input id="progSearch" type="text" placeholder="Nom, description…" oninput="filterProgramList()"></div>
     <div class="section"><h2>Programmes du coach</h2><div class="prog-grid" id="officialGrid"><div class="empty">Chargement…</div></div></div>
     <div class="section"><h2>Mes programmes</h2><div class="prog-grid" id="mineGrid"><div class="empty">Chargement…</div></div></div>
+    <div class="promo">
+      <div class="cat">COACHING PERSONNALISÉ</div>
+      <h2>Passe au niveau supérieur avec HS Coaching</h2>
+      <p>Tu veux aller plus vite et être sûr de ce que tu fais ? Ton coach construit un programme pensé pour toi et t'accompagne séance après séance.</p>
+      <ul>
+        <li>Un programme sur mesure : ton niveau, ton objectif, ton emploi du temps</li>
+        <li>Un suivi de tes séances, de tes charges et de ta progression</li>
+        <li>Des ajustements réguliers et des messages directs avec ton coach</li>
+      </ul>
+      <button class="btn btn-accent" onclick="openContactModal()">Je veux être coaché</button>
+    </div>
   `;
   allPrograms = [];
   try{ allPrograms = await listPrograms(); }catch(e){ console.error(e); }
