@@ -389,16 +389,17 @@ async function lastLogsFor(programId, dayLabel){
     const dayFilter = dayLabel ? `&day_label=eq.${encodeURIComponent(dayLabel)}` : '&day_label=is.null';
     const sessions = await (await authedFetch(`/rest/v1/sessions?select=id&program_id=eq.${programId}&user_id=eq.${s.user.id}${dayFilter}&order=started_at.desc&limit=1`)).json();
     if(!sessions.length) return [];
-    return (await authedFetch(`/rest/v1/session_logs?select=exercise_id,set_number,reps,charge&session_id=eq.${sessions[0].id}`)).json();
+    return (await authedFetch(`/rest/v1/session_logs?select=exercise_id,set_number,reps,charge,duration_seconds&session_id=eq.${sessions[0].id}`)).json();
   }
   return rpc('guest_last_session_logs_day', { p_token: TOKEN, p_program_id: programId, p_day_label: dayLabel||null });
 }
-async function logSetFor(sessionId, exId, setNum, reps, charge){
+async function logSetFor(sessionId, exId, setNum, reps, charge, durationSec){
   if(isLoggedIn()){
-    const res = await authedFetch('/rest/v1/session_logs', { method:'POST', body: JSON.stringify({ session_id: sessionId, exercise_id: exId, set_number: setNum, reps, charge }) });
+    const res = await authedFetch('/rest/v1/session_logs', { method:'POST', body: JSON.stringify({ session_id: sessionId, exercise_id: exId, set_number: setNum, reps, charge, duration_seconds: durationSec || null }) });
     if(!res.ok) throw new Error('log_failed');
     return res;
   }
+  if(durationSec) return rpc('guest_log_set_t', { p_token: TOKEN, p_session_id: sessionId, p_exercise_id: exId, p_set_number: setNum, p_reps: reps, p_charge: charge, p_duration_seconds: durationSec });
   return rpc('guest_log_set', { p_token: TOKEN, p_session_id: sessionId, p_exercise_id: exId, p_set_number: setNum, p_reps: reps, p_charge: charge });
 }
 // durationSec == null : la séance se termine « maintenant » ; sinon durée fixée à la main (en secondes)
@@ -889,8 +890,23 @@ async function renderSession(programId, dayIdx, manual){
     else blocks.push({ group: u.group, units: [u] });
   });
   const varBtn = k => slotState[k].variant ? `<button type="button" class="var-btn" data-slotbtn="${k}" onclick="event.stopPropagation(); swapVariant(${k})">↔ ${escHtml(exercisesById[slotState[k].variant].name)}</button>` : '';
+  const TIME_RE = /\d\s*(min|sec|s\b|m\b|'|")/i;
+  const isTimed = u => (u.ex.category || '').toLowerCase() === 'cardio' || TIME_RE.test(u.it.reps || '');
   const lineHtml = (u, s) => {
     const prev = lastByKey[`${u.ex.id}_${s}`];
+    if(isTimed(u)){
+      const pd = prev && prev.duration_seconds ? prev.duration_seconds : 0;
+      const phm = pd ? Math.floor(pd/60) : 'min', phs = pd ? (pd%60) : 'sec';
+      return `<div class="set-line" data-slot="${u.k}" data-ex="${u.ex.id}" data-set="${s}" data-timed="1">
+        <div class="setnum">S${s}</div>
+        <input type="number" class="reps-input" style="display:none"><input type="number" class="charge-input" style="display:none">
+        <input type="number" inputmode="numeric" min="0" placeholder="${phm}" class="min-input">
+        <span class="unit">min</span>
+        <input type="number" inputmode="numeric" min="0" max="59" placeholder="${phs}" class="sec-input">
+        <span class="unit">s</span>
+        ${manual ? '' : '<button class="valid" onclick="validateSet(this)">✓</button>'}
+      </div>`;
+    }
     const ph = prev ? `${prev.reps||''}` : (u.it.reps||'');
     const phc = prev ? `${prev.charge||''}` : '';
     return `<div class="set-line" data-slot="${u.k}" data-ex="${u.ex.id}" data-set="${s}">
@@ -981,8 +997,9 @@ async function renderSession(programId, dayIdx, manual){
       if(!line) return;
       if(v.reps!=null) line.querySelector('.reps-input').value = v.reps;
       if(v.charge!=null) line.querySelector('.charge-input').value = v.charge;
+      if(v.sec && line.querySelector('.min-input')){ line.querySelector('.min-input').value = Math.floor(v.sec/60); line.querySelector('.sec-input').value = v.sec%60; }
       line.querySelector('.valid').classList.add('done');
-      sessDone[`${line.dataset.ex}_${setNum}`] = (v.reps && v.charge) ? v.reps*v.charge : 0;
+      sessDone[`${line.dataset.ex}_${setNum}`] = (!v.sec && v.reps && v.charge) ? v.reps*v.charge : 0;
     });
   }
   sessTick = setInterval(sessTickFn, 250);
@@ -1020,13 +1037,21 @@ async function validateSet(btn){
 async function validateSetInner(btn){
   const line = btn.closest('.set-line');
   const exId = line.dataset.ex; const setNum = parseInt(line.dataset.set);
-  const reps = parseInt(line.querySelector('.reps-input').value) || null;
-  const charge = parseFloat(line.querySelector('.charge-input').value) || null;
+  const timed = line.dataset.timed === '1';
+  let reps = parseInt(line.querySelector('.reps-input').value) || null;
+  let charge = parseFloat(line.querySelector('.charge-input').value) || null;
+  let sec = null;
+  if(timed){
+    reps = null; charge = null;
+    sec = (parseInt(line.querySelector('.min-input').value) || 0) * 60 + (parseInt(line.querySelector('.sec-input').value) || 0);
+    if(sec <= 0){ toast('Indique la durée (minutes / secondes)'); return; }
+    sec = Math.min(sec, 86400);
+  }
   try{
-    await logSetFor(activeSession, exId, setNum, reps, charge);
+    await logSetFor(activeSession, exId, setNum, reps, charge, sec);
     btn.classList.add('done');
     sessDone[`${exId}_${setNum}`] = (reps && charge) ? reps*charge : 0;
-    if(activeMeta){ activeMeta.done = activeMeta.done || {}; activeMeta.done[`${line.dataset.slot}|${setNum}`] = { reps, charge }; saveActive(); }
+    if(activeMeta){ activeMeta.done = activeMeta.done || {}; activeMeta.done[`${line.dataset.slot}|${setNum}`] = { reps, charge, sec }; saveActive(); }
   }catch(e){ toast('Erreur, réessaie'); }
 }
 
@@ -1128,8 +1153,9 @@ async function saveManualSession(programId){
   const entries = [...document.querySelectorAll('#sessBody .set-line')].map(l=>({
     exId: l.dataset.ex, setNum: parseInt(l.dataset.set),
     reps: parseInt(l.querySelector('.reps-input').value) || null,
-    charge: parseFloat(l.querySelector('.charge-input').value) || null
-  })).filter(e=> e.reps || e.charge);
+    charge: parseFloat(l.querySelector('.charge-input').value) || null,
+    sec: l.dataset.timed === '1' ? Math.min(86400, (parseInt(l.querySelector('.min-input').value) || 0) * 60 + (parseInt(l.querySelector('.sec-input').value) || 0)) || null : null
+  })).filter(e=> e.reps || e.charge || e.sec);
   if(!entries.length){ toast('Renseigne au moins une série'); return; }
   const dateVal = document.getElementById('manDate').value;
   if(!dateVal){ toast('Choisis la date de la séance'); return; }
@@ -1144,7 +1170,7 @@ async function saveManualSession(programId){
   let sid;
   try{
     sid = await addPastSessionFor(programId, activeDayLabel, startDt.toISOString(), durSec);
-    const results = await Promise.all(entries.map(e=> logSetFor(sid, e.exId, e.setNum, e.reps, e.charge)));
+    const results = await Promise.all(entries.map(e=> logSetFor(sid, e.exId, e.setNum, e.reps, e.charge, e.sec)));
     if(results.some(r=> r && r.ok === false)) throw new Error('log_failed');
     await completeSessionFor(sid, durSec);
   }catch(e){ console.error(e); toast('Erreur, réessaie'); btn.disabled = false; return; }

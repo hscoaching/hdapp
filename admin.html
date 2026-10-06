@@ -622,7 +622,7 @@ function renderClientSessions(){
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;"><div class="tag">${s.date_unknown ? 'Date inconnue · 📥 importée' : escapeHtml(d.toLocaleDateString('fr-FR',{weekday:'short', day:'numeric', month:'long', year:'numeric'})) + (s.imported ? ' · 📥 importée' : ' · ' + escapeHtml(d.toLocaleTimeString('fr-FR',{hour:'2-digit', minute:'2-digit'})))}${dur ? ' · ' + escapeHtml(dur) : ''}${s.completed_at ? '' : ' · non terminée'}</div>
         <button type="button" class="btn btn-ghost btn-sm" aria-label="Supprimer" onclick="event.stopPropagation(); askDeleteClientSession('${s.id}')">🗑</button></div>
         <h3>${escapeHtml(title)}</h3>
-        ${s.completed_at ? (s.badge_eligible ? '<div style="font-size:12px; color:var(--accent); margin-top:6px;">🏅 Compte pour les badges</div>' : `<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">${s.source === 'manual' ? '✍️ Saisie après coup · ne compte pas pour les badges' : 'Ne compte pas pour les badges (&lt; 4 séries, &lt; 10 min ou 2e séance du jour)'}</div>`) : ''}
+        ${s.completed_at ? (s.badge_eligible ? '<div style="font-size:12px; color:var(--accent); margin-top:6px;">🏅 Compte pour les badges</div>' : `<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">${s.source === 'manual' ? '✍️ Saisie après coup · ne compte pas pour les badges' : 'Ne compte pas pour les badges (ni 4 séries ni 10 min de cardio, &lt; 10 min ou 2e séance du jour)'}</div>`) : ''}
         ${s.edit_unlocked ? '<div style="font-size:12px; color:var(--accent); margin-top:6px;">✏️ Modification autorisée en cours</div>' : ''}
         <div class="cs-logs" style="display:none; margin-top:12px;"></div>
       </div>`;

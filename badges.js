@@ -16,13 +16,19 @@
     { id:'w4',   group:'Régularité', icon:'⚡', title:'Mois parfait',       desc:'4 semaines d\'affilée',              kind:'streak', target:4 },
     { id:'w8',   group:'Régularité', icon:'🚀', title:'Machine',            desc:'8 semaines d\'affilée',              kind:'streak', target:8 },
     { id:'w12',  group:'Régularité', icon:'💎', title:'Inarrêtable',        desc:'12 semaines d\'affilée',             kind:'streak', target:12 },
-    { id:'t1',   group:'Poids soulevé', icon:'🏋️', title:'1 tonne',         desc:'1 000 kg soulevés au total',         kind:'tonnage', target:1000 },
-    { id:'t10',  group:'Poids soulevé', icon:'🦾', title:'10 tonnes',       desc:'10 000 kg soulevés au total',        kind:'tonnage', target:10000 },
-    { id:'t50',  group:'Poids soulevé', icon:'🏗️', title:'50 tonnes',       desc:'50 000 kg soulevés au total',        kind:'tonnage', target:50000 },
-    { id:'t100', group:'Poids soulevé', icon:'🏔️', title:'100 tonnes',      desc:'100 000 kg soulevés au total',       kind:'tonnage', target:100000 },
-    { id:'p1',   group:'Dépassement', icon:'🏆', title:'Record battu',      desc:'Une charge supérieure à ta meilleure marque', kind:'pr', target:1 },
-    { id:'p10',  group:'Dépassement', icon:'🥇', title:'Chasseur de records', desc:'10 records battus',               kind:'pr', target:10 },
-    { id:'cb',   group:'Dépassement', icon:'💪', title:'Retour en force',   desc:`Une séance après ${COMEBACK_DAYS} jours ou plus de pause`, kind:'comeback', target:1 }
+    { id:'cb',   group:'Dépassement', icon:'💪', title:'Retour en force',   desc:`Une séance après ${COMEBACK_DAYS} jours ou plus de pause`, kind:'comeback', target:1 },
+    { id:'t1',   group:'Bonus muscu · Poids soulevé', icon:'🏋️', title:'1 tonne',         desc:'1 000 kg soulevés au total',         bonus:true, kind:'tonnage', target:1000 },,
+    { id:'t10',  group:'Bonus muscu · Poids soulevé', icon:'🦾', title:'10 tonnes',       desc:'10 000 kg soulevés au total',        bonus:true, kind:'tonnage', target:10000 },,
+    { id:'t50',  group:'Bonus muscu · Poids soulevé', icon:'🏗️', title:'50 tonnes',       desc:'50 000 kg soulevés au total',        bonus:true, kind:'tonnage', target:50000 },,
+    { id:'t100', group:'Bonus muscu · Poids soulevé', icon:'🏔️', title:'100 tonnes',      desc:'100 000 kg soulevés au total',       bonus:true, kind:'tonnage', target:100000 },,
+    { id:'p1',   group:'Bonus muscu · Records', icon:'🏆', title:'Record battu',      desc:'Une charge supérieure à ta meilleure marque', bonus:true, kind:'pr', target:1 },,
+    { id:'p10',  group:'Bonus muscu · Records', icon:'🥇', title:'Chasseur de records', desc:'10 records battus',               bonus:true, kind:'pr', target:10 },,
+    { id:'c1',   group:'Bonus cardio', icon:'⏱️', title:'Premier souffle',  desc:'1 h de cardio au total',             kind:'cardiotime', bonus:true, target:3600 },
+    { id:'c10',  group:'Bonus cardio', icon:'🏃', title:'Endurant',         desc:'10 h de cardio au total',            kind:'cardiotime', bonus:true, target:36000 },
+    { id:'c50',  group:'Bonus cardio', icon:'🚴', title:'Grand fond',       desc:'50 h de cardio au total',            kind:'cardiotime', bonus:true, target:180000 },
+    { id:'c100', group:'Bonus cardio', icon:'🫀', title:'Cœur d\'acier',    desc:'100 h de cardio au total',           kind:'cardiotime', bonus:true, target:360000 },
+    { id:'cs10', group:'Bonus cardio', icon:'🌬️', title:'Cardio régulier',  desc:'10 séances avec au moins 10 min de cardio', kind:'cardiosessions', bonus:true, target:10 },
+    { id:'cs25', group:'Bonus cardio', icon:'🔄', title:'Cardio fidèle',    desc:'25 séances avec au moins 10 min de cardio', kind:'cardiosessions', bonus:true, target:25 }
   ];
 
   // Lundi (heure locale) de la semaine d'une date, exprimé en numéro de semaine absolu
@@ -42,14 +48,21 @@
     const ids = new Set(sessions.map(s => s.id));
     const hasLogs = Array.isArray(data.logs);
     const logs = hasLogs ? data.logs.filter(l => ids.has(l.session_id)) : [];
-    return { sessions, logs, hasLogs };
+    const cardioSet = new Set(data.cardioIds || []);
+    const hasCardio = hasLogs && Array.isArray(data.cardioIds);
+    // secondes de cardio par séance
+    const cardioBySession = {};
+    if(hasCardio) logs.forEach(l => { if(l.duration_seconds && cardioSet.has(l.exercise_id)) cardioBySession[l.session_id] = (cardioBySession[l.session_id] || 0) + l.duration_seconds; });
+    return { sessions, logs, hasLogs, hasCardio, cardioBySession };
   }
 
   // Statistiques « à la date asOf » sur les séances données
-  function stats(sessions, logs, hasLogs, asOf){
+  function stats(sessions, logs, hasLogs, asOf, cardioBySession, hasCardio){
     const upTo = sessions.filter(s => s.t <= asOf);
     const idSet = new Set(upTo.map(s => s.id));
     const total = upTo.length;
+    let cardioSec = 0, cardioSessions = 0;
+    upTo.forEach(s => { const c = (cardioBySession && cardioBySession[s.id]) || 0; cardioSec += c; if(c >= 600) cardioSessions++; });
 
     // Semaines
     const perWeek = {};
@@ -94,7 +107,7 @@
         });
       });
     }
-    return { total, best, current, thisWeek, comebacks, tonnage, prs, hasLogs };
+    return { total, best, current, thisWeek, comebacks, tonnage, prs, hasLogs, hasCardio, cardioSec, cardioSessions };
   }
 
   function value(def, st){
@@ -102,6 +115,8 @@
          : def.kind === 'streak'   ? st.best
          : def.kind === 'tonnage'  ? st.tonnage
          : def.kind === 'pr'       ? st.prs
+         : def.kind === 'cardiotime' ? st.cardioSec
+         : def.kind === 'cardiosessions' ? st.cardioSessions
          : st.comebacks;
   }
 
@@ -111,11 +126,11 @@
     let asOf = now || new Date();
     // l'horloge du téléphone peut retarder de quelques minutes sur le serveur : on ne laisse jamais une séance « dans le futur »
     if(p.sessions.length && p.sessions[p.sessions.length-1].t > asOf) asOf = p.sessions[p.sessions.length-1].t;
-    const st = stats(p.sessions, p.logs, p.hasLogs, asOf);
+    const st = stats(p.sessions, p.logs, p.hasLogs, asOf, p.cardioBySession, p.hasCardio);
     const unlockedAt = {};
     // date de déblocage : première séance après laquelle le badge est acquis
     p.sessions.forEach(s => {
-      const sst = stats(p.sessions, p.logs, p.hasLogs, s.t);
+      const sst = stats(p.sessions, p.logs, p.hasLogs, s.t, p.cardioBySession, p.hasCardio);
       DEFS.forEach(d => {
         if(!unlockedAt[d.id] && value(d, sst) >= d.target) unlockedAt[d.id] = s.t;
       });
@@ -124,7 +139,7 @@
     (data.revoked || []).forEach(r => { revoked[r.badge_id] = r; });
     const badges = DEFS.map(d => {
       const cur = value(d, st);
-      const needsLogs = (d.kind === 'tonnage' || d.kind === 'pr') && !p.hasLogs;
+      const needsLogs = ((d.kind === 'tonnage' || d.kind === 'pr') && !p.hasLogs) || ((d.kind === 'cardiotime' || d.kind === 'cardiosessions') && !p.hasCardio);
       const rev = revoked[d.id] || null;
       return Object.assign({}, d, {
         cur, unlocked: !needsLogs && cur >= d.target && !rev, needsLogs,
@@ -133,7 +148,8 @@
         unlockedAt: unlockedAt[d.id] || null
       });
     });
-    return { stats: st, badges, unlockedCount: badges.filter(b => b.unlocked).length, goal: WEEKLY_GOAL };
+    const core = badges.filter(b => !b.bonus), bonus = badges.filter(b => b.bonus);
+    return { stats: st, badges, unlockedCount: core.filter(b => b.unlocked).length, coreTotal: core.length, bonusUnlocked: bonus.filter(b => b.unlocked).length, bonusTotal: bonus.length, goal: WEEKLY_GOAL };
   }
 
   // Badges débloqués grâce à une séance précise (comparaison avant / après)
@@ -149,7 +165,11 @@
   }
 
   const nf = n => Math.round(n).toLocaleString('fr-FR');
-  function fmtVal(b, v){ return b.kind === 'tonnage' ? nf(v) + ' kg' : String(Math.min(v, 999999)); }
+  function fmtVal(b, v){
+    if(b.kind === 'tonnage') return nf(v) + ' kg';
+    if(b.kind === 'cardiotime'){ const h = v / 3600; return (h >= 10 ? Math.floor(h) : Math.round(h * 10) / 10).toString().replace('.', ',') + ' h'; }
+    return String(Math.min(v, 999999));
+  }
   function esc(s){ return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
 
   function ensureCss(){
@@ -235,13 +255,13 @@
       <div class="bdg-hero">
         <div class="bdg-hero-top">
           <div class="bdg-streak">${streakTxt}<small>Meilleure série : ${st.best} semaine${st.best > 1 ? 's' : ''} · ${st.total} séance${st.total > 1 ? 's' : ''} comptée${st.total > 1 ? 's' : ''}</small></div>
-          <div class="bdg-count"><b>${res.unlockedCount}/${res.badges.length}</b>badges</div>
+          <div class="bdg-count"><b>${res.unlockedCount}/${res.coreTotal}</b>badges${res.bonusUnlocked ? `<small style="display:block;font-size:12px;">+ ${res.bonusUnlocked} bonus</small>` : ''}</div>
         </div>
         <div class="bdg-week">${weekLine}<div class="bdg-dots">${weekDots(st.thisWeek, res.goal)}</div></div>
         <div class="bdg-mini">Objectif : ${res.goal} séances par semaine. Une semaine de pause par mois ne casse pas ta série.</div>
-        <div class="bdg-rule">Une séance compte pour les badges si elle est faite en direct : au moins 4 séries, au moins 10 minutes, et une seule par jour. Les séances saisies après coup restent dans ton historique mais ne comptent pas.</div>
+        <div class="bdg-rule">Une séance compte pour les badges si elle est faite en direct, dure au moins 10 minutes, avec au moins 4 séries ou au moins 10 minutes de cardio, et une seule par jour. Les séances saisies après coup ou importées restent dans ton historique mais ne comptent pas. Les badges « bonus » sont facultatifs : muscu ou cardio, pas besoin de faire les deux.</div>
       </div>
-      ${groups.map(g => `<div class="bdg-group">${esc(g)}</div><div class="bdg-grid">${res.badges.filter(b => b.group === g).map(badgeHtml).join('')}</div>`).join('')}
+      ${groups.map(g => `<div class="bdg-group">${esc(g)}${/^Bonus/.test(g) ? ' <span style="text-transform:none;letter-spacing:0;font-weight:500;">· facultatif</span>' : ''}</div><div class="bdg-grid">${res.badges.filter(b => b.group === g).map(badgeHtml).join('')}</div>`).join('')}
     `;
   }
 
@@ -267,7 +287,7 @@
   // Résumé d'une ligne (liste des clients côté coach)
   function summaryLine(res){
     const st = res.stats;
-    return `🔥 ${st.current} sem. de suite · ${st.total} séance${st.total > 1 ? 's' : ''}` + (st.hasLogs ? ` · 🏅 ${res.unlockedCount}/${res.badges.length}` : '');
+    return `🔥 ${st.current} sem. de suite · ${st.total} séance${st.total > 1 ? 's' : ''}` + (st.hasLogs ? ` · 🏅 ${res.unlockedCount}/${res.coreTotal}${res.bonusUnlocked ? ' +' + res.bonusUnlocked : ''}` : '');
   }
 
   // Chargement des séances (et des séries) d'un utilisateur, par pages de 1000 lignes.
@@ -289,9 +309,11 @@
     if(withLogs !== false){
       logs = await pageAll(getJson, `/rest/v1/session_logs?select=id,session_id,exercise_id,reps,charge,duration_seconds,sessions!inner(user_id)&sessions.user_id=eq.${uid}&order=id`);
     }
+    let cardioIds;
+    if(withLogs !== false){ try{ const c = await getJson('/rest/v1/exercises?select=id&category=eq.Cardio&limit=500'); if(Array.isArray(c)) cardioIds = c.map(x => x.id); }catch(e){} }
     let revoked = [];
     try{ const r = await getJson(`/rest/v1/badge_revocations?select=badge_id,reason&user_id=eq.${uid}`); if(Array.isArray(r)) revoked = r; }catch(e){ revoked = []; }
-    return { sessions, logs, revoked };
+    return { sessions, logs, revoked, cardioIds };
   }
 
   window.HSBadges = { chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, WEEKLY_GOAL };

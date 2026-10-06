@@ -425,7 +425,7 @@ function histBadgeNote(s){
   if(s.badge_eligible) return '<div style="font-size:12px; color:var(--accent); margin-top:6px;">🏅 Compte pour les badges</div>';
   if(s.imported) return '<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">📥 Séance importée · compte pour ta progression, pas pour les badges</div>';
   if(s.source === 'manual') return '<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">✍️ Saisie après coup · ne compte pas pour les badges</div>';
-  return '<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">Ne compte pas pour les badges (moins de 4 séries, moins de 10 min, ou déjà une séance comptée ce jour)</div>';
+  return '<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">Ne compte pas pour les badges (ni 4 séries ni 10 min de cardio, moins de 10 min, ou déjà une séance comptée ce jour)</div>';
 }
 async function loadHistorique(){
   const uid = getSession().user.id;
