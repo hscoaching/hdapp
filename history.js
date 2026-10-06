@@ -77,6 +77,16 @@
         logs = await pageAll(o.req, `/rest/v1/session_logs?select=id,session_id,set_number,reps,charge,completed_at,exercises(name),sessions!inner(user_id)&sessions.user_id=eq.${encodeURIComponent(o.userId)}&order=id`);
       }
     }catch(e){ console.error(e); toast("Export impossible pour le moment."); return false; }
+    if(window.HSExport){
+      const when = new Date().toLocaleDateString('fr-FR', {day:'numeric', month:'long', year:'numeric'});
+      const ok = await HSExport.pdf({
+        title: "Historique d'entraînement" + (o.who ? ' - ' + o.who : ''),
+        subtitle: 'HS Coaching - exporté le ' + when,
+        filename: HSExport.fileName(o.sessionId ? 'seance' : 'historique', o.who),
+        blocks: HSExport.sessionBlocks(sessions, logs)
+      });
+      if(ok) return true;
+    }
     const bySession = {};
     logs.forEach(l => { (bySession[l.session_id] = bySession[l.session_id] || []).push(l); });
     const blocks = sessions.filter(s => s.completed_at || bySession[s.id]).map(s => {

@@ -279,6 +279,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="badges.js"></script>
+<script src="export.js"></script>
 <script>
 String.prototype.fold = function(){ return this.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }; // recherche sans accents
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
@@ -737,9 +738,30 @@ async function renderProgramDetail(programId){
     ${(!multi && items.length) ? `<div class="session-bar"><button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}/seance'">Démarrer la séance</button></div>` : ''}
   `;
 }
-function printProgram(){
+async function printProgram(){
   if(!currentProgramDetail) return;
   const { name, description, items } = currentProgramDetail;
+  // Vrai fichier PDF (tableaux) téléchargé directement ; en cas d'échec, on retombe sur l'impression
+  if(window.HSExport){
+    try{
+      const tags = supersetTags(items);
+      const groups = groupByDay(items);
+      const blocks = [];
+      if(description) blocks.push({ type:'p', text: description });
+      groups.forEach(g => {
+        if(groups.length > 1) blocks.push({ type:'h', small:true, text: g.label });
+        const ts = supersetTags(g.items);
+        blocks.push({ type:'table', head:['Exercice','Séries','Reps','Repos (s)','Remarque'],
+          body: g.items.map((it,i) => {
+            const ex = exercisesById[it.exercise_id]; if(!ex) return null;
+            const vex = it.variant_exercise_id ? exercisesById[it.variant_exercise_id] : null;
+            return [ex.name, String(it.sets ?? ''), String(it.reps ?? ''), String(it.rest_seconds ?? ''), [ts[i] ? 'Superset ' + ts[i] : '', vex ? 'Variante : ' + vex.name : ''].filter(Boolean).join(' - ')];
+          }).filter(Boolean), align:[null,'right','right','right',null], widths:[170] });
+      });
+      const ok = await HSExport.pdf({ title: name, subtitle: "HS Coaching - Programme d'entraînement", filename: HSExport.fileName('programme', name), blocks });
+      if(ok) return;
+    }catch(e){ console.error(e); }
+  }
   const pexList = list=>{
     const tags = supersetTags(list);
     return list.map((it,i)=>{
