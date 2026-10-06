@@ -375,25 +375,20 @@ async function logSetFor(sessionId, exId, setNum, reps, charge){
 // durationSec == null : la séance se termine « maintenant » ; sinon durée fixée à la main (en secondes)
 async function completeSessionFor(sessionId, durationSec){
   if(isLoggedIn()){
-    let completed = new Date().toISOString();
-    if(durationSec != null){
-      const r = await authedFetch(`/rest/v1/sessions?select=started_at&id=eq.${sessionId}`);
-      const rows = await r.json();
-      if(!rows[0]) throw new Error('session introuvable');
-      completed = new Date(Date.parse(rows[0].started_at) + durationSec*1000).toISOString();
-    }
-    const res = await authedFetch(`/rest/v1/sessions?id=eq.${sessionId}`, { method:'PATCH', body: JSON.stringify({ completed_at: completed }) });
+    // L'heure de fin est fixée par le serveur ; la durée saisie à la main n'est qu'indicative.
+    const body = { completed_at: new Date().toISOString() };
+    if(durationSec != null) body.declared_seconds = Math.round(durationSec);
+    const res = await authedFetch(`/rest/v1/sessions?id=eq.${sessionId}`, { method:'PATCH', body: JSON.stringify(body) });
     if(res && res.ok === false) throw new Error('complete_failed');
     return res;
   }
-  if(durationSec != null) return rpc('guest_complete_session_dur', { p_token: TOKEN, p_session_id: sessionId, p_duration_seconds: durationSec });
+  if(durationSec != null) return rpc('guest_complete_session_dur', { p_token: TOKEN, p_session_id: sessionId, p_duration_seconds: Math.round(durationSec) });
   return rpc('guest_complete_session', { p_token: TOKEN, p_session_id: sessionId });
 }
-// Séance saisie après coup : date de début et durée choisies par la personne
+// Séance saisie après coup : créée « ouverte », on ajoute les séries puis on la termine (elle ne compte pas pour les badges)
 async function addPastSessionFor(programId, dayLabel, startedAtIso, durationSec){
   if(isLoggedIn()){
-    const completed = new Date(Date.parse(startedAtIso) + durationSec*1000).toISOString();
-    const res = await authedFetch('/rest/v1/sessions', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ program_id: programId, day_label: dayLabel||null, started_at: startedAtIso, completed_at: completed, user_id: getUserSession().user.id }) });
+    const res = await authedFetch('/rest/v1/sessions', { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ program_id: programId, day_label: dayLabel||null, started_at: startedAtIso, source:'manual', declared_seconds: durationSec, user_id: getUserSession().user.id }) });
     if(!res.ok) throw new Error('create_failed');
     const data = await res.json(); return data[0].id;
   }
@@ -1091,10 +1086,12 @@ async function saveManualSession(programId){
   let startDt = isToday ? new Date(Date.now() - durSec*1000) : new Date(y, m-1, d, 12, 0, 0);
   if(startDt > now) startDt = now;
   btn.disabled = true;
+  let sid;
   try{
-    const sid = await addPastSessionFor(programId, activeDayLabel, startDt.toISOString(), durSec);
+    sid = await addPastSessionFor(programId, activeDayLabel, startDt.toISOString(), durSec);
     const results = await Promise.all(entries.map(e=> logSetFor(sid, e.exId, e.setNum, e.reps, e.charge)));
     if(results.some(r=> r && r.ok === false)) throw new Error('log_failed');
+    await completeSessionFor(sid, durSec);
   }catch(e){ console.error(e); toast('Erreur, réessaie'); btn.disabled = false; return; }
   const vol = entries.reduce((a,e)=> a + ((e.reps && e.charge) ? e.reps*e.charge : 0), 0);
   showSessionSummary(programId, 'SÉANCE ENREGISTRÉE', durSec*1000, entries.length, vol, sid);

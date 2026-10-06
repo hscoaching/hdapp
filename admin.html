@@ -448,20 +448,52 @@ function load(){
 
 // ================= CLIENTS =================
 let clientRows = [];
+let pendingEditReqs = [];
+function renderEditRequests(){
+  const box = document.getElementById('editReqBox'); if(!box) return;
+  if(!pendingEditReqs.length){ box.innerHTML = ''; return; }
+  const nameOf = id => { const r = clientRows.find(x => x.client.id === id); return r ? (r.client.full_name || r.client.email) : 'Client'; };
+  box.innerHTML = `<div class="card" style="border-color:var(--accent); margin-bottom:16px;">
+    <h3 style="font-family:Inter; font-weight:700; font-size:16px; margin:0 0 4px;">✏️ ${pendingEditReqs.length} demande${pendingEditReqs.length>1?'s':''} de modification</h3>
+    <p class="empty" style="padding:0 0 8px; text-align:left;">Si tu approuves, le client peut corriger les séries de cette séance puis la verrouiller de nouveau.</p>
+    ${pendingEditReqs.map(r => {
+      const s = r.sessions || {};
+      const d = s.started_at ? new Date(s.started_at).toLocaleDateString('fr-FR',{day:'numeric', month:'long', year:'numeric'}) : '';
+      const t = (s.programs && s.programs.name ? s.programs.name : 'Séance libre') + (s.day_label ? ' · ' + s.day_label : '');
+      return `<div style="border-top:1px solid var(--line); padding:12px 0;">
+        <div style="font-weight:700;">${escapeHtml(nameOf(r.user_id))} <span style="font-weight:500; color:var(--ink-muted);">· ${escapeHtml(d)} · ${escapeHtml(t)}</span></div>
+        <div style="font-size:13.5px; margin:6px 0 10px; white-space:pre-wrap;">« ${escapeHtml(r.message)} »</div>
+        <div class="row-actions" style="gap:8px; flex-wrap:wrap;">
+          <button class="btn btn-ghost btn-sm" onclick="openClientSessions('${r.user_id}','${escapeHtml(nameOf(r.user_id)).replace(/'/g,'')}')">📅 Voir la séance</button>
+          <button class="btn btn-accent btn-sm" onclick="decideEditRequest('${r.id}', true)">Approuver</button>
+          <button class="btn btn-ghost btn-sm" onclick="decideEditRequest('${r.id}', false)">Refuser</button>
+        </div></div>`;
+    }).join('')}</div>`;
+}
+async function decideEditRequest(id, approve){
+  try{
+    await api('/rest/v1/rpc/decide_edit_request', { method:'POST', body: JSON.stringify({ p_request: id, p_approve: approve }) });
+  }catch(e){ console.error(e); toast('Action impossible. Réessaie.'); return; }
+  pendingEditReqs = pendingEditReqs.filter(r => r.id !== id);
+  renderEditRequests();
+  toast(approve ? 'Modification autorisée' : 'Demande refusée');
+}
 let clientSearchQ = '';
 async function renderClientsTab(){
   document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
-  let clients, progs, sessions, convs, unreadMsgs;
+  let clients, progs, sessions, convs, unreadMsgs, revs = [], editReqs = [];
   try{
     clients = await api('/rest/v1/profiles?select=id,full_name,email&role=eq.client&order=full_name');
     if(!clients.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucun client pour le moment.</div>'; return; }
     const idList = clients.map(c=>c.id).join(',');
     [progs, sessions, convs, unreadMsgs] = await Promise.all([
       api(`/rest/v1/programs?select=id,name,owner_user_id,created_at&owner_user_id=in.(${idList})&is_official=eq.false&order=created_at.desc`),
-      api(`/rest/v1/sessions?select=id,user_id,started_at,completed_at&user_id=in.(${idList})&order=started_at.desc&limit=5000`),
+      api(`/rest/v1/sessions?select=id,user_id,started_at,completed_at,badge_eligible&user_id=in.(${idList})&order=started_at.desc&limit=5000`),
       api(`/rest/v1/conversations?select=id,user_id&user_id=in.(${idList})`),
       api('/rest/v1/messages?select=conversation_id&sender=eq.user&read=eq.false')
     ]);
+    try{ revs = await api(`/rest/v1/badge_revocations?select=user_id,badge_id,reason&user_id=in.(${idList})`) || []; }catch(e){ revs = []; }
+    try{ editReqs = await api('/rest/v1/session_edit_requests?select=id,session_id,user_id,message,created_at,sessions(started_at,day_label,programs(name))&status=eq.pending&order=created_at') || []; }catch(e){ editReqs = []; }
   }catch(e){
     console.error(e);
     document.getElementById('tabBody').innerHTML = '<div class="empty">Impossible de charger les clients. Réessaie.</div>';
@@ -485,7 +517,7 @@ async function renderClientsTab(){
     const convId = convByUser[c.id] || null;
     const unread = convId ? (unreadByConv[convId]||0) : 0;
     let badgeLine = '';
-    try{ if(typeof HSBadges !== 'undefined') badgeLine = HSBadges.summaryLine(HSBadges.compute({ sessions: sessionsByUser[c.id] || [] })); }catch(e){}
+    try{ if(typeof HSBadges !== 'undefined') badgeLine = HSBadges.summaryLine(HSBadges.compute({ sessions: sessionsByUser[c.id] || [], revoked: revs.filter(r => r.user_id === c.id) })); }catch(e){}
     return { client:c, prog, progs: progsOfUser, last, convId, unread, badgeLine };
   });
   clientRows.sort((a,b)=>{
@@ -495,10 +527,13 @@ async function renderClientsTab(){
     return tb - ta;
   });
   clientSearchQ = '';
+  pendingEditReqs = editReqs;
   document.getElementById('tabBody').innerHTML = `
+    <div id="editReqBox"></div>
     <div class="field"><label>Chercher un client</label><input id="clientSearch" type="text" placeholder="Nom ou email…" oninput="filterClientsTab(this.value)"></div>
     <div id="clientsList"></div>
   `;
+  renderEditRequests();
   renderClientRows(clientRows);
 }
 function filterClientsTab(q){
@@ -550,7 +585,8 @@ function renderClientRows(rows){
 let csClient = null, csSessions = [], csShowAll = false;
 function fmtSessDuration(s){
   if(!s.completed_at) return '';
-  const ms = new Date(s.completed_at) - new Date(s.started_at);
+  let ms = new Date(s.completed_at) - new Date(s.started_at);
+  if(s.declared_seconds != null) ms = s.declared_seconds * 1000;
   if(ms <= 2000) return '';
   const tot = Math.round(ms/1000), h = Math.floor(tot/3600), m = Math.floor((tot%3600)/60), sec = tot%60;
   return h ? `${h} h ${String(m).padStart(2,'0')} min` : (m ? `${m} min ${String(sec).padStart(2,'0')} s` : `${sec} s`);
@@ -559,7 +595,7 @@ async function openClientSessions(clientId, name){
   csClient = { id: clientId, name }; csShowAll = false;
   document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
   try{
-    csSessions = await api(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,programs(name)&user_id=eq.${clientId}&order=started_at.desc&limit=300`);
+    csSessions = await api(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,declared_seconds,badge_eligible,source,edit_unlocked,programs(name)&user_id=eq.${clientId}&order=started_at.desc&limit=300`);
   }catch(e){
     console.error(e);
     document.getElementById('tabBody').innerHTML = '<a class="backlink" onclick="renderClientsTab()">← Clients</a><div class="empty">Impossible de charger les séances. Réessaie.</div>';
@@ -585,6 +621,8 @@ function renderClientSessions(){
         <div style="display:flex; justify-content:space-between; align-items:flex-start; gap:10px;"><div class="tag">${escapeHtml(d.toLocaleDateString('fr-FR',{weekday:'short', day:'numeric', month:'long', year:'numeric'}))} · ${escapeHtml(d.toLocaleTimeString('fr-FR',{hour:'2-digit', minute:'2-digit'}))}${dur ? ' · ' + escapeHtml(dur) : ''}${s.completed_at ? '' : ' · non terminée'}</div>
         <button type="button" class="btn btn-ghost btn-sm" aria-label="Supprimer" onclick="event.stopPropagation(); askDeleteClientSession('${s.id}')">🗑</button></div>
         <h3>${escapeHtml(title)}</h3>
+        ${s.completed_at ? (s.badge_eligible ? '<div style="font-size:12px; color:var(--accent); margin-top:6px;">🏅 Compte pour les badges</div>' : `<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">${s.source === 'manual' ? '✍️ Saisie après coup · ne compte pas pour les badges' : 'Ne compte pas pour les badges (&lt; 4 séries, &lt; 10 min ou 2e séance du jour)'}</div>`) : ''}
+        ${s.edit_unlocked ? '<div style="font-size:12px; color:var(--accent); margin-top:6px;">✏️ Modification autorisée en cours</div>' : ''}
         <div class="cs-logs" style="display:none; margin-top:12px;"></div>
       </div>`;
     }).join('') : '<div class="empty">Aucune séance enregistrée pour ce client.</div>'}</div>
@@ -678,7 +716,28 @@ async function openClientProgress(clientId, name){
   }).join('');
   tb.innerHTML = head + freq + volCard + (cards || '<div class="empty">Aucune charge notée pour l\'instant.</div>');
 }
+let bmClient = null;
+async function refreshBadgesModal(){ if(bmClient) await openBadgesModal(bmClient.id, bmClient.name); }
+async function revokeBadgeAdmin(badgeId){
+  if(!bmClient) return;
+  const reason = prompt('Pourquoi annuler ce badge ? (visible par le client, tu peux laisser vide)');
+  if(reason === null) return;
+  try{
+    await api('/rest/v1/badge_revocations', { method:'POST', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ user_id: bmClient.id, badge_id: badgeId, reason: reason.trim() || null }) });
+  }catch(e){ console.error(e); toast("Impossible d'annuler le badge"); return; }
+  toast('Badge annulé');
+  refreshBadgesModal();
+}
+async function restoreBadgeAdmin(badgeId){
+  if(!bmClient) return;
+  try{
+    await api(`/rest/v1/badge_revocations?user_id=eq.${encodeURIComponent(bmClient.id)}&badge_id=eq.${encodeURIComponent(badgeId)}`, { method:'DELETE', headers:{ Prefer:'return=representation' } });
+  }catch(e){ console.error(e); toast('Impossible de rétablir le badge'); return; }
+  toast('Badge rétabli');
+  refreshBadgesModal();
+}
 async function openBadgesModal(clientId, name){
+  bmClient = { id: clientId, name };
   document.getElementById('exModalTitle').textContent = 'Badges · ' + name;
   const body = document.getElementById('exModalBody');
   body.innerHTML = '<div class="empty">Chargement…</div>';
@@ -687,7 +746,7 @@ async function openBadgesModal(clientId, name){
   if(typeof HSBadges === 'undefined'){ body.innerHTML = '<div class="empty">Badges indisponibles.</div>' + closeBtn; return; }
   try{
     const data = await HSBadges.load(p => api(p), clientId);
-    body.innerHTML = HSBadges.renderFull(HSBadges.compute(data)) + closeBtn;
+    body.innerHTML = HSBadges.renderFull(HSBadges.compute(data), { coach: true }) + closeBtn;
   }catch(e){
     console.error(e);
     body.innerHTML = '<div class="empty">Impossible de charger les badges. Réessaie.</div>' + closeBtn;

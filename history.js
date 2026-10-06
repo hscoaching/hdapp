@@ -47,7 +47,7 @@
 
   function fmtDur(s){
     if(!s.completed_at) return '';
-    const ms = new Date(s.completed_at) - new Date(s.started_at);
+    const ms = s.declared_seconds != null ? s.declared_seconds * 1000 : new Date(s.completed_at) - new Date(s.started_at);
     if(ms <= 2000) return '';
     const tot = Math.round(ms / 1000), h = Math.floor(tot / 3600), m = Math.floor((tot % 3600) / 60), sec = tot % 60;
     return h ? `${h} h ${String(m).padStart(2,'0')} min ${String(sec).padStart(2,'0')} s` : (m ? `${m} min ${String(sec).padStart(2,'0')} s` : `${sec} s`);
@@ -145,5 +145,36 @@
     };
   }
 
-  window.HSHistory = { confirmDelete, exportPdf };
+  // Demande de modification d'une séance terminée (le coach doit approuver)
+  function requestEdit(o){
+    ensureCss();
+    const s = o.session;
+    const d = new Date(s.started_at);
+    const label = (s.programs && s.programs.name ? s.programs.name : 'Séance libre') + (s.day_label ? ' · ' + s.day_label : '');
+    const ov = document.createElement('div'); ov.className = 'hsd-overlay';
+    ov.innerHTML = `<div class="hsd-card" role="dialog" aria-modal="true">
+      <h3>Demander une modification</h3>
+      <p class="hsd-what"><b>${esc(label)}</b><br>${esc(d.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'}))}</p>
+      <div class="hsd-tip" style="color:var(--ink,#f5f5f5);">Une séance terminée est verrouillée. Explique à ton coach ce que tu veux corriger : il devra l'approuver avant que tu puisses modifier tes séries.</div>
+      <textarea id="hsdMsg" rows="4" maxlength="500" placeholder="Ex : j'ai noté 60 kg au lieu de 50 kg sur le développé couché" style="width:100%; box-sizing:border-box; background:var(--surface-2,#1f2024); color:var(--ink,#f5f5f5); border:1px solid var(--line,#2c2c30); border-radius:12px; padding:12px; font-family:inherit; font-size:14px; resize:vertical;"></textarea>
+      <button type="button" class="hsd-btn" id="hsdSend" style="background:var(--accent,#fff); color:var(--accent-ink,#0b0b0c);">Envoyer la demande</button>
+      <button type="button" class="hsd-btn" id="hsdCancel">Annuler</button>
+    </div>`;
+    document.body.appendChild(ov);
+    const close = () => ov.remove();
+    ov.addEventListener('click', e => { if(e.target === ov) close(); });
+    ov.querySelector('#hsdCancel').onclick = close;
+    ov.querySelector('#hsdSend').onclick = async () => {
+      const msg = ov.querySelector('#hsdMsg').value.trim();
+      if(msg.length < 5){ toast('Explique ce que tu veux corriger'); return; }
+      const btn = ov.querySelector('#hsdSend'); btn.disabled = true;
+      try{
+        await o.req('/rest/v1/session_edit_requests', { method:'POST', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ session_id: s.id, message: msg }) });
+      }catch(e){ console.error(e); btn.disabled = false; toast("Envoi impossible. Réessaie."); return; }
+      close(); toast('Demande envoyée à ton coach');
+      if(typeof o.onDone === 'function') o.onDone();
+    };
+  }
+
+  window.HSHistory = { confirmDelete, exportPdf, requestEdit, toast };
 })();

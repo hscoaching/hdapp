@@ -33,9 +33,10 @@
     return Math.round((x.getTime() - new Date(1970,0,5).getTime()) / (7*86400000));
   }
 
-  // Séances comptées = terminées. data = { sessions:[{id,started_at,completed_at}], logs:[{session_id,exercise_id,reps,charge}] }
+  // Séances comptées = terminées + éligibles. data = { sessions:[{id,started_at,completed_at}], logs:[{session_id,exercise_id,reps,charge}] }
   function prepare(data){
-    const sessions = (data.sessions || []).filter(s => s && s.completed_at && s.started_at)
+    // Seules les séances « éligibles » (faites en direct, assez longues, 1 par jour) comptent pour les badges
+    const sessions = (data.sessions || []).filter(s => s && s.completed_at && s.started_at && s.badge_eligible === true)
       .map(s => ({ id:s.id, t:new Date(s.started_at) }))
       .sort((a,b) => a.t - b.t);
     const ids = new Set(sessions.map(s => s.id));
@@ -119,11 +120,16 @@
         if(!unlockedAt[d.id] && value(d, sst) >= d.target) unlockedAt[d.id] = s.t;
       });
     });
+    const revoked = {};
+    (data.revoked || []).forEach(r => { revoked[r.badge_id] = r; });
     const badges = DEFS.map(d => {
       const cur = value(d, st);
       const needsLogs = (d.kind === 'tonnage' || d.kind === 'pr') && !p.hasLogs;
+      const rev = revoked[d.id] || null;
       return Object.assign({}, d, {
-        cur, unlocked: !needsLogs && cur >= d.target, needsLogs,
+        cur, unlocked: !needsLogs && cur >= d.target && !rev, needsLogs,
+        earned: !needsLogs && cur >= d.target,
+        revoked: !!rev, revokedReason: rev ? (rev.reason || '') : '',
         unlockedAt: unlockedAt[d.id] || null
       });
     });
@@ -135,7 +141,8 @@
     const after = compute(data);
     const before = compute({
       sessions: (data.sessions||[]).filter(s => s.id !== sessionId),
-      logs: data.logs ? data.logs.filter(l => l.session_id !== sessionId) : data.logs
+      logs: data.logs ? data.logs.filter(l => l.session_id !== sessionId) : data.logs,
+      revoked: data.revoked
     });
     const had = new Set(before.badges.filter(b => b.unlocked).map(b => b.id));
     return { after, fresh: after.badges.filter(b => b.unlocked && !had.has(b.id)) };
@@ -176,6 +183,13 @@
       .bdg-new-list{display:flex; flex-wrap:wrap; gap:14px; justify-content:center;}
       .bdg-new-item{max-width:130px;}
       .bdg-new-item .bdg-ico{font-size:40px; margin-bottom:4px;}
+      .bdg.revoked{opacity:.8; border-color:#c0504d;}
+      .bdg.revoked .bdg-ico{filter:grayscale(1);}
+      .bdg-rev{font-size:11px; color:#ff8a85; margin-top:6px; font-weight:700;}
+      .bdg-rev small{display:block; font-weight:500; color:var(--ink-muted,#9a9a9e);}
+      .bdg-act{margin-top:8px; font-family:inherit; font-size:12px; font-weight:700; padding:6px 12px; border-radius:999px; border:1px solid var(--line,#2c2c30); background:var(--surface-2,#1f2024); color:var(--ink,#f5f5f5); cursor:pointer;}
+      .bdg-act.warn{border-color:#c0504d; color:#ff8a85;}
+      .bdg-rule{font-size:12px; color:var(--ink-muted,#9a9a9e); margin-top:8px; line-height:1.4;}
       .bdg-mini{font-size:12.5px; color:var(--ink-muted,#9a9a9e); margin-top:6px;}
     `;
     document.head.appendChild(st);
@@ -198,10 +212,14 @@
     const weekLine = `Cette semaine : ${Math.min(st.thisWeek, 99)}/${res.goal} séance${res.goal > 1 ? 's' : ''}` + (st.thisWeek >= res.goal ? ' ✅' : '');
     const groups = [];
     res.badges.forEach(b => { if(groups.indexOf(b.group) < 0) groups.push(b.group); });
+    const coach = !!opts.coach;
     const badgeHtml = b => {
+      if(b.revoked){
+        return `<div class="bdg revoked"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div><div class="bdg-rev">Annulé par le coach${b.revokedReason ? `<small>${esc(b.revokedReason)}</small>` : ''}</div>${coach ? `<button type="button" class="bdg-act" onclick="restoreBadgeAdmin('${b.id}')">Rétablir</button>` : ''}</div>`;
+      }
       if(b.unlocked){
         const d = b.unlockedAt ? new Date(b.unlockedAt).toLocaleDateString('fr-FR', {day:'numeric', month:'short', year:'numeric'}) : '';
-        return `<div class="bdg"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div>${d ? `<div class="bdg-date">${d}</div>` : ''}</div>`;
+        return `<div class="bdg"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div>${d ? `<div class="bdg-date">${d}</div>` : ''}${coach ? `<button type="button" class="bdg-act warn" onclick="revokeBadgeAdmin('${b.id}')">Annuler ce badge</button>` : ''}</div>`;
       }
       const pct = b.needsLogs ? 0 : Math.max(0, Math.min(100, Math.round(b.cur / b.target * 100)));
       const prog = b.needsLogs ? '' : (b.kind === 'comeback' ? '' : `<div class="bdg-bar"><i style="width:${pct}%"></i></div><div class="bdg-prog">${fmtVal(b, b.cur)} / ${fmtVal(b, b.target)}</div>`);
@@ -210,11 +228,12 @@
     return `
       <div class="bdg-hero">
         <div class="bdg-hero-top">
-          <div class="bdg-streak">${streakTxt}<small>Meilleure série : ${st.best} semaine${st.best > 1 ? 's' : ''} · ${st.total} séance${st.total > 1 ? 's' : ''} au total</small></div>
+          <div class="bdg-streak">${streakTxt}<small>Meilleure série : ${st.best} semaine${st.best > 1 ? 's' : ''} · ${st.total} séance${st.total > 1 ? 's' : ''} comptée${st.total > 1 ? 's' : ''}</small></div>
           <div class="bdg-count"><b>${res.unlockedCount}/${res.badges.length}</b>badges</div>
         </div>
         <div class="bdg-week">${weekLine}<div class="bdg-dots">${weekDots(st.thisWeek, res.goal)}</div></div>
         <div class="bdg-mini">Objectif : ${res.goal} séances par semaine. Une semaine de pause par mois ne casse pas ta série.</div>
+        <div class="bdg-rule">Une séance compte pour les badges si elle est faite en direct : au moins 4 séries, au moins 10 minutes, et une seule par jour. Les séances saisies après coup restent dans ton historique mais ne comptent pas.</div>
       </div>
       ${groups.map(g => `<div class="bdg-group">${esc(g)}</div><div class="bdg-grid">${res.badges.filter(b => b.group === g).map(badgeHtml).join('')}</div>`).join('')}
     `;
@@ -250,12 +269,14 @@
   }
   async function load(getJson, userId, withLogs){
     const uid = encodeURIComponent(userId);
-    const sessions = await pageAll(getJson, `/rest/v1/sessions?select=id,started_at,completed_at&user_id=eq.${uid}&order=started_at`);
+    const sessions = await pageAll(getJson, `/rest/v1/sessions?select=id,started_at,completed_at,badge_eligible&user_id=eq.${uid}&order=started_at`);
     let logs;
     if(withLogs !== false){
       logs = await pageAll(getJson, `/rest/v1/session_logs?select=id,session_id,exercise_id,reps,charge,sessions!inner(user_id)&sessions.user_id=eq.${uid}&order=id`);
     }
-    return { sessions, logs };
+    let revoked = [];
+    try{ const r = await getJson(`/rest/v1/badge_revocations?select=badge_id,reason&user_id=eq.${uid}`); if(Array.isArray(r)) revoked = r; }catch(e){ revoked = []; }
+    return { sessions, logs, revoked };
   }
 
   window.HSBadges = { compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, WEEKLY_GOAL };

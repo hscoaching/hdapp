@@ -378,24 +378,41 @@ async function loadBadges(){
     if(currentTab === 'badges') box.innerHTML = '<div class="empty">Impossible de charger tes badges. Réessaie.</div>';
   }
 }
-let HIST = [];
+let HIST = [], HISTREQ = {};
 async function histReq(path, opts){
   const res = await apiFetch(path, opts);
   if(!res.ok) throw new Error(await res.text());
   const t = await res.text();
   return t ? JSON.parse(t) : null;
 }
+function histDurSec(s){
+  if(!s.completed_at) return 0;
+  if(s.declared_seconds != null) return s.declared_seconds;
+  return Math.max(0, Math.round((new Date(s.completed_at) - new Date(s.started_at)) / 1000));
+}
+function histBadgeNote(s){
+  if(!s.completed_at) return '';
+  if(s.badge_eligible) return '<div style="font-size:12px; color:var(--accent); margin-top:6px;">🏅 Compte pour les badges</div>';
+  if(s.source === 'manual') return '<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">✍️ Saisie après coup · ne compte pas pour les badges</div>';
+  return '<div style="font-size:12px; color:var(--ink-muted); margin-top:6px;">Ne compte pas pour les badges (moins de 4 séries, moins de 10 min, ou déjà une séance comptée ce jour)</div>';
+}
 async function loadHistorique(){
-  const res = await apiFetch(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,programs(name)&user_id=eq.${getSession().user.id}&order=started_at.desc`);
+  const uid = getSession().user.id;
+  const res = await apiFetch(`/rest/v1/sessions?select=id,started_at,completed_at,day_label,declared_seconds,badge_eligible,source,edit_unlocked,programs(name)&user_id=eq.${uid}&order=started_at.desc`);
   const sessions = await res.json();
-  HIST = sessions;
-  if(!sessions.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucune séance enregistrée pour l\'instant.</div>'; return; }
+  HIST = Array.isArray(sessions) ? sessions : [];
+  HISTREQ = {};
+  try{
+    const reqs = await histReq(`/rest/v1/session_edit_requests?select=id,session_id,status,message,created_at&user_id=eq.${uid}&order=created_at.desc`);
+    (reqs || []).forEach(r => { if(!HISTREQ[r.session_id]) HISTREQ[r.session_id] = r; });
+  }catch(e){ console.error(e); }
+  if(!HIST.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucune séance enregistrée pour l\'instant.</div>'; return; }
   const exportBar = `<div style="margin-bottom:14px;"><button type="button" class="btn btn-ghost btn-block" style="margin-top:0;" onclick="exportAllHistory()">📄 Exporter tout mon historique (PDF)</button></div>`;
-  document.getElementById('tabBody').innerHTML = exportBar + sessions.map(s=>{
+  document.getElementById('tabBody').innerHTML = exportBar + HIST.map(s=>{
     const d = new Date(s.started_at);
     let duree = '';
-    if(s.completed_at && (new Date(s.completed_at) - d) > 2000){
-      const tot = Math.max(1, Math.round((new Date(s.completed_at) - d) / 1000));
+    const tot = histDurSec(s);
+    if(tot > 2){
       const h = Math.floor(tot/3600), m = Math.floor((tot%3600)/60), sec = tot%60;
       duree = ' · ' + (h ? `${h} h ${String(m).padStart(2,'0')} min ${String(sec).padStart(2,'0')} s` : (m ? `${m} min ${String(sec).padStart(2,'0')} s` : `${sec} s`));
     }
@@ -405,7 +422,8 @@ async function loadHistorique(){
         <button type="button" aria-label="Supprimer cette séance" title="Supprimer" onclick="event.stopPropagation(); askDeleteSession('${s.id}')" style="background:none; border:1px solid var(--line); color:var(--ink-muted); border-radius:999px; padding:4px 10px; font-size:13px; cursor:pointer;">🗑</button>
       </div>
       <h3>${escapeHtml(s.programs?.name || 'Séance libre')}${s.day_label ? ' · ' + escapeHtml(s.day_label) : ''}</h3>
-      <div class="logs" style="display:none; margin-top:12px;"></div>
+      ${histBadgeNote(s)}
+      <div class="logs" style="display:none; margin-top:12px;" onclick="event.stopPropagation()"></div>
     </div>`;
   }).join('');
 }
@@ -416,43 +434,70 @@ function askDeleteSession(id){
 function exportAllHistory(){
   HSHistory.exportPdf({ req: histReq, userId: getSession().user.id, sessions: HIST, who: getSession().user.email });
 }
+function askEditSession(id){
+  const s = HIST.find(x => x.id === id); if(!s) return;
+  HSHistory.requestEdit({ session: s, req: histReq, onDone: () => { const c = document.querySelector(`.card[data-sid="${id}"]`); loadHistorique(); } });
+}
+function histEditHtml(s){
+  const r = HISTREQ[s.id];
+  if(s.edit_unlocked) return `<div style="border:1px solid var(--accent); border-radius:10px; padding:12px; margin-top:12px; font-size:13.5px;">✏️ Ton coach a autorisé la modification. Corrige tes séries puis valide.<button type="button" class="btn btn-accent btn-block" style="margin-top:10px;" onclick="finishEditSession('${s.id}')">Terminer les modifications</button></div>`;
+  if(r && r.status === 'pending') return `<div style="font-size:13px; color:var(--ink-muted); margin-top:12px;">⏳ Demande de modification envoyée, en attente de ton coach.</div>`;
+  const note = r && r.status === 'rejected' ? `<div style="font-size:13px; color:var(--ink-muted); margin-top:12px;">Ta dernière demande a été refusée par ton coach.</div>` : '';
+  return note + `<button type="button" class="btn btn-ghost" style="margin-top:12px;" onclick="askEditSession('${s.id}')">✏️ Demander une modification</button>`;
+}
+async function finishEditSession(id){
+  try{
+    await histReq('/rest/v1/rpc/finish_session_edit', { method:'POST', body: JSON.stringify({ p_session: id }) });
+  }catch(e){ console.error(e); HSHistory.toast('Impossible de terminer. Réessaie.'); return; }
+  HSHistory.toast('Séance verrouillée à nouveau');
+  loadHistorique();
+}
+async function saveLogEdit(inp){
+  const row = inp.closest('.edit-row');
+  const reps = row.querySelector('.e-reps').value, charge = row.querySelector('.e-charge').value;
+  try{
+    await histReq(`/rest/v1/session_logs?id=eq.${row.dataset.id}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ reps: reps === '' ? null : parseInt(reps), charge: charge === '' ? null : parseFloat(charge) }) });
+    HSHistory.toast('Enregistré');
+  }catch(e){ console.error(e); HSHistory.toast('Modification refusée. Réessaie.'); }
+}
 async function toggleSessionLogs(card, sessionId){
   const box = card.querySelector('.logs');
   if(box.style.display==='block'){ box.style.display='none'; return; }
-  if(!box.dataset.loaded){
-    const res = await apiFetch(`/rest/v1/session_logs?select=set_number,reps,charge,exercises(name)&session_id=eq.${sessionId}&order=set_number`);
-    const logs = await res.json();
-    if(!logs.length){ box.innerHTML = '<div class="empty">Pas de détail pour cette séance.</div>'; }
-    else {
-      const byExercise = {};
-      let totalVolume = 0;
-      logs.forEach(l=>{
-        const name = l.exercises?.name || 'Exercice';
-        if(!byExercise[name]) byExercise[name] = [];
-        byExercise[name].push(l);
-        if(l.reps && l.charge) totalVolume += l.reps * l.charge;
-      });
-      const rows = Object.entries(byExercise).map(([name, sets])=>{
-        const filled = sets.filter(s => s.reps!=null || s.charge!=null);
-        let body;
-        if(!filled.length){
-          body = `<div class="set-rows-empty">Rien noté pour cet exercice.</div>`;
-        } else {
-          body = `<div class="set-rows">${filled.map(s =>
-            `<div class="set-row"><span class="set-row-num">Série ${s.set_number}</span><span class="set-row-val">${s.reps!=null ? s.reps+' reps' : '–'}${s.charge!=null ? ' · '+s.charge+' kg' : ''}</span></div>`
-          ).join('')}</div>`;
-        }
-        return `<div style="margin-bottom:16px;">
-          <div style="font-weight:700;font-size:15px;margin-bottom:6px;">${escapeHtml(name)}</div>
-          ${body}
-        </div>`;
-      }).join('');
-      const volumeLine = totalVolume ? `<div class="log-line" style="border-top:1px solid var(--line);padding-top:12px;margin-top:4px;font-size:14px;"><span>Poids total soulevé pendant la séance</span><b>${Math.round(totalVolume).toLocaleString('fr-FR')} kg</b></div>` : '';
-      box.innerHTML = rows + volumeLine;
-    }
-    box.dataset.loaded = '1';
-  }
+  const s = HIST.find(x => x.id === sessionId) || {};
   box.style.display='block';
+  box.innerHTML = '<div class="empty" style="padding:6px 0;">Chargement…</div>';
+  let logs;
+  try{
+    logs = await histReq(`/rest/v1/session_logs?select=id,set_number,reps,charge,exercises(name)&session_id=eq.${sessionId}&order=set_number`);
+  }catch(e){ console.error(e); box.innerHTML = '<div class="empty">Impossible de charger le détail.</div>'; return; }
+  const editBlock = s.completed_at ? histEditHtml(s) : '';
+  if(!logs.length){ box.innerHTML = '<div class="empty">Pas de détail pour cette séance.</div>' + editBlock; return; }
+  const byExercise = {};
+  let totalVolume = 0;
+  logs.forEach(l=>{
+    const name = l.exercises?.name || 'Exercice';
+    if(!byExercise[name]) byExercise[name] = [];
+    byExercise[name].push(l);
+    if(l.reps && l.charge) totalVolume += l.reps * l.charge;
+  });
+  const editing = !!s.edit_unlocked;
+  const rows = Object.entries(byExercise).map(([name, sets])=>{
+    let body;
+    if(editing){
+      body = `<div class="set-rows">${sets.map(x =>
+        `<div class="set-row edit-row" data-id="${x.id}"><span class="set-row-num">Série ${x.set_number}</span><span class="set-row-val"><input class="e-reps" type="number" inputmode="numeric" value="${x.reps ?? ''}" placeholder="reps" style="width:64px;" onchange="saveLogEdit(this)"> × <input class="e-charge" type="number" inputmode="decimal" step="0.5" value="${x.charge ?? ''}" placeholder="kg" style="width:72px;" onchange="saveLogEdit(this)"> kg</span></div>`
+      ).join('')}</div>`;
+    } else {
+      const filled = sets.filter(x => x.reps!=null || x.charge!=null);
+      body = !filled.length ? `<div class="set-rows-empty">Rien noté pour cet exercice.</div>` :
+        `<div class="set-rows">${filled.map(x =>
+          `<div class="set-row"><span class="set-row-num">Série ${x.set_number}</span><span class="set-row-val">${x.reps!=null ? x.reps+' reps' : '–'}${x.charge!=null ? ' · '+x.charge+' kg' : ''}</span></div>`
+        ).join('')}</div>`;
+    }
+    return `<div style="margin-bottom:16px;"><div style="font-weight:700;font-size:15px;margin-bottom:6px;">${escapeHtml(name)}</div>${body}</div>`;
+  }).join('');
+  const volumeLine = totalVolume ? `<div class="log-line" style="border-top:1px solid var(--line);padding-top:12px;margin-top:4px;font-size:14px;"><span>Poids total soulevé pendant la séance</span><b>${Math.round(totalVolume).toLocaleString('fr-FR')} kg</b></div>` : '';
+  box.innerHTML = rows + volumeLine + editBlock;
 }
 
 // ---------- Progression ----------

@@ -104,9 +104,10 @@
   .card{
     background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
     padding:0; cursor:pointer; text-align:left; overflow:hidden; position:relative;
+    display:flex; flex-direction:column; justify-content:flex-start; align-items:stretch;
   }
   .card-img{width:100%; aspect-ratio:4/3; object-fit:cover; background:var(--surface-2); display:block;}
-  .card-body{padding:16px;}
+  .card-body{padding:16px; flex:1;}
   .card:hover{border-color:var(--accent);}
   .fav-star{position:absolute; top:8px; right:8px; width:30px; height:30px; border-radius:50%; background:rgba(0,0,0,.55); color:#fff; display:flex; align-items:center; justify-content:center; font-size:16px; cursor:pointer; z-index:2;}
   .fav-star.active{color:#ffd54a;}
