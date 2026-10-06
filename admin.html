@@ -1103,6 +1103,7 @@ async function renderProgramForm(programId, prefill){
           <button type="button" class="btn btn-ghost btn-sm reps-mode-btn" data-mode="time" onclick="setPfRepsMode('time')">Temps</button>
         </div>
         <div class="pf-field"><label for="pfReps">Reps</label><input id="pfReps" type="text" placeholder="Reps" value="10-12" style="width:70px;"></div>
+        <div class="pf-field" id="pfTimeBox" style="display:none;"><label>Durée</label><div style="display:flex; gap:6px;"><input id="pfMin" type="number" min="0" inputmode="numeric" placeholder="Min" style="width:64px;"><input id="pfSec" type="number" min="0" max="59" inputmode="numeric" placeholder="Sec" style="width:64px;"></div></div>
         <div class="pf-field"><label for="pfRest">Repos (s)</label><input id="pfRest" type="number" placeholder="Repos(s)" value="90" style="width:80px;"></div>
         <button class="btn btn-ghost" onclick="addDraftEx()">Ajouter à cette séance</button>
       </div>
@@ -1244,15 +1245,24 @@ function setPfRepsMode(mode){
   pfRepsMode = mode;
   [...document.querySelectorAll('.reps-mode-btn')].forEach(b=> b.classList.toggle('active', b.dataset.mode===mode));
   const repsInput = document.getElementById('pfReps');
-  if(mode==='time'){ repsInput.type='number'; repsInput.placeholder='Secondes'; repsInput.value=''; }
-  else { repsInput.type='text'; repsInput.placeholder='Reps'; repsInput.value='10-12'; }
+  repsInput.type='text'; repsInput.placeholder='Reps'; repsInput.value = mode==='time' ? '' : '10-12';
+  repsInput.closest('.pf-field').style.display = mode==='time' ? 'none' : '';
+  document.getElementById('pfTimeBox').style.display = mode==='time' ? '' : 'none';
+  document.getElementById('pfMin').value = ''; document.getElementById('pfSec').value = '';
+}
+// Durée saisie en minutes et/ou secondes -> « 45s », « 2 min » ou « 1 min 30s » (30s par défaut)
+function fmtTimeReps(min, sec){
+  let m = Math.max(0, parseInt(min) || 0), s = Math.max(0, parseInt(sec) || 0);
+  m += Math.floor(s / 60); s = s % 60;
+  if(!m && !s) return '30s';
+  return m ? (s ? `${m} min ${s}s` : `${m} min`) : `${s}s`;
 }
 function addDraftEx(){
   const exId = document.getElementById('pfPickEx').value;
   if(!exId){ toast('Choisis un exercice'); return; }
   const sets = parseInt(document.getElementById('pfSets').value)||3;
   const repsRaw = document.getElementById('pfReps').value.trim();
-  const reps = pfRepsMode==='time' ? `${repsRaw || '30'}s` : (repsRaw || '10-12');
+  const reps = pfRepsMode==='time' ? fmtTimeReps(document.getElementById('pfMin').value, document.getElementById('pfSec').value) : (repsRaw || '10-12');
   const rest = parseInt(document.getElementById('pfRest').value)||90;
   draftItems.push({ exercise_id: exId, sets, reps, rest_seconds: rest, day: draftDays[activeDayIdx], linkPrev: false, variant_id: null });
   renderDraftList();
