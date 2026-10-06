@@ -341,11 +341,39 @@ async function listPrograms(){
   if(isLoggedIn()) return (await authedFetch('/rest/v1/programs?select=*&order=is_official.desc,created_at.desc')).json();
   return rpc('guest_list_programs', { p_token: TOKEN });
 }
+// Réseau mobile capricieux (salle, tunnel, réveil de l'appli) : on réessaie, puis on retombe sur la dernière copie connue.
+async function withRetry(fn, tries, delayMs){
+  let err;
+  for(let i = 0; i < tries; i++){
+    try{ return await fn(); }catch(e){ err = e; if(i < tries - 1) await new Promise(r => setTimeout(r, delayMs * (i + 1))); }
+  }
+  throw err;
+}
+function progCacheKey(programId){ return 'hs_prog_items_' + programId; }
 async function programExercisesFor(programId){
-  if(isLoggedIn()) return (await authedFetch(`/rest/v1/program_exercises?select=*&program_id=eq.${programId}&order=order_index`)).json();
-  const rows = await rpc('guest_program_exercises', { p_token: TOKEN, p_program_id: programId });
-  // Les lignes "désactivées" (sets=0) lors d'une modification côté invité ne doivent plus s'afficher.
-  return rows.filter(r => r.sets !== 0);
+  const load = async () => {
+    if(isLoggedIn()){
+      const res = await authedFetch(`/rest/v1/program_exercises?select=*&program_id=eq.${programId}&order=order_index`);
+      if(!res.ok) throw new Error('program_exercises_' + res.status);
+      const rows = await res.json();
+      if(!Array.isArray(rows)) throw new Error('program_exercises_format');
+      return rows;
+    }
+    const rows = await rpc('guest_program_exercises', { p_token: TOKEN, p_program_id: programId });
+    // Les lignes "désactivées" (sets=0) lors d'une modification côté invité ne doivent plus s'afficher.
+    return rows.filter(r => r.sets !== 0);
+  };
+  try{
+    const rows = await withRetry(load, 3, 700);
+    try{ localStorage.setItem(progCacheKey(programId), JSON.stringify(rows)); }catch(e){}
+    return rows;
+  }catch(e){
+    console.error(e);
+    let cached = null;
+    try{ cached = JSON.parse(localStorage.getItem(progCacheKey(programId)) || 'null'); }catch(_){}
+    if(Array.isArray(cached)){ toast('Connexion instable : programme enregistré sur ton téléphone'); return cached; }
+    throw e;
+  }
 }
 async function startSessionFor(programId, dayLabel){
   if(isLoggedIn()){
@@ -694,7 +722,7 @@ async function renderProgramDetail(programId){
   app.innerHTML = `<a class="backlink" href="#">← Tous les programmes</a><div id="progBody"><div class="empty">Chargement…</div></div>`;
   let items = [];
   try{ items = await programExercisesFor(programId); }
-  catch(e){ document.getElementById('progBody').innerHTML = '<div class="empty">Programme introuvable.</div>'; return; }
+  catch(e){ document.getElementById('progBody').innerHTML = `<div class="empty">Impossible de charger le programme (connexion instable).</div><button class="btn btn-accent" style="margin-top:8px;" onclick="renderProgramDetail('${programId}')">Réessayer</button>`; return; }
   let progName = '';
   let progDesc = '';
   let isOfficial = true;
@@ -791,7 +819,7 @@ async function renderSession(programId, dayIdx, manual){
   app.innerHTML = `<a class="backlink" href="#programme/${programId}">← Retour au programme</a><div id="sessBody"><div class="empty">Préparation de la séance…</div></div>`;
   let allItems = [];
   try{ allItems = await programExercisesFor(programId); }
-  catch(e){ document.getElementById('sessBody').innerHTML = '<div class="empty">Programme introuvable.</div>'; return; }
+  catch(e){ document.getElementById('sessBody').innerHTML = `<div class="empty">Impossible de charger le programme (connexion instable).</div><button class="btn btn-accent" style="margin-top:8px;" onclick="location.reload()">Réessayer</button>`; return; }
   const groups = groupByDay(allItems);
   let items = allItems, dayLabel = null;
   if(groups.length > 1){
