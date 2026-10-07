@@ -124,7 +124,7 @@
 <script>
 (function(){
   var n=document.querySelector('.navrow');
-  if(n && localStorage.getItem('hs_role')==='admin' && !n.querySelector('[href="admin.html"]')){
+  if(n && ['admin','coach'].includes(localStorage.getItem('hs_role')) && !n.querySelector('[href="admin.html"]')){
     n.insertAdjacentHTML('beforeend','<a href="admin.html">Espace coach</a>');
   }
 })();
@@ -135,6 +135,7 @@
 <footer>HS Coaching · Régularité &amp; dépassement de soi</footer>
 
 <script src="badges.js"></script>
+<script src="coaches.js"></script>
 <script src="export.js"></script>
 <script src="history.js"></script>
 <script src="import.js"></script>
@@ -313,13 +314,13 @@ async function syncRole(){
     const role = rows[0] && rows[0].role;
     if(role){ localStorage.setItem('hs_role', role); }
     const n = document.querySelector('.navrow');
-    if(role==='admin' && n && !n.querySelector('[href="admin.html"]')) n.insertAdjacentHTML('beforeend','<a href="admin.html">Espace coach</a>');
+    if((role==='admin' || role==='coach') && n && !n.querySelector('[href="admin.html"]')) n.insertAdjacentHTML('beforeend','<a href="admin.html">Espace coach</a>');
     return role;
   }catch(e){ return null; }
 }
 async function renderDashboard(){
   const role = await syncRole();
-  const isCoachAccount = role === 'admin';
+  const isCoachAccount = role === 'admin' || role === 'coach';
   app.innerHTML = `
     <div class="eyebrow">MON COMPTE</div>
     <h1 class="page" id="hello">Salut 👋</h1>
@@ -840,17 +841,34 @@ async function deleteBodyLog(id){
 
 let chatPoll = null; let conversationId = null;
 async function loadChat(){
-  document.getElementById('tabBody').innerHTML = `<div class="chat-box"><div class="chat-msgs" id="chatMsgs"><div class="empty">Chargement…</div></div>
+  document.getElementById('tabBody').innerHTML = '<div id="coachBar"></div>' + `<div class="chat-box"><div class="chat-msgs" id="chatMsgs"><div class="empty">Chargement…</div></div>
     <div class="chat-input"><input id="chatInput" type="text" placeholder="Écris un message…" onkeydown="if(event.key==='Enter')sendMessage()"><button onclick="sendMessage()">Envoyer</button></div></div>`;
   let convs = await (await apiFetch(`/rest/v1/conversations?select=id&limit=1`)).json();
   if(!convs.length){
     convs = await (await apiFetch(`/rest/v1/conversations`, { method:'POST', headers:{Prefer:'return=representation'}, body: JSON.stringify({ user_id: getSession().user.id }) })).json();
   }
   conversationId = convs[0].id;
+  showCoachBar();
   await refreshMessages();
   apiFetch(`/rest/v1/messages?conversation_id=eq.${conversationId}&sender=eq.coach&read=eq.false`, { method:'PATCH', body: JSON.stringify({ read:true }) }).catch(()=>{});
   clearInterval(chatPoll);
   chatPoll = setInterval(()=>{ if(currentTab==='chat') refreshMessages(); }, 5000);
+}
+async function showCoachBar(){
+  try{
+    const uid = getSession().user.id;
+    const me = ((await (await apiFetch(`/rest/v1/profiles?select=coach_id&id=eq.${uid}`)).json()) || [])[0] || {};
+    let name = '';
+    if(me.coach_id){ const cp = ((await (await apiFetch(`/rest/v1/coach_profiles?select=display_name&user_id=eq.${me.coach_id}`)).json()) || [])[0]; name = cp ? cp.display_name : 'ton coach'; }
+    const bar = document.getElementById('coachBar'); if(!bar) return;
+    bar.innerHTML = `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px;margin-bottom:12px;border:1px solid var(--line);border-radius:14px">
+      <div style="font-size:14px">${me.coach_id ? 'Ton coach : <b>' + escapeHtml(name) + '</b>' : 'Tu discutes avec le coach principal.'}</div>
+      <button class="btn btn-ghost btn-sm" onclick="openCoachDirectory()">${me.coach_id ? 'Voir les coachs' : 'Choisir un coach'}</button></div>`;
+  }catch(e){}
+}
+function openCoachDirectory(){
+  if(typeof HSCoaches === 'undefined') return;
+  HSCoaches.openDirectory({ fetcher: apiFetch, loggedIn: true, onSent: c => alert(c ? 'Demande envoyée à ' + c.display_name + ' !' : 'Demande envoyée !') });
 }
 async function refreshMessages(){
   const res = await apiFetch(`/rest/v1/messages?select=*&conversation_id=eq.${conversationId}&order=created_at`);
@@ -895,7 +913,7 @@ async function loadProfil(){
     <div class="card">
       <div class="profile-row"><span>Nom</span><b>${escapeHtml(p.full_name || '—')}${NAME_CHIP}</b></div>
       <div class="profile-row"><span>Email</span><b>${escapeHtml(s.user.email)}</b></div>
-      <div class="profile-row"><span>Statut</span><b>${p.role==='admin' ? 'Coach (admin)' : 'Client'}</b></div>
+      <div class="profile-row"><span>Statut</span><b>${p.role==='admin' ? 'Coach (admin)' : (p.role==='coach' ? 'Coach' : 'Client')}</b></div>
     </div>
     <button class="btn btn-ghost btn-block" onclick="logout()">Se déconnecter</button>
   `;

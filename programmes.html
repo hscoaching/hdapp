@@ -270,7 +270,7 @@
 <script>
 (function(){
   var n=document.querySelector('.navrow');
-  if(n && localStorage.getItem('hs_role')==='admin' && !n.querySelector('[href="admin.html"]')){
+  if(n && ['admin','coach'].includes(localStorage.getItem('hs_role')) && !n.querySelector('[href="admin.html"]')){
     n.insertAdjacentHTML('beforeend','<a href="admin.html">Espace coach</a>');
   }
 })();
@@ -287,6 +287,7 @@
 <div class="toast" id="toast"></div>
 
 <script src="badges.js"></script>
+<script src="coaches.js"></script>
 <script src="export.js"></script>
 <script>
 String.prototype.fold = function(){ return this.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }; // recherche sans accents
@@ -584,7 +585,16 @@ function openExFiche(exId){
   document.getElementById('exOverlay').classList.add('open');
 }
 
+function anonFetch(path, init){
+  init = init || {};
+  return fetch(`${SUPABASE_URL}${path}`, { ...init, headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${SUPABASE_ANON_KEY}`, 'Content-Type':'application/json', ...(init.headers||{}) } });
+}
 function openContactModal(){
+  if(typeof HSCoaches !== 'undefined'){
+    const logged = isLoggedIn();
+    HSCoaches.openDirectory({ fetcher: logged ? authedFetch : anonFetch, loggedIn: logged, onSent: c => toast(c ? 'Demande envoyée à ' + c.display_name + ' 💪' : 'Demande envoyée, un coach te recontacte bientôt 💪') });
+    return;
+  }
   document.getElementById('modalSheet').innerHTML = `
     <div class="sheet-top">
       <div><div class="cat">SANS ENGAGEMENT</div><h2>Contacter un coach</h2></div>
@@ -710,7 +720,7 @@ function filterProgramList(){
   renderProgramGrids(matches);
 }
 let creatorProfiles = {}, coachFilter = 'all';
-function isCoachView(){ return isLoggedIn() && localStorage.getItem('hs_role') === 'admin'; }
+function isCoachView(){ return isLoggedIn() && ['admin','coach'].includes(localStorage.getItem('hs_role')); }
 function progOrigin(p){
   if(p.is_official) return 'official';
   if(!p.owner_user_id) return 'visitor';

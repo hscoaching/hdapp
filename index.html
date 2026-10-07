@@ -226,7 +226,7 @@
 <script>
 (function(){
   var n=document.querySelector('.navrow');
-  if(n && localStorage.getItem('hs_role')==='admin' && !n.querySelector('[href="admin.html"]')){
+  if(n && ['admin','coach'].includes(localStorage.getItem('hs_role')) && !n.querySelector('[href="admin.html"]')){
     n.insertAdjacentHTML('beforeend','<a href="admin.html">Espace coach</a>');
   }
 })();
