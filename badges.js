@@ -30,7 +30,17 @@
     { id:'c50',  group:'Cardio', tag:'cardio', icon:'🚴', title:'Grand fond',       desc:'50 h de cardio au total',            kind:'cardiotime', bonus:true, target:180000 },
     { id:'c100', group:'Cardio', tag:'cardio', icon:'🫀', title:'Cœur d\'acier',    desc:'100 h de cardio au total',           kind:'cardiotime', bonus:true, target:360000 },
     { id:'cs10', group:'Cardio', tag:'cardio', icon:'🌬️', title:'Cardio régulier',  desc:'10 séances avec au moins 10 min de cardio', kind:'cardiosessions', bonus:true, target:10 },
-    { id:'cs25', group:'Cardio', tag:'cardio', icon:'🔄', title:'Cardio fidèle',    desc:'25 séances avec au moins 10 min de cardio', kind:'cardiosessions', bonus:true, target:25 }
+    { id:'cs25', group:'Cardio', tag:'cardio', icon:'🔄', title:'Cardio fidèle',    desc:'25 séances avec au moins 10 min de cardio', kind:'cardiosessions', bonus:true, target:25 },
+    { id:'rc1',  group:'Récupération', tag:'récup', icon:'🌙', title:'Bien dosé',        desc:'1 semaine complète avec 2 à 5 séances (au moins 2 jours de repos)', bonus:true, kind:'balanced', target:1 },
+    { id:'rc4',  group:'Récupération', tag:'récup', icon:'😴', title:'Récupérateur',     desc:'4 semaines équilibrées (2 à 5 séances)',   bonus:true, kind:'balanced', target:4 },
+    { id:'rc12', group:'Récupération', tag:'récup', icon:'🧘', title:'Sage du repos',    desc:'12 semaines équilibrées',                  bonus:true, kind:'balanced', target:12 },
+    { id:'rc26', group:'Récupération', tag:'récup', icon:'🌿', title:'Maître de la récup', desc:'26 semaines équilibrées',               bonus:true, kind:'balanced', target:26 },
+    { id:'rs4',  group:'Rythme sain',  tag:'récup', icon:'⚖️', title:'Rythme sain',      desc:'4 semaines équilibrées d\'affilée',        bonus:true, kind:'balstreak', target:4 },
+    { id:'rb7',  group:'Sommeil', tag:'récup', icon:'🌙', title:'Nuits réparatrices', desc:'7 nuits de 7 h ou plus (bilan de récupération)', bonus:true, kind:'sleep', target:7 },
+    { id:'rb30', group:'Sommeil', tag:'récup', icon:'🛌', title:'Sommeil de champion', desc:'30 nuits de 7 h ou plus', bonus:true, kind:'sleep', target:30 },
+    { id:'rb100',group:'Sommeil', tag:'récup', icon:'💤', title:'Fils d\'Hypnos',   desc:'100 nuits de 7 h ou plus', bonus:true, kind:'sleep', target:100 },
+    { id:'rk10', group:'Bilans', tag:'récup', icon:'📝', title:'À l\'écoute',        desc:'10 bilans de récupération remplis', bonus:true, kind:'checkins', target:10 },
+    { id:'rk50', group:'Bilans', tag:'récup', icon:'🧠', title:'Connais-toi toi-même', desc:'50 bilans de récupération remplis', bonus:true, kind:'checkins', target:50 }
   ];
 
   // Niveaux : calculés avec les badges principaux (séances + régularité), jamais avec les bonus
@@ -159,6 +169,16 @@
     let current = streak;
     if(thisWeek >= WEEKLY_GOAL){ current = streak + 1; if(current > best) best = current; }
 
+    // Semaines équilibrées (semaines terminées avec 2 à 5 séances = au moins 2 jours de repos)
+    let balanced = 0, balStreak = 0, balBest = 0;
+    if(total){
+      for(let w = weekIndex(upTo[0].t); w < curW; w++){
+        const n = perWeek[w] || 0;
+        if(n >= WEEKLY_GOAL && n <= 5){ balanced++; balStreak++; if(balStreak > balBest) balBest = balStreak; }
+        else balStreak = 0;
+      }
+    }
+
     // Retour en force
     let comebacks = 0;
     for(let i = 1; i < upTo.length; i++){
@@ -185,9 +205,10 @@
         });
       });
     }
-    return { total, best, current, thisWeek, comebacks, tonnage, prs, hasLogs, hasCardio, cardioSec, cardioSessions, muscuSessions };
+    return { total, best, current, thisWeek, comebacks, balanced, balBest, sleepNights: CK.filter(c => Number(c.sleep_hours) >= 7).length, checkinCount: CK.length, tonnage, prs, hasLogs, hasCardio, cardioSec, cardioSessions, muscuSessions };
   }
 
+  let CK = [];
   function value(def, st){
     return def.kind === 'sessions' ? st.total
          : def.kind === 'streak'   ? st.best
@@ -195,11 +216,16 @@
          : def.kind === 'pr'       ? st.prs
          : def.kind === 'cardiotime' ? st.cardioSec
          : def.kind === 'cardiosessions' ? st.cardioSessions
+         : def.kind === 'balanced' ? st.balanced
+         : def.kind === 'sleep' ? st.sleepNights
+         : def.kind === 'checkins' ? st.checkinCount
+         : def.kind === 'balstreak' ? st.balBest
          : st.comebacks;
   }
 
   // Résultat complet : stats actuelles + liste des badges (avec date de déblocage)
   function compute(data, now){
+    CK = (data.checkins || []).filter(c => c && c.day && c.sleep_hours != null).sort((a,b) => a.day < b.day ? -1 : 1);
     const p = prepare(data);
     let asOf = now || new Date();
     // l'horloge du téléphone peut retarder de quelques minutes sur le serveur : on ne laisse jamais une séance « dans le futur »
@@ -210,8 +236,12 @@
     p.sessions.forEach(s => {
       const sst = stats(p.sessions, p.logs, p.hasLogs, s.t, p.cardioBySession, p.hasCardio, p.muscuBySession);
       DEFS.forEach(d => {
-        if(!unlockedAt[d.id] && value(d, sst) >= d.target) unlockedAt[d.id] = s.t;
+        if(d.kind !== 'sleep' && d.kind !== 'checkins' && !unlockedAt[d.id] && value(d, sst) >= d.target) unlockedAt[d.id] = s.t;
       });
+    });
+    DEFS.filter(d => d.kind === 'sleep' || d.kind === 'checkins').forEach(d => {
+      let n = 0;
+      for(const c of CK){ if(d.kind === 'checkins' || Number(c.sleep_hours) >= 7) n++; if(n >= d.target){ unlockedAt[d.id] = new Date(c.day + 'T12:00:00'); break; } }
     });
     const revoked = {};
     (data.revoked || []).forEach(r => { revoked[r.badge_id] = r; });
@@ -236,7 +266,7 @@
     const before = compute({
       sessions: (data.sessions||[]).filter(s => s.id !== sessionId),
       logs: data.logs ? data.logs.filter(l => l.session_id !== sessionId) : data.logs,
-      revoked: data.revoked
+      revoked: data.revoked, cardioIds: data.cardioIds, checkins: data.checkins
     });
     const had = new Set(before.badges.filter(b => b.unlocked).map(b => b.id));
     return { after, before, fresh: after.badges.filter(b => b.unlocked && !had.has(b.id)), levelUp: after.level.t > before.level.t ? after.level : null };
@@ -448,7 +478,68 @@
     if(withLogs !== false){ try{ const c = await getJson('/rest/v1/exercises?select=id&category=eq.Cardio&limit=500'); if(Array.isArray(c)) cardioIds = c.map(x => x.id); }catch(e){} }
     let revoked = [];
     try{ const r = await getJson(`/rest/v1/badge_revocations?select=badge_id,reason&user_id=eq.${uid}`); if(Array.isArray(r)) revoked = r; }catch(e){ revoked = []; }
-    return { sessions, logs, revoked, cardioIds };
+    let checkins = [];
+    try{ const r = await getJson(`/rest/v1/recovery_checkins?select=day,sleep_hours,soreness,energy&user_id=eq.${uid}&order=day&limit=1000`); if(Array.isArray(r)) checkins = r; }catch(e){ checkins = []; }
+    return { sessions, logs, revoked, cardioIds, checkins };
+  }
+
+
+  // ---- Bilan de récupération (sommeil, courbatures, énergie) ----
+  function localDay(d){ d = d || new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+  // opts : { fetcher(path, init) -> Response, getJson(path), userId, onDone() }
+  async function openCheckin(opts){
+    ensureCss();
+    const old = document.getElementById('hsCkOv'); if(old) old.remove();
+    const today = localDay();
+    let data = null, cur = null;
+    try{ data = await load(opts.getJson, opts.userId, false); cur = (data.checkins || []).find(c => c.day === today) || null; }catch(e){ data = null; }
+    let sleep = cur ? Number(cur.sleep_hours) : 7.5, sore = cur ? cur.soreness : null, en = cur ? cur.energy : null;
+    const ov = document.createElement('div'); ov.id = 'hsCkOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1200;display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto';
+    ov.onclick = e => { if(e.target === ov) ov.remove(); };
+    const scale = (id, labels, val) => `<div style="display:flex;gap:6px;justify-content:center;margin:8px 0 16px">${labels.map((l,i) => `<button type="button" data-k="${id}" data-v="${i+1}" style="flex:1;max-width:58px;padding:9px 0;border-radius:12px;border:1px solid var(--line,#2c2c30);background:${val === i+1 ? 'var(--accent,#d9ff3f)' : 'transparent'};color:${val === i+1 ? '#111' : 'inherit'};font-size:20px;cursor:pointer">${l}</button>`).join('')}</div>`;
+    function paint(){
+      ov.innerHTML = `<div style="max-width:420px;width:100%;background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:20px;padding:22px 20px;text-align:center">
+        <h3 style="margin:0 0 4px;font-size:20px">😴 Bilan de récupération</h3>
+        <div class="bdg-mini" style="margin-bottom:16px">30 secondes · la récup compte autant que l'entraînement</div>
+        <div style="font-weight:600">Combien d'heures as-tu dormi cette nuit ?</div>
+        <div style="display:flex;align-items:center;justify-content:center;gap:18px;margin:10px 0 16px">
+          <button type="button" id="ckMinus" style="width:44px;height:44px;border-radius:50%;border:1px solid var(--line,#2c2c30);background:transparent;color:inherit;font-size:22px;cursor:pointer">−</button>
+          <div style="font-size:34px;font-weight:800;min-width:90px">${String(sleep).replace('.', ',')} h</div>
+          <button type="button" id="ckPlus" style="width:44px;height:44px;border-radius:50%;border:1px solid var(--line,#2c2c30);background:transparent;color:inherit;font-size:22px;cursor:pointer">+</button>
+        </div>
+        <div style="font-weight:600">Courbatures (facultatif)</div>${scale('sore', ['😀','🙂','😐','😣','🥵'], sore)}
+        <div style="font-weight:600">Énergie (facultatif)</div>${scale('en', ['🪫','😴','😐','💪','⚡'], en)}
+        <div id="ckRes"></div>
+        <button id="ckSave" class="btn btn-accent" style="width:100%;justify-content:center">Enregistrer</button>
+        <button id="ckClose" class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px">Plus tard</button>
+      </div>`;
+      ov.querySelector('#ckMinus').onclick = () => { sleep = Math.max(0, Math.round((sleep - 0.5) * 10) / 10); paint(); };
+      ov.querySelector('#ckPlus').onclick = () => { sleep = Math.min(16, Math.round((sleep + 0.5) * 10) / 10); paint(); };
+      ov.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { const v = +b.dataset.v; if(b.dataset.k === 'sore') sore = sore === v ? null : v; else en = en === v ? null : v; paint(); });
+      ov.querySelector('#ckClose').onclick = () => ov.remove();
+      ov.querySelector('#ckSave').onclick = save;
+    }
+    async function save(){
+      const btn = ov.querySelector('#ckSave'); btn.disabled = true;
+      const row = { user_id: opts.userId, day: today, sleep_hours: sleep, soreness: sore, energy: en };
+      try{
+        const r = await opts.fetcher('/rest/v1/recovery_checkins?on_conflict=user_id,day', { method:'POST', headers:{ Prefer:'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(row) });
+        if(!r.ok) throw new Error('save_failed');
+      }catch(e){ console.error(e); btn.disabled = false; ov.querySelector('#ckRes').innerHTML = '<div class="bdg-mini" style="color:#ff7a6b;margin-bottom:10px">Erreur, réessaie.</div>'; return; }
+      let fresh = [], res = null;
+      if(data){
+        const rest = (data.checkins || []).filter(c => c.day !== today);
+        const before = compute(Object.assign({}, data, { checkins: rest }));
+        res = compute(Object.assign({}, data, { checkins: rest.concat([row]) }));
+        const had = new Set(before.badges.filter(b => b.unlocked).map(b => b.id));
+        fresh = res.badges.filter(b => b.unlocked && !had.has(b.id));
+      }
+      ov.querySelector('#ckSave').remove(); ov.querySelector('#ckClose').textContent = 'Fermer';
+      ov.querySelector('#ckRes').innerHTML = '<div style="font-weight:700;margin:6px 0 12px">✅ Bilan enregistré</div>' + (fresh.length ? renderNew(fresh, res, null) + '<div style="height:12px"></div>' : '');
+      if(opts.onDone) try{ opts.onDone(); }catch(e){}
+    }
+    paint(); document.body.appendChild(ov);
   }
 
   // Fenêtre « ta légende » : comparaison mythologique du niveau actuel
@@ -479,5 +570,5 @@
     }catch(e){ return false; }
   }
 
-  window.HSBadges = { showLevel, levelUpSeen, chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, WEEKLY_GOAL };
+  window.HSBadges = { showLevel, levelUpSeen, chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, openCheckin, WEEKLY_GOAL };
 })();
