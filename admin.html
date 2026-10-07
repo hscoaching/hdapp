@@ -657,7 +657,8 @@ function coachesBoxHtml(clients){
   const n = id => (clients || []).filter(c => c.coach_id === id).length;
   const rows = coachList.length ? coachList.map(co => `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)">
       <div style="min-width:0"><div style="font-weight:700">${escapeHtml(co.full_name || 'Coach')}</div><div style="font-size:12.5px;opacity:.7;overflow:hidden;text-overflow:ellipsis">${escapeHtml(co.email || '')} · ${n(co.id)} client${n(co.id) > 1 ? 's' : ''}</div></div>
-      <button class="btn btn-ghost btn-sm" style="flex:none" onclick="demoteCoach('${co.id}','${escapeHtml(co.full_name || co.email || 'ce coach').replace(/'/g, "\\'")}')">Retirer les droits</button></div>`).join('')
+      <div style="display:flex;gap:6px;flex:none;flex-wrap:wrap;justify-content:flex-end"><button class="btn btn-ghost btn-sm" onclick="openMyCoachCard('${co.id}','${escapeHtml(co.full_name || co.email || 'ce coach').replace(/'/g, "\\'")}')">🪪 Fiche</button>
+      <button class="btn btn-ghost btn-sm" onclick="demoteCoach('${co.id}','${escapeHtml(co.full_name || co.email || 'ce coach').replace(/'/g, "\\'")}')">Retirer les droits</button></div></div>`).join('')
     : '<div style="font-size:13px;opacity:.7;padding-top:8px">Aucun coach pour le moment. Pour en ajouter : ouvre la fiche d\'un client inscrit et appuie sur « 🎓 Promouvoir coach ». Tu pourras ensuite lui attribuer des clients.</div>';
   return `<details class="coaches-box" ${coachesOpen ? 'open' : ''} ontoggle="coachesOpen = this.open" style="border:1px solid var(--line);border-radius:16px;padding:4px 14px 12px;margin-bottom:16px">
     <summary style="cursor:pointer;font-weight:700;padding:12px 0">🎓 Coachs <span style="opacity:.6;font-weight:500">(${coachList.length})</span></summary>${rows}</details>`;
@@ -1257,34 +1258,67 @@ async function acceptContact(id){
   }catch(e){ toast('Impossible : ce client est peut-être déjà suivi par un autre coach'); }
 }
 // ---- Ma fiche coach (présentation visible par les clients dans la liste des coachs) ----
-async function openMyCoachCard(){
+async function openMyCoachCard(targetId, targetName){
+  const tid = (typeof targetId === 'string' && targetId) ? targetId : MY_ID;
+  const mine = tid === MY_ID;
   let cp = {};
-  try{ cp = ((await api(`/rest/v1/coach_profiles?select=*&user_id=eq.${MY_ID}`)) || [])[0] || {}; }catch(e){}
+  try{ cp = ((await api(`/rest/v1/coach_profiles?select=*&user_id=eq.${tid}`)) || [])[0] || {}; }catch(e){}
   const old = document.getElementById('myCoachOv'); if(old) old.remove();
   const ov = document.createElement('div'); ov.id = 'myCoachOv';
-  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1300;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1300;display:flex;align-items:flex-start;justify-content:center;padding:16px;overflow:auto';
   ov.onclick = e => { if(e.target === ov) ov.remove(); };
+  const inpS = 'width:100%;box-sizing:border-box;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;color:inherit;padding:12px;font:inherit;font-size:16px';
   const f = (id, label, val, ph, area) => `<label style="display:block;margin:12px 0 4px;font-size:13px;opacity:.8">${label}</label>` + (area
-    ? `<textarea id="${id}" placeholder="${ph}" style="width:100%;box-sizing:border-box;min-height:110px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;color:inherit;padding:12px;font:inherit;font-size:16px">${escapeHtml(val || '')}</textarea>`
-    : `<input id="${id}" type="text" placeholder="${ph}" value="${escapeHtml(val || '')}" style="width:100%;box-sizing:border-box;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;color:inherit;padding:12px;font:inherit;font-size:16px">`);
-  ov.innerHTML = `<div style="max-width:520px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px 18px">
-    <h2 style="margin:0 0 4px">🪪 Ma fiche coach</h2>
+    ? `<textarea id="${id}" placeholder="${ph}" style="${inpS};min-height:110px">${escapeHtml(val || '')}</textarea>`
+    : `<input id="${id}" type="text" placeholder="${ph}" value="${escapeHtml(val || '')}" style="${inpS}">`);
+  ov.innerHTML = `<div style="max-width:520px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px 18px;margin:auto">
+    <h2 style="margin:0 0 4px">🪪 ${mine ? 'Ma fiche coach' : 'Fiche de ' + escapeHtml(targetName || 'ce coach')}</h2>
     <div style="font-size:13px;opacity:.7">C'est ce que verront les clients et visiteurs quand ils choisiront un coach.</div>
-    ${f('mcName','Nom affiché', cp.display_name, 'Ton prénom ou nom de coach')}
+    <div id="mcPrev" style="border:1px solid var(--line);border-radius:16px;padding:14px;margin:14px 0 4px;background:var(--surface-2)"></div>
+    ${f('mcName','Nom affiché', cp.display_name || (mine ? '' : targetName), 'Prénom ou nom de coach')}
     ${f('mcHead','Accroche (une ligne)', cp.headline, 'Ex. Coach prise de masse & force')}
-    ${f('mcBio','Présentation', cp.bio, 'Ton parcours, ta méthode, pour qui tu es fait…', true)}
+    ${f('mcBio','Présentation', cp.bio, 'Parcours, méthode, pour qui il/elle est fait…', true)}
     ${f('mcSpec','Spécialités (séparées par des virgules)', cp.specialties, 'Musculation, Perte de poids, Cardio')}
-    ${f('mcPhoto','Photo (adresse https d’une image, facultatif)', cp.photo_url, 'https://…')}
-    <label style="display:flex;gap:10px;align-items:center;margin:16px 0 4px;font-size:15px"><input type="checkbox" id="mcListed" ${cp.listed ? 'checked' : ''} style="width:20px;height:20px"> Afficher ma fiche dans la liste des coachs</label>
+    <label style="display:block;margin:12px 0 4px;font-size:13px;opacity:.8">Photo</label>
+    <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn btn-ghost btn-sm" id="mcPick" type="button">📷 Choisir une photo</button><button class="btn btn-ghost btn-sm" id="mcNoPhoto" type="button">Retirer la photo</button></div>
+    <input type="hidden" id="mcPhoto" value="${escapeHtml(cp.photo_url || '')}">
+    <label style="display:flex;gap:10px;align-items:center;margin:16px 0 4px;font-size:15px"><input type="checkbox" id="mcListed" ${cp.listed ? 'checked' : ''} style="width:20px;height:20px"> Afficher la fiche dans la liste des coachs</label>
     <div style="display:flex;gap:10px;margin-top:16px"><button class="btn btn-accent" style="flex:1;justify-content:center" id="mcSave">Enregistrer</button><button class="btn btn-ghost" id="mcClose">Fermer</button></div></div>`;
   document.body.appendChild(ov);
-  ov.querySelector('#mcClose').onclick = () => ov.remove();
-  ov.querySelector('#mcSave').onclick = async () => {
-    const v = id => ov.querySelector('#' + id).value.trim();
-    const photo = v('mcPhoto');
+  const g = id => ov.querySelector('#' + id);
+  const prev = () => {
+    const nm = g('mcName').value.trim() || 'Nom du coach', ph = g('mcPhoto').value, ini = escapeHtml(nm.charAt(0).toUpperCase());
+    const tags = g('mcSpec').value.split(',').map(x => x.trim()).filter(Boolean).slice(0, 8).map(x => `<span style="font-size:12px;padding:4px 10px;border-radius:999px;border:1px solid var(--line)">${escapeHtml(x)}</span>`).join('');
+    g('mcPrev').innerHTML = `<div style="display:flex;gap:12px;align-items:center">${ph ? `<img src="${escapeHtml(ph)}" alt="" style="width:56px;height:56px;border-radius:50%;object-fit:cover;flex:none">` : `<div style="width:56px;height:56px;border-radius:50%;flex:none;background:var(--accent);color:var(--accent-ink,#111);display:flex;align-items:center;justify-content:center;font-weight:800;font-size:22px">${ini}</div>`}
+      <div style="min-width:0"><div style="font-weight:800;font-size:17px">${escapeHtml(nm)}</div><div style="font-size:13px;opacity:.75">${escapeHtml(g('mcHead').value)}</div></div></div>
+      ${g('mcBio').value.trim() ? `<div style="font-size:14px;line-height:1.45;margin:10px 0;white-space:pre-line">${escapeHtml(g('mcBio').value)}</div>` : ''}<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:8px">${tags}</div>`;
+  };
+  ['mcName','mcHead','mcBio','mcSpec'].forEach(id => g(id).addEventListener('input', prev)); prev();
+  g('mcClose').onclick = () => ov.remove();
+  g('mcNoPhoto').onclick = () => { g('mcPhoto').value = ''; prev(); };
+  g('mcPick').onclick = () => {
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; inp.style.display = 'none'; document.body.appendChild(inp);
+    inp.onchange = async () => {
+      const file = inp.files && inp.files[0]; inp.remove(); if(!file) return;
+      try{
+        toast('Envoi de la photo…');
+        const bmp = await createImageBitmap(file), side = Math.min(bmp.width, bmp.height), SZ = 600;
+        const cv = document.createElement('canvas'); cv.width = cv.height = SZ;
+        cv.getContext('2d').drawImage(bmp, (bmp.width - side) / 2, (bmp.height - side) / 2, side, side, 0, 0, SZ, SZ);
+        const blob = await new Promise(r => cv.toBlob(r, 'image/jpeg', 0.85));
+        const path = `${tid}/photo-${Date.now()}.jpg`;
+        await refreshIfNeeded(); const s = getSession();
+        const res = await fetch(`${SUPABASE_URL}/storage/v1/object/coach-photos/${path}`, { method:'POST', headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token}`, 'Content-Type':'image/jpeg' }, body: blob });
+        if(!res.ok) throw new Error('upload');
+        g('mcPhoto').value = `${SUPABASE_URL}/storage/v1/object/public/coach-photos/${path}`; prev(); toast('Photo ajoutée (pense à enregistrer)');
+      }catch(e){ console.error(e); toast('Photo impossible, essaie une autre image'); }
+    };
+    inp.click();
+  };
+  g('mcSave').onclick = async () => {
+    const v = id => g(id).value.trim();
     if(!v('mcName')){ toast('Le nom est requis'); return; }
-    if(photo && !/^https:\/\//.test(photo)){ toast('La photo doit commencer par https://'); return; }
-    const row = { user_id: MY_ID, display_name: v('mcName'), headline: v('mcHead') || null, bio: v('mcBio') || null, specialties: v('mcSpec') || null, photo_url: photo || null, listed: ov.querySelector('#mcListed').checked, updated_at: new Date().toISOString() };
+    const row = { user_id: tid, display_name: v('mcName'), headline: v('mcHead') || null, bio: v('mcBio') || null, specialties: v('mcSpec') || null, photo_url: v('mcPhoto') || null, listed: g('mcListed').checked, updated_at: new Date().toISOString() };
     try{
       await api('/rest/v1/coach_profiles?on_conflict=user_id', { method:'POST', headers:{ Prefer:'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(row) });
       toast(row.listed ? 'Fiche enregistrée et visible' : 'Fiche enregistrée (masquée)'); ov.remove();
