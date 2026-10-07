@@ -11,6 +11,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<script src="coaches.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root{
@@ -253,6 +254,13 @@
     <div class="empty" id="empty" style="display:none;">Aucun exercice ne correspond à ta recherche.</div>
   </div>
 </main>
+
+<section class="wrap" id="coachSection" style="display:none;margin-top:36px">
+  <div class="eyebrow">TON COACH</div>
+  <h2 style="margin:4px 0 6px;font-size:24px">Envie d'être accompagné ?</h2>
+  <p style="opacity:.75;font-size:14px;margin:0 0 12px">Découvre l'équipe et écris à un coach : sans engagement, sans compte.</p>
+  <div id="coachStrip"></div>
+</section>
 
 <footer>HS Coaching · Régularité &amp; dépassement de soi<br><a href="https://repdb.co" style="color:inherit;opacity:.6;font-size:11px;">Illustrations des exercices : RepDB (repdb.co)</a></footer>
 
@@ -698,8 +706,15 @@ if('serviceWorker' in navigator){
 }
 
 (function(){
+  if(typeof HSCoaches !== 'undefined'){
+    const f = (p, i) => { i = i || {}; return fetch(SUPABASE_URL + p, Object.assign({}, i, { headers: Object.assign({ apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + SUPABASE_ANON_KEY, 'Content-Type': 'application/json' }, i.headers || {}) })); };
+    const sec = document.getElementById('coachSection'), strip = document.getElementById('coachStrip');
+    HSCoaches.renderStrip(strip, { fetcher: f, loggedIn: false, onSent: c => alert(c ? 'Demande envoyée à ' + c.display_name + ' 💪' : 'Demande envoyée, un coach te recontacte bientôt 💪') }).then(() => { if(strip.innerHTML) sec.style.display = ''; });
+  }
+})();
+(function(){
   const KEY = 'hs_install_dismissed_v1';
-  if (localStorage.getItem(KEY)) return;
+  try{ const t = +localStorage.getItem(KEY); if(t && Date.now() - t < 14*864e5) return; }catch(e){}
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (isStandalone) return;
 
@@ -710,7 +725,7 @@ if('serviceWorker' in navigator){
     document.body.appendChild(bar);
     document.body.classList.add('has-install-banner');
     const closeBtn = bar.querySelector('.installClose');
-    if (closeBtn) closeBtn.addEventListener('click', ()=>{ localStorage.setItem(KEY,'1'); bar.remove(); document.body.classList.remove('has-install-banner'); });
+    if (closeBtn) closeBtn.addEventListener('click', ()=>{ localStorage.setItem(KEY, String(Date.now())); bar.remove(); document.body.classList.remove('has-install-banner'); });
     const installBtn = bar.querySelector('.installGo');
     if (installBtn && onInstall) installBtn.addEventListener('click', onInstall);
   }
@@ -721,6 +736,10 @@ if('serviceWorker' in navigator){
     if (isSafari) {
       showBanner(`
         <p>Installe cette app sur ton écran d'accueil : appuie sur <strong>Partager</strong> puis <strong>« Sur l'écran d'accueil »</strong>.</p>
+        <div class="btn-row"><button class="installClose" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer;">✕</button></div>
+      `);    } else {
+      showBanner(`
+        <p>Pour installer l'app sur iPhone, ouvre ce site dans <strong>Safari</strong>, puis <strong>Partager</strong> › <strong>« Sur l'écran d'accueil »</strong>.</p>
         <div class="btn-row"><button class="installClose" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer;">✕</button></div>
       `);
     }
@@ -740,7 +759,7 @@ if('serviceWorker' in navigator){
         deferredPrompt.prompt();
         await deferredPrompt.userChoice;
         deferredPrompt = null;
-        localStorage.setItem(KEY,'1');
+        localStorage.setItem(KEY, String(Date.now()));
         const el = document.querySelector('.install-banner'); if (el) el.remove();
         document.body.classList.remove('has-install-banner');
       });

@@ -34,9 +34,14 @@
       .hsc-btn.ghost{background:transparent;color:inherit;border:1px solid var(--line,#2c2c30)}
       .hsc-f{display:block;margin:12px 0 4px;font-size:13px;opacity:.8}
       .hsc-in{width:100%;box-sizing:border-box;background:var(--surface-2,#1d1e22);border:1px solid var(--line,#2c2c30);border-radius:10px;color:inherit;padding:12px;font-size:16px;font-family:inherit}
+      .hsc-pill{display:inline-flex;align-items:center;gap:4px;font-size:11px;font-weight:800;letter-spacing:.04em;padding:2px 8px 2px 5px;border-radius:99px;background:linear-gradient(90deg,#2a1c05,#111);border:1.5px solid #ffd24a;color:#ffd24a;vertical-align:middle;white-space:nowrap}.hsc-pill svg{width:13px;height:13px}
+      .hsc-strip{display:flex;gap:12px;overflow-x:auto;padding:4px 2px 12px;scroll-snap-type:x mandatory}
+      .hsc-mini{flex:0 0 240px;scroll-snap-align:start;border:1px solid var(--line,#2c2c30);border-radius:16px;padding:14px;background:var(--surface-2,#1d1e22);display:flex;flex-direction:column;gap:8px}
+      .hsc-mini .hsc-bio{margin:0;font-size:13px;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
       textarea.hsc-in{min-height:90px;resize:vertical}`;
     document.head.appendChild(st);
   }
+  const pill = () => '<span class="hsc-pill"><svg viewBox="0 0 24 24"><polygon points="12,1 22,6 22,17 12,23 2,17 2,6" fill="#ffd24a"/></svg>COACH</span>';
   function close(){ const o = document.getElementById('hsCoachOv'); if(o) o.remove(); }
   function shell(inner){
     ensureCss(); close();
@@ -62,7 +67,7 @@
       <div class="hsc-top"><h2>Choisis ton coach</h2><button class="hsc-x" aria-label="Fermer">✕</button></div>
       <p class="hsc-lede">Lis les présentations, puis choisis celui ou celle avec qui tu veux travailler. Sans engagement.</p>
       ${coaches.map((c, i) => `<div class="hsc-card">
-        <div class="hsc-head">${avatar(c)}<div style="min-width:0"><div class="hsc-name">${esc(c.display_name)} ${window.HSBadges && HSBadges.coachPill ? HSBadges.coachPill() : ''}</div>${c.headline ? `<div class="hsc-hl">${esc(c.headline)}</div>` : ''}</div></div>
+        <div class="hsc-head">${avatar(c)}<div style="min-width:0"><div class="hsc-name">${esc(c.display_name)} ${pill()}</div>${c.headline ? `<div class="hsc-hl">${esc(c.headline)}</div>` : ''}</div></div>
         ${c.bio ? `<div class="hsc-bio">${esc(c.bio)}</div>` : ''}
         ${c.specialties ? `<div class="hsc-tags">${c.specialties.split(',').map(s => s.trim()).filter(Boolean).slice(0, 8).map(s => `<span class="hsc-tag">${esc(s)}</span>`).join('')}</div>` : ''}
         <button class="hsc-btn" data-i="${i}">Contacter ${esc(c.display_name)}</button></div>`).join('')}
@@ -98,5 +103,20 @@
     };
   }
 
-  window.HSCoaches = { openDirectory, listCoaches };
+  // Bandeau "Nos coachs" (page d'accueil / visiteurs) : fiches en lecture seule + bouton de contact direct.
+  async function renderStrip(box, opts){
+    try{
+      const coaches = await listCoaches(opts.fetcher); cache = coaches;
+      if(!coaches.length){ box.style.display = 'none'; return; }
+      ensureCss();
+      box.innerHTML = `<div class="hsc-strip">${coaches.map((c, i) => `<div class="hsc-mini">
+        <div class="hsc-head">${avatar(c)}<div style="min-width:0"><div class="hsc-name" style="font-size:16px">${esc(c.display_name)}</div>${pill()}</div></div>
+        ${c.headline ? `<div class="hsc-hl">${esc(c.headline)}</div>` : ''}
+        ${c.bio ? `<div class="hsc-bio">${esc(c.bio)}</div>` : ''}
+        <button class="hsc-btn" data-i="${i}" style="margin-top:auto">Contacter ${esc((c.display_name || '').split(' ')[0])}</button></div>`).join('')}</div>`;
+      box.querySelectorAll('.hsc-btn[data-i]').forEach(b => b.onclick = () => openForm(Object.assign({}, opts, { fromList: false }), coaches[+b.dataset.i]));
+    }catch(e){ box.style.display = 'none'; }
+  }
+
+  window.HSCoaches = { openDirectory, listCoaches, renderStrip };
 })();

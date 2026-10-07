@@ -1017,7 +1017,7 @@ if('serviceWorker' in navigator){
 
 (function(){
   const KEY = 'hs_install_dismissed_v1';
-  if (localStorage.getItem(KEY)) return;
+  try{ const t = +localStorage.getItem(KEY); if(t && Date.now() - t < 14*864e5) return; }catch(e){}
   const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
   if (isStandalone) return;
 
@@ -1028,7 +1028,7 @@ if('serviceWorker' in navigator){
     document.body.appendChild(bar);
     document.body.classList.add('has-install-banner');
     const closeBtn = bar.querySelector('.installClose');
-    if (closeBtn) closeBtn.addEventListener('click', ()=>{ localStorage.setItem(KEY,'1'); bar.remove(); document.body.classList.remove('has-install-banner'); });
+    if (closeBtn) closeBtn.addEventListener('click', ()=>{ localStorage.setItem(KEY, String(Date.now())); bar.remove(); document.body.classList.remove('has-install-banner'); });
     const installBtn = bar.querySelector('.installGo');
     if (installBtn && onInstall) installBtn.addEventListener('click', onInstall);
   }
@@ -1039,6 +1039,10 @@ if('serviceWorker' in navigator){
     if (isSafari) {
       showBanner(`
         <p>Installe cette app sur ton écran d'accueil : appuie sur <strong>Partager</strong> puis <strong>« Sur l'écran d'accueil »</strong>.</p>
+        <div class="btn-row"><button class="installClose" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer;">✕</button></div>
+      `);    } else {
+      showBanner(`
+        <p>Pour installer l'app sur iPhone, ouvre ce site dans <strong>Safari</strong>, puis <strong>Partager</strong> › <strong>« Sur l'écran d'accueil »</strong>.</p>
         <div class="btn-row"><button class="installClose" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer;">✕</button></div>
       `);
     }
@@ -1058,7 +1062,7 @@ if('serviceWorker' in navigator){
         deferredPrompt.prompt();
         await deferredPrompt.userChoice;
         deferredPrompt = null;
-        localStorage.setItem(KEY,'1');
+        localStorage.setItem(KEY, String(Date.now()));
         const el = document.querySelector('.install-banner'); if (el) el.remove();
         document.body.classList.remove('has-install-banner');
       });
