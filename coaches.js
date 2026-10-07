@@ -62,7 +62,7 @@
       <div class="hsc-top"><h2>Choisis ton coach</h2><button class="hsc-x" aria-label="Fermer">✕</button></div>
       <p class="hsc-lede">Lis les présentations, puis choisis celui ou celle avec qui tu veux travailler. Sans engagement.</p>
       ${coaches.map((c, i) => `<div class="hsc-card">
-        <div class="hsc-head">${avatar(c)}<div style="min-width:0"><div class="hsc-name">${esc(c.display_name)}</div>${c.headline ? `<div class="hsc-hl">${esc(c.headline)}</div>` : ''}</div></div>
+        <div class="hsc-head">${avatar(c)}<div style="min-width:0"><div class="hsc-name">${esc(c.display_name)} ${window.HSBadges && HSBadges.coachPill ? HSBadges.coachPill() : ''}</div>${c.headline ? `<div class="hsc-hl">${esc(c.headline)}</div>` : ''}</div></div>
         ${c.bio ? `<div class="hsc-bio">${esc(c.bio)}</div>` : ''}
         ${c.specialties ? `<div class="hsc-tags">${c.specialties.split(',').map(s => s.trim()).filter(Boolean).slice(0, 8).map(s => `<span class="hsc-tag">${esc(s)}</span>`).join('')}</div>` : ''}
         <button class="hsc-btn" data-i="${i}">Contacter ${esc(c.display_name)}</button></div>`).join('')}

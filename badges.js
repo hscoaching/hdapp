@@ -263,6 +263,11 @@
         cur: 1, unlocked: true, needsLogs: false, earned: true, revoked: false, revokedReason: '', unlockedAt: null });
     });
     const core = badges.filter(b => !b.bonus), bonus = badges.filter(b => b.bonus);
+    if(data.coaching){
+      const sec = (id, icon, title, desc) => badges.push({ id, group: 'Coaching', tag: 'secret', icon, title, desc, bonus: true, secret: true, kind: 'event', target: 1, cur: 1, unlocked: true, needsLogs: false, earned: true, revoked: false, revokedReason: '', unlockedAt: null });
+      if(data.coaching.tailored) sec('sec_tailored', '📋', 'Sur mesure', 'Un coach a conçu un programme rien que pour toi.');
+      if(data.coaching.coached) sec('sec_coached', '🤝', 'Coaché', 'Un coach te suit personnellement. Tu n\'es plus seul dans l\'aventure.');
+    }
     return { stats: st, badges, unlockedCount: core.filter(b => b.unlocked).length, coreTotal: core.length, level: levelOf(core.filter(b => b.unlocked).length, profileOf(st)), bonusUnlocked: bonus.filter(b => b.unlocked).length, bonusTotal: bonus.length, goal: WEEKLY_GOAL };
   }
 
@@ -272,7 +277,7 @@
     const before = compute({
       sessions: (data.sessions||[]).filter(s => s.id !== sessionId),
       logs: data.logs ? data.logs.filter(l => l.session_id !== sessionId) : data.logs,
-      revoked: data.revoked, cardioIds: data.cardioIds, checkins: data.checkins, challengeBadges: data.challengeBadges
+      revoked: data.revoked, cardioIds: data.cardioIds, checkins: data.checkins, challengeBadges: data.challengeBadges, coaching: data.coaching
     });
     const had = new Set(before.badges.filter(b => b.unlocked).map(b => b.id));
     return { after, before, fresh: after.badges.filter(b => b.unlocked && !had.has(b.id)), levelUp: after.level.t > before.level.t ? after.level : null };
@@ -353,6 +358,11 @@
       .lvl-pad{position:absolute;right:-4px;bottom:-2px;font-size:15px;font-style:normal}
       .lvl-card.nxt{border-color:var(--accent,#fff);box-shadow:0 0 0 1px var(--accent,#fff),0 0 18px rgba(255,255,255,.12)}.lvl-card.nxt .medal{filter:saturate(.85) brightness(.85)}
       .lvl-steps .medal::after{display:none}
+      .medal.tS{--c1:#e5c8ff;--c2:#7a3fd1;--rim:#b784f5;box-shadow:0 0 18px rgba(155,100,255,.55),inset 0 0 0 3px rgba(0,0,0,.18)}
+      .bdg-sec{border:1px dashed #7a3fd1;background:linear-gradient(180deg,#1a1325,var(--surface,#16171a))}
+      .bdg-secret{display:inline-block;margin-top:8px;font-size:11px;font-weight:700;padding:3px 9px;border-radius:99px;border:1px solid #b784f5;color:#b784f5}
+      .coach-pill{display:inline-flex;align-items:center;gap:5px;font-size:12px;font-weight:800;letter-spacing:.04em;padding:3px 10px 3px 6px;border-radius:99px;background:linear-gradient(90deg,#2a1c05,#111);border:1.5px solid #ffd24a;color:#ffd24a;vertical-align:middle;white-space:nowrap;font-family:'Inter',system-ui,sans-serif}.coach-pill svg{width:16px;height:16px}
+      @keyframes secPulse{0%,100%{box-shadow:0 0 24px rgba(155,100,255,.3)}50%{box-shadow:0 0 44px rgba(155,100,255,.6)}}
       .end-pop{opacity:0;transform:translateY(14px) scale(.96);animation:endPop .5s cubic-bezier(.2,.9,.3,1.2) forwards}
       @keyframes endPop{to{opacity:1;transform:none}}
       .end-card{background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:16px;padding:16px;margin-bottom:12px}
@@ -402,6 +412,7 @@
       if(b.unlocked){
         const d = b.unlockedAt ? new Date(b.unlockedAt).toLocaleDateString('fr-FR', {day:'numeric', month:'short', year:'numeric'}) : '';
         const isF = opts.featured === b.id;
+        if(b.secret) return `<div class="bdg bdg-sec"><div class="bdg-ico">${medal('S', b.icon)}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div><div class="bdg-secret">🤫 Badge secret</div></div>`;
         const pickBtn = (!coach && opts.pick) ? `<button type="button" class="bdg-feat ${isF ? 'on' : ''}" onclick="${opts.pick}(${isF ? "'level'" : `'${b.id}'`})">${isF ? '★ Affiché à côté de ton nom' : 'Afficher à côté de mon nom'}</button>` : '';
         return `<div class="bdg${isF ? ' featured' : ''}"><div class="bdg-ico">${medal(tierOf(b, list), b.icon)}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div>${d ? `<div class="bdg-date">${d}</div>` : ''}${pickBtn}${coach ? `<button type="button" class="bdg-act warn" onclick="revokeBadgeAdmin('${b.id}')">Annuler ce badge</button>` : ''}</div>`;
       }
@@ -416,6 +427,7 @@
       const done = list.filter(b => b.unlocked).length, t = famTier(done, list.length);
       const best = list.slice().reverse().find(b => b.unlocked) || list[0];
       const tag = list[0].tag ? ` · bonus ${list[0].tag}` : '';
+      if(list.every(b => b.secret)) return `<details class="fam"><summary>${medal('S', best.icon, 54)}<div><div class="tt">${esc(name)}</div><div class="tl">${done} badge${done > 1 ? 's' : ''} secret${done > 1 ? 's' : ''} découvert${done > 1 ? 's' : ''}</div></div><span class="chev">▾</span></summary><div class="bdg-grid">${list.map(b => badgeHtml(b, list)).join('')}</div></details>`;
       return `<details class="fam"><summary>${medal(t, best.icon, 54)}<div><div class="tt">${esc(name)}</div><div class="tl">${done}/${list.length} · ${t ? TIER_NAMES[t] : 'à débloquer'}${tag}</div></div><span class="chev">▾</span></summary><div class="bdg-grid">${list.map(b => badgeHtml(b, list)).join('')}</div></details>`;
     };
     const coreFams = famNames.filter(n => !res.badges.find(b => b.group === n).bonus);
@@ -511,6 +523,40 @@
       sp.innerHTML = Array.from({ length: 14 }, (_, k) => `<i style="--x:${Math.round((Math.random() - .5) * 240)}px;--y:${Math.round(-30 - Math.random() * 90)}px;animation-delay:${(0.5 + Math.random() * .5).toFixed(2)}s">${em[k % em.length]}</i>`).join('');
       try{ if(navigator.vibrate) navigator.vibrate([30, 60, 30, 60, 90]); }catch(e){}
     }
+  }
+
+  // ---- Badge COACH (hexagone doré) ----
+  const HEX_SVG = (s) => `<svg viewBox="0 0 92 106" width="${s}" height="${Math.round(s * 106 / 92)}" aria-hidden="true"><defs><linearGradient id="hxg" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#ffe27a"/><stop offset=".55" stop-color="#d49b12"/><stop offset="1" stop-color="#7a5200"/></linearGradient></defs><polygon points="46,3 85,24 85,70 46,103 7,70 7,24" fill="url(#hxg)" stroke="#fff3b8" stroke-width="3"/><polygon points="46,14 76,30 76,66 46,92 16,66 16,30" fill="#16110a" stroke="#ffd24a" stroke-width="1.5"/><text x="46" y="48" text-anchor="middle" font-size="11" font-weight="800" fill="#ffd24a" letter-spacing="2" font-family="Inter,sans-serif">COACH</text><text x="46" y="76" text-anchor="middle" font-size="26" font-family="sans-serif">🏅</text></svg>`;
+  function coachPill(){ ensureCss(); return `<span class="coach-pill"><svg viewBox="0 0 24 24"><polygon points="12,1 22,6 22,17 12,23 2,17 2,6" fill="#ffd24a"/></svg>COACH</span>`; }
+  function coachHero(name){ ensureCss(); return `<div class="lvl-hero" style="margin-bottom:14px">${HEX_SVG(84)}<div style="flex:1"><div class="lv">Équipe HS Coaching</div><div class="nm">Coach${name ? ' ' + esc(name) : ''}</div><div class="bdg-mini" style="margin:6px 0 0">Ce badge est réservé aux coachs : il ne se gagne pas, il se mérite.</div></div></div>`; }
+
+  // ---- Révélation des badges secrets (une seule fois par badge) ----
+  const SECRETS = { sec_tailored: ['📋', 'Sur mesure', 'Un coach a conçu un programme rien que pour toi.'], sec_coached: ['🤝', 'Coaché', 'Un coach te suit personnellement. Tu n\'es plus seul dans l\'aventure.'] };
+  async function checkSecrets(getJson, userId){
+    try{
+      const r = await getJson('/rest/v1/rpc/my_coaching_flags?p_user=' + encodeURIComponent(userId));
+      const f = Array.isArray(r) && r[0]; if(!f) return;
+      const key = 'hs_secret_seen_' + userId; let seen = [];
+      try{ seen = JSON.parse(localStorage.getItem(key) || '[]'); }catch(e){}
+      const now = [f.tailored ? 'sec_tailored' : null, f.coached ? 'sec_coached' : null].filter(Boolean).filter(id => seen.indexOf(id) < 0);
+      if(!now.length) return;
+      try{ localStorage.setItem(key, JSON.stringify(seen.concat(now))); }catch(e){}
+      revealSecret(now);
+    }catch(e){ /* silencieux */ }
+  }
+  function revealSecret(ids){
+    ensureCss(); const id = ids[0], s = SECRETS[id]; if(!s) return;
+    const ov = document.createElement('div');
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:1400;display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto';
+    ov.innerHTML = `<div class="end-pop" style="max-width:360px;width:100%;border:1px solid #b784f5;border-radius:20px;padding:26px 20px;text-align:center;background:radial-gradient(circle at 50% 0,#2a1a45,#16171a 70%);animation:endPop .5s cubic-bezier(.2,.9,.3,1.2) forwards,secPulse 2.4s ease-in-out infinite">
+      <div style="font-size:12px;letter-spacing:.1em;color:#b784f5;font-weight:800;text-transform:uppercase;margin-bottom:14px">🤫 Badge secret débloqué</div>
+      <div class="medal tS" style="--s:104px;margin-bottom:14px">${s[0]}</div>
+      <div style="font-size:24px;font-weight:800">${esc(s[1])}</div>
+      <div style="font-size:14px;color:var(--ink-muted,#9a9a9e);margin:8px 0 18px;line-height:1.45">${esc(s[2])}</div>
+      <button type="button" style="font-family:inherit;font-weight:700;font-size:15px;padding:12px 28px;border-radius:999px;border:0;background:#b784f5;color:#1a1325;cursor:pointer">Génial !</button></div>`;
+    document.body.appendChild(ov);
+    try{ if(navigator.vibrate) navigator.vibrate([30, 60, 30, 60, 90]); }catch(e){}
+    ov.querySelector('button').onclick = () => { ov.remove(); if(ids.length > 1) revealSecret(ids.slice(1)); };
   }
 
   // ---- Carte de partage (image à poster) ----
@@ -611,7 +657,8 @@
     }
     return out;
   }
-  async function load(getJson, userId, withLogs){
+  async function load(getJson, userId, withLogs, lopts){
+    const other = !!(lopts && lopts.other);
     const uid = encodeURIComponent(userId);
     const sessions = await pageAll(getJson, `/rest/v1/sessions?select=id,started_at,completed_at,badge_eligible&user_id=eq.${uid}&order=started_at`);
     let logs;
@@ -625,8 +672,10 @@
     let checkins = [];
     try{ const r = await getJson(`/rest/v1/recovery_checkins?select=day,sleep_hours,soreness,energy&user_id=eq.${uid}&order=day&limit=1000`); if(Array.isArray(r)) checkins = r; }catch(e){ checkins = []; }
     let challengeBadges = [];
-    try{ const r = await getJson('/rest/v1/rpc/my_challenge_badges'); if(Array.isArray(r)) challengeBadges = r; }catch(e){ challengeBadges = []; }
-    return { sessions, logs, revoked, cardioIds, checkins, challengeBadges };
+    if(!other){ try{ const r = await getJson('/rest/v1/rpc/my_challenge_badges'); if(Array.isArray(r)) challengeBadges = r; }catch(e){ challengeBadges = []; } }
+    let coaching = null;
+    try{ const r = await getJson('/rest/v1/rpc/my_coaching_flags?p_user=' + uid); if(Array.isArray(r) && r[0]) coaching = r[0]; }catch(e){ coaching = null; }
+    return { sessions, logs, revoked, cardioIds, checkins, challengeBadges, coaching };
   }
 
 
@@ -739,5 +788,5 @@
     }catch(e){ return false; }
   }
 
-  window.HSBadges = { shareEnd, shareLevel, shareCard, pickPath, renderEnd, animateEnd, showLevel, showTier, levelUpSeen, chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, openCheckin, WEEKLY_GOAL };
+  window.HSBadges = { coachPill, coachHero, checkSecrets, shareEnd, shareLevel, shareCard, pickPath, renderEnd, animateEnd, showLevel, showTier, levelUpSeen, chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, openCheckin, WEEKLY_GOAL };
 })();

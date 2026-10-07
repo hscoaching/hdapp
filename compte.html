@@ -322,6 +322,7 @@ async function syncRole(){
 async function renderDashboard(){
   const role = await syncRole();
   const isCoachAccount = role === 'admin' || role === 'coach';
+  window.__isCoach = isCoachAccount;
   app.innerHTML = `
     <div class="eyebrow">MON COMPTE</div>
     <h1 class="page" id="hello">Salut 👋</h1>
@@ -358,7 +359,8 @@ async function refreshNameBadge(){
       const getJson = async x => { const r = await apiFetch(x); if(!r.ok) throw new Error('load_failed'); return r.json(); };
       const res = HSBadges.compute(await HSBadges.load(getJson, uid));
       const c = HSBadges.chip(res, p.featured_badge, true);
-      set(c);
+      set(c + (window.__isCoach ? ' ' + HSBadges.coachPill() : ''));
+      if(!window.__isCoach) HSBadges.checkSecrets(getJson, uid);
       if(HSBadges.levelUpSeen(uid, res.level)) setTimeout(() => HSBadges.showLevel(true), 400);
       if(!c && p.featured_badge) apiFetch(`/rest/v1/profiles?id=eq.${uid}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ featured_badge: null }) }).catch(()=>{});
     } else if(first){ set(''); }
@@ -450,9 +452,9 @@ async function loadBadges(){
   try{
     const getJson = async p => { const r = await apiFetch(p); if(!r.ok) throw new Error('load_failed'); return r.json(); };
     const uid = getSession().user.id;
-    const [data, prof] = await Promise.all([HSBadges.load(getJson, uid), getJson(`/rest/v1/profiles?select=featured_badge&id=eq.${uid}`).catch(() => [])]);
+    const [data, prof] = await Promise.all([HSBadges.load(getJson, uid), getJson(`/rest/v1/profiles?select=featured_badge,full_name&id=eq.${uid}`).catch(() => [])]);
     if(currentTab !== 'badges') return;
-    box.innerHTML = HSBadges.renderFull(HSBadges.compute(data), { pick: 'pickBadge', featured: (prof && prof[0] && prof[0].featured_badge) || null });
+    box.innerHTML = (window.__isCoach ? HSBadges.coachHero((prof && prof[0] && prof[0].full_name) || '') : '') + HSBadges.renderFull(HSBadges.compute(data), { pick: 'pickBadge', featured: (prof && prof[0] && prof[0].featured_badge) || null });
   }catch(e){
     console.error(e);
     if(currentTab === 'badges') box.innerHTML = '<div class="empty">Impossible de charger tes badges. Réessaie.</div>';

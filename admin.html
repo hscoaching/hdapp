@@ -1076,7 +1076,7 @@ async function openBadgesModal(clientId, name){
   const closeBtn = '<div class="row-actions" style="margin-top:14px;"><button class="btn btn-ghost" onclick="closeExerciseModal()">Fermer</button></div>';
   if(typeof HSBadges === 'undefined'){ body.innerHTML = '<div class="empty">Badges indisponibles.</div>' + closeBtn; return; }
   try{
-    const data = await HSBadges.load(p => api(p), clientId);
+    const data = await HSBadges.load(p => api(p), clientId, undefined, { other: true });
     body.innerHTML = HSBadges.renderFull(HSBadges.compute(data), { coach: true }) + closeBtn;
   }catch(e){
     console.error(e);
