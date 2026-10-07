@@ -776,60 +776,88 @@ function progressionCardHtml(ex){
 }
 
 // ---------- Poids / mensurations ----------
-let bodyLogs = [];
+let bodyLogs = [], bodyGoal = {}, poidsRange = 90;
 async function loadPoids(){
   document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
   try{
-    const res = await apiFetch(`/rest/v1/body_logs?select=*&order=logged_at.asc`);
+    const me = encodeURIComponent(getSession().user.id);
+    const res = await apiFetch(`/rest/v1/body_logs?select=*&user_id=eq.${me}&order=logged_at.asc`);
     bodyLogs = await res.json();
     if(!Array.isArray(bodyLogs)) bodyLogs = [];
-  }catch(e){ bodyLogs = []; }
+    try{ const g = await (await apiFetch(`/rest/v1/body_goals?select=*&user_id=eq.${me}`)).json(); bodyGoal = (Array.isArray(g) && g[0]) || {}; }catch(e){ bodyGoal = {}; }
+  }catch(e){ bodyLogs = []; bodyGoal = {}; }
   renderPoidsTab();
 }
+function pzCss(){ if(document.getElementById('pzCss')) return; const st = document.createElement('style'); st.id = 'pzCss'; st.textContent = '.pz-seg{font-family:inherit;font-size:12px;font-weight:700;padding:6px 10px;border-radius:999px;border:1px solid var(--line);background:var(--surface-2);color:var(--ink-muted);cursor:pointer}.pz-seg.on{background:var(--accent);color:var(--accent-ink,#0b0b0c);border-color:var(--accent)}'; document.head.appendChild(st); }
 function renderPoidsTab(){
+  pzCss();
   document.getElementById('tabBody').innerHTML = `
     <div class="card">
       <h3>Nouvelle pesée</h3>
       <div class="field"><label>Poids (kg)</label><input id="newWeight" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 78.5"></div>
-      <div class="field"><label>Tour de taille (cm, optionnel)</label><input id="newWaist" type="number" step="0.1" inputmode="decimal" placeholder="Ex : 82"></div>
       <button class="btn btn-accent" style="margin-top:4px;" onclick="addBodyLog()">Enregistrer</button>
     </div>
+    ${goalCardHtml()}
     ${weightChartHtml(bodyLogs)}
     ${bodyLogsListHtml(bodyLogs)}
   `;
 }
 function weightChartHtml(logs){
-  const pts = logs.filter(l=>l.weight_kg!=null).slice(-20);
+  const key = 'weight_kg', unit = 'kg', goal = bodyGoal.weight_kg;
+  const all = logs.filter(l => l[key] != null);
+  const cutoff = poidsRange ? Date.now() - poidsRange * 864e5 : 0;
+  const pts = all.filter(l => new Date(l.logged_at).getTime() >= cutoff);
+  const seg = (k, lab) => `<button type="button" class="pz-seg ${poidsRange === k ? 'on' : ''}" onclick="poidsRange=${k};renderPoidsTab()">${lab}</button>`;
+  const head = `<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px"><span style="flex:1"></span>${seg(30,'30 j')}${seg(90,'3 mois')}${seg(0,'Tout')}</div>`;
   if(pts.length < 2){
-    return `<div class="card progress-card"><h3>Évolution du poids</h3><p>Ajoute au moins deux pesées pour voir ta courbe d'évolution.</p></div>`;
+    return `<div class="card progress-card"><h3>Évolution</h3>${head}<p>${all.length < 2 ? 'Ajoute au moins deux mesures pour voir ta courbe.' : 'Pas assez de mesures sur cette période : choisis « Tout ».'}</p></div>`;
   }
-  const w = 280, h = 64, pad = 8;
-  const weights = pts.map(p=>p.weight_kg);
-  const min = Math.min(...weights), max = Math.max(...weights);
-  const range = (max-min) || 1;
-  const stepX = (w-2*pad)/(pts.length-1);
-  const coords = pts.map((p,i)=>{
-    const x = pad+i*stepX;
-    const y = h-pad-((p.weight_kg-min)/range)*(h-2*pad);
-    return [x,y];
-  });
-  const poly = coords.map(c=> c[0].toFixed(1)+','+c[1].toFixed(1)).join(' ');
-  const dots = coords.map(c=> `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="2.5" style="fill:var(--accent);"/>`).join('');
-  const first = pts[0].weight_kg, last = pts[pts.length-1].weight_kg;
-  const delta = Math.round((last-first)*10)/10;
-  let deltaTxt;
-  if(delta > 0) deltaTxt = `+${delta} kg depuis ta première pesée affichée`;
-  else if(delta < 0) deltaTxt = `${delta} kg depuis ta première pesée affichée`;
-  else deltaTxt = `Poids stable depuis ta première pesée affichée`;
-  return `<div class="card progress-card">
-    <h3>Évolution du poids</h3>
-    <p>${deltaTxt}</p>
-    <svg width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
-      <polyline points="${poly}" style="fill:none; stroke:var(--accent); stroke-width:2;" stroke-linecap="round" stroke-linejoin="round"/>
-      ${dots}
-    </svg>
-    <p style="margin-top:8px;color:var(--ink-muted);font-size:12px;">Dernier poids noté : ${last} kg · ${pts.length} pesée${pts.length>1?'s':''} affichée${pts.length>1?'s':''}</p>
-  </div>`;
+  const W = 320, H = 190, L = 38, R = 12, T = 14, B = 26;
+  const vals = pts.map(p => Number(p[key]));
+  let lo = Math.min(...vals, goal != null ? Number(goal) : Infinity), hi = Math.max(...vals, goal != null ? Number(goal) : -Infinity);
+  const padv = (hi - lo) * 0.15 || 1; lo -= padv; hi += padv;
+  const t0 = new Date(pts[0].logged_at).getTime(), t1 = new Date(pts[pts.length - 1].logged_at).getTime(), span = (t1 - t0) || 1;
+  const X = t => L + (t - t0) / span * (W - L - R), Y = v => T + (hi - v) / (hi - lo) * (H - T - B);
+  const fmt = v => (Math.round(v * 10) / 10).toString().replace('.', ',');
+  const coords = pts.map(p => [X(new Date(p.logged_at).getTime()), Y(Number(p[key])), p]);
+  const poly = coords.map(c => c[0].toFixed(1) + ',' + c[1].toFixed(1)).join(' ');
+  const area = `${L},${H - B} ${poly} ${coords[coords.length - 1][0].toFixed(1)},${H - B}`;
+  const ticks = [lo + padv, (lo + hi) / 2, hi - padv].map(v => `<line x1="${L}" x2="${W - R}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}" style="stroke:var(--line);stroke-width:1"/><text x="${L - 6}" y="${(Y(v) + 4).toFixed(1)}" text-anchor="end" style="fill:var(--ink-muted);font-size:10px">${fmt(v)}</text>`).join('');
+  const dFmt = t => new Date(t).toLocaleDateString('fr-FR', { day:'numeric', month:'short' });
+  const xl = `<text x="${L}" y="${H - 8}" style="fill:var(--ink-muted);font-size:10px">${dFmt(t0)}</text><text x="${W - R}" y="${H - 8}" text-anchor="end" style="fill:var(--ink-muted);font-size:10px">${dFmt(t1)}</text>`;
+  const gl = goal != null ? `<line x1="${L}" x2="${W - R}" y1="${Y(Number(goal)).toFixed(1)}" y2="${Y(Number(goal)).toFixed(1)}" style="stroke:var(--accent);stroke-width:1.5;stroke-dasharray:5 4"/><text x="${L + 4}" y="${(Y(Number(goal)) - 5).toFixed(1)}" text-anchor="start" style="fill:var(--accent);font-size:10px;font-weight:700">Objectif ${fmt(Number(goal))} ${unit}</text>` : '';
+  const dots = coords.map(c => `<circle cx="${c[0].toFixed(1)}" cy="${c[1].toFixed(1)}" r="3.2" style="fill:var(--accent)"><title>${dFmt(new Date(c[2].logged_at).getTime())} : ${fmt(Number(c[2][key]))} ${unit}</title></circle>`).join('');
+  const first = vals[0], last = vals[vals.length - 1], delta = Math.round((last - first) * 10) / 10;
+  const avg = vals.reduce((a, b) => a + b, 0) / vals.length;
+  const deltaTxt = delta === 0 ? 'Stable sur la période' : (delta > 0 ? '+' : '') + fmt(delta) + ' ' + unit + ' sur la période';
+  return `<div class="card progress-card"><h3>Évolution</h3>${head}
+    <div style="font-size:26px;font-weight:800;line-height:1.1">${fmt(last)} ${unit}</div><p style="margin:2px 0 8px">${deltaTxt}</p>
+    <svg viewBox="0 0 ${W} ${H}" style="width:100%;height:auto;display:block" role="img" aria-label="Courbe d'évolution">${ticks}<polygon points="${area}" style="fill:var(--accent);opacity:.1"/><polyline points="${poly}" style="fill:none;stroke:var(--accent);stroke-width:2.2" stroke-linecap="round" stroke-linejoin="round"/>${gl}${dots}${xl}</svg>
+    <div style="display:flex;justify-content:space-between;margin-top:8px;font-size:12px;color:var(--ink-muted)"><span>Min <b style="color:var(--ink)">${fmt(Math.min(...vals))}</b></span><span>Moyenne <b style="color:var(--ink)">${fmt(avg)}</b></span><span>Max <b style="color:var(--ink)">${fmt(Math.max(...vals))}</b></span><span>${pts.length} mesures</span></div></div>`;
+}
+function goalCardHtml(){
+  const g = bodyGoal || {}, wl = bodyLogs.filter(l => l.weight_kg != null);
+  let prog = '';
+  if(g.weight_kg != null && wl.length){
+    const start = Number(wl[0].weight_kg), now = Number(wl[wl.length - 1].weight_kg), goal = Number(g.weight_kg);
+    const total = Math.abs(goal - start), done = Math.max(0, Math.min(total, total - Math.abs(goal - now)));
+    const pct = total ? Math.round(done / total * 100) : 100, left = Math.round(Math.abs(goal - now) * 10) / 10;
+    prog = left < 0.1 ? `<div class="end-sub" style="margin-top:8px">🎯 Objectif atteint, bravo !</div>` : `<div style="height:10px;border-radius:99px;background:var(--surface-2);overflow:hidden;margin-top:10px"><i style="display:block;height:100%;width:${pct}%;background:var(--accent);border-radius:99px"></i></div><div style="font-size:12.5px;color:var(--ink-muted);margin-top:6px">Départ ${String(start).replace('.', ',')} kg · actuel <b style="color:var(--ink)">${String(now).replace('.', ',')} kg</b> · encore <b style="color:var(--ink)">${String(left).replace('.', ',')} kg</b> (${pct} %)</div>`;
+  }
+  return `<div class="card"><h3>🎯 Mon objectif</h3>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px"><div class="field" style="flex:1;min-width:120px;margin:0"><label>Poids visé (kg)</label><input id="goalWeight" type="number" step="0.1" inputmode="decimal" value="${g.weight_kg ?? ''}" placeholder="Ex : 75"></div>
+</div>
+    <button class="btn btn-ghost" style="margin-top:10px" onclick="saveBodyGoal(this)">Enregistrer l'objectif</button>${prog}</div>`;
+}
+async function saveBodyGoal(btn){
+  const v = id => { const x = document.getElementById(id).value; return x === '' ? null : parseFloat(x); };
+  const row = { user_id: getSession().user.id, weight_kg: v('goalWeight'), updated_at: new Date().toISOString() };
+  btn.disabled = true;
+  try{
+    const res = await apiFetch('/rest/v1/body_goals?on_conflict=user_id', { method:'POST', headers:{ Prefer:'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(row) });
+    if(!res.ok) throw new Error(await res.text());
+    bodyGoal = row; renderPoidsTab();
+  }catch(e){ console.error(e); btn.disabled = false; alert('Objectif non enregistré : vérifie les valeurs (entre 20 et 400 kg).'); }
 }
 function bodyLogsListHtml(logs){
   if(!logs.length) return '<div class="empty">Aucune pesée enregistrée pour l\'instant.</div>';
@@ -837,7 +865,6 @@ function bodyLogsListHtml(logs){
     const d = new Date(l.logged_at);
     const parts = [];
     if(l.weight_kg!=null) parts.push(`${l.weight_kg} kg`);
-    if(l.waist_cm!=null) parts.push(`taille ${l.waist_cm} cm`);
     return `<div class="card" style="display:flex; align-items:center; justify-content:space-between; gap:12px;">
       <div><div class="tag">${d.toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'})}</div>
       <h3 style="margin-top:4px;">${parts.join(' · ') || '—'}</h3></div>
@@ -848,17 +875,15 @@ function bodyLogsListHtml(logs){
 }
 async function addBodyLog(){
   const weightEl = document.getElementById('newWeight');
-  const waistEl = document.getElementById('newWaist');
   const weight = weightEl.value ? parseFloat(weightEl.value) : null;
-  const waist = waistEl.value ? parseFloat(waistEl.value) : null;
-  if(weight==null && waist==null){ alert('Renseigne au moins un poids ou un tour de taille.'); return; }
+  if(weight==null){ alert('Renseigne ton poids.'); return; }
   const btn = event.target;
   btn.disabled = true; btn.textContent = 'Enregistrement...';
   try{
     const res = await apiFetch(`/rest/v1/body_logs`, {
       method:'POST',
       headers:{ Prefer:'return=representation' },
-      body: JSON.stringify({ user_id: getSession().user.id, weight_kg: weight, waist_cm: waist })
+      body: JSON.stringify({ user_id: getSession().user.id, weight_kg: weight })
     });
     if(!res.ok) throw new Error(await res.text());
     const [created] = await res.json();

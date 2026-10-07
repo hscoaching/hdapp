@@ -487,7 +487,9 @@
     const goal = `<div class="end-card end-pop" style="animation-delay:${dl()}"><h4>Cette semaine</h4><div style="display:flex;gap:6px;margin-bottom:6px">${Array.from({ length: Math.max(after.goal, st.thisWeek) }, (_, i) => `<span class="bdg-dot ${i < st.thisWeek ? 'on' : ''}" style="flex:1;height:10px"></span>`).join('')}</div>
       <div class="end-sub">${st.thisWeek >= after.goal ? '✅ Objectif de la semaine atteint. Le repos fait partie du programme 😴' : `<b>${st.thisWeek}/${after.goal}</b> séance${after.goal > 1 ? 's' : ''} · encore <b>${after.goal - st.thisWeek}</b> pour valider ta semaine`}${st.current > 0 ? ` · 🔥 ${st.current} semaine${st.current > 1 ? 's' : ''} de suite` : ''}</div></div>`;
     const next = nx ? `<div class="end-card end-pop" style="animation-delay:${dl()}"><h4>Prochain badge en vue</h4><div style="display:flex;gap:12px;align-items:center"><div class="bdg-ico" style="flex:none;margin:0">${nx.icon}</div><div style="min-width:0;flex:1"><div class="bdg-t" style="text-align:left">${esc(nx.title)}</div><div class="end-bar" style="margin-top:6px;height:7px"><i data-from="0" data-to="${Math.round(nx.cur / nx.target * 100)}"></i></div><div class="end-sub" style="margin-top:6px">${esc(nx.desc || '')}</div></div></div></div>` : '';
-    return up + bad + lvl + goal + next;
+    window.__hsEndShare = { levelUp, fresh, level: L };
+    const shareBtn = `<button type="button" class="end-pop" style="animation-delay:${dl()};width:100%;font-family:inherit;font-weight:700;font-size:15px;padding:13px;border-radius:12px;border:1px solid var(--accent,#d9ff3f);background:transparent;color:var(--ink,#f5f5f5);cursor:pointer;margin-bottom:10px" onclick="HSBadges.shareEnd()">📤 Partager ma séance</button>`;
+    return up + bad + lvl + goal + next + shareBtn;
   }
   // Anime un conteneur : compteurs [data-count], barres [data-to], étincelles, vibration à la découverte d'un badge
   function animateEnd(root){
@@ -509,6 +511,72 @@
       sp.innerHTML = Array.from({ length: 14 }, (_, k) => `<i style="--x:${Math.round((Math.random() - .5) * 240)}px;--y:${Math.round(-30 - Math.random() * 90)}px;animation-delay:${(0.5 + Math.random() * .5).toFixed(2)}s">${em[k % em.length]}</i>`).join('');
       try{ if(navigator.vibrate) navigator.vibrate([30, 60, 30, 60, 90]); }catch(e){}
     }
+  }
+
+  // ---- Carte de partage (image à poster) ----
+  const TIER_COL = [['#6b6b70', '#2a2a2d', '#3a3a3e'], ['#e7a26b', '#8a4f27', '#c2773b'], ['#f1f3f6', '#8d95a3', '#c9cfd9'], ['#ffe27a', '#b8860b', '#f2c744'], ['#ff9a9a', '#a30f26', '#e5484d'], ['#e5c8ff', '#7a3fd1', '#b784f5']];
+  function wrapText(ctx, text, maxW){
+    const words = String(text).split(' '), lines = []; let cur = '';
+    words.forEach(w => { const t = cur ? cur + ' ' + w : w; if(ctx.measureText(t).width > maxW && cur){ lines.push(cur); cur = w; } else cur = t; });
+    if(cur) lines.push(cur); return lines;
+  }
+  function loadSvg(svg, color){
+    return new Promise(res => {
+      const s = svg.replace('<svg ', '<svg xmlns="http://www.w3.org/2000/svg" width="400" height="400" ').replace(/currentColor/g, color);
+      const img = new Image(); img.onload = () => res(img); img.onerror = () => res(null);
+      img.src = 'data:image/svg+xml;charset=utf-8,' + encodeURIComponent(s);
+    });
+  }
+  async function makeCard(o){
+    const W = 1080, H = 1350, cv = document.createElement('canvas'); cv.width = W; cv.height = H;
+    const ctx = cv.getContext('2d'), FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
+    let accent = '#d9ff3f'; try{ accent = getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || accent; }catch(e){}
+    ctx.fillStyle = '#0b0b0c'; ctx.fillRect(0, 0, W, H);
+    const glow = ctx.createRadialGradient(W / 2, 560, 40, W / 2, 560, 720); glow.addColorStop(0, 'rgba(255,255,255,.14)'); glow.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = glow; ctx.fillRect(0, 0, W, H);
+    ctx.fillStyle = accent; ctx.fillRect(0, 0, W, 10);
+    ctx.textAlign = 'left'; ctx.fillStyle = '#f5f5f5'; ctx.font = `800 46px ${FONT}`; ctx.fillText('HS COACHING', 70, 120);
+    ctx.textAlign = 'center'; ctx.fillStyle = accent; ctx.font = `700 32px ${FONT}`; ctx.fillText(String(o.eyebrow || '').toUpperCase(), W / 2, 270);
+    const [c1, c2, rim] = TIER_COL[o.t || 0], cx = W / 2, cy = 560, r = 200;
+    const g = ctx.createRadialGradient(cx - 60, cy - 70, 20, cx, cy, r); g.addColorStop(0, c1); g.addColorStop(.78, c2);
+    ctx.shadowColor = 'rgba(0,0,0,.6)'; ctx.shadowBlur = 40; ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.fillStyle = g; ctx.fill(); ctx.shadowBlur = 0;
+    ctx.lineWidth = 14; ctx.strokeStyle = rim; ctx.stroke();
+    if(o.icon && String(o.icon).indexOf('<svg') === 0){ const img = await loadSvg(o.icon, '#1d1608'); if(img) ctx.drawImage(img, cx - 125, cy - 125, 250, 250); }
+    else if(o.icon){ ctx.font = `200px ${FONT}`; ctx.textBaseline = 'middle'; ctx.fillText(o.icon, cx, cy + 10); ctx.textBaseline = 'alphabetic'; }
+    ctx.fillStyle = '#f5f5f5'; ctx.font = `800 78px ${FONT}`;
+    const tl = wrapText(ctx, o.title || '', 900).slice(0, 2); tl.forEach((l, i) => ctx.fillText(l, W / 2, 860 + i * 88));
+    let y = 860 + tl.length * 88 - 20;
+    if(o.sub){ ctx.fillStyle = 'rgba(245,245,245,.7)'; ctx.font = `500 36px ${FONT}`; wrapText(ctx, o.sub, 880).slice(0, 2).forEach((l, i) => ctx.fillText(l, W / 2, y + 50 + i * 46)); }
+    const st = (o.stats || []).filter(s => s && s.v).slice(0, 3);
+    if(st.length){
+      const colW = 920 / st.length;
+      st.forEach((s, i) => { const x = 80 + colW * i + colW / 2; ctx.fillStyle = '#f5f5f5'; ctx.font = `800 62px ${FONT}`; ctx.fillText(s.v, x, 1130); ctx.fillStyle = 'rgba(245,245,245,.6)'; ctx.font = `500 28px ${FONT}`; ctx.fillText(s.l, x, 1176); });
+    }
+    ctx.fillStyle = accent; ctx.fillRect(70, 1230, W - 140, 3);
+    ctx.fillStyle = 'rgba(245,245,245,.75)'; ctx.font = `600 30px ${FONT}`; ctx.fillText('Rejoins-moi sur l\'appli HS Coaching', W / 2, 1290);
+    return cv;
+  }
+  async function shareCard(o){
+    try{
+      const cv = await makeCard(o);
+      const blob = await new Promise(r => cv.toBlob(r, 'image/png'));
+      const file = new File([blob], 'hs-coaching.png', { type: 'image/png' });
+      const text = (o.title || 'Ma séance') + ' · HS Coaching';
+      if(navigator.canShare && navigator.canShare({ files: [file] })){ try{ await navigator.share({ files: [file], text }); return; }catch(e){ if(e && e.name === 'AbortError') return; } }
+      const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'hs-coaching.png'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    }catch(e){ console.error(e); alert('Impossible de créer l\'image pour le moment.'); }
+  }
+  function shareEnd(){
+    const R = window.__hsEndShare; if(!R) return;
+    const S = window.__hsEndStats || {};
+    const stats = [S.nSets ? { v: String(S.nSets), l: S.nSets > 1 ? 'séries' : 'série' } : null, S.vol ? { v: Math.round(S.vol).toLocaleString('fr-FR') + ' kg', l: 'soulevés' } : null, S.minutes ? { v: S.minutes + ' min', l: 'de séance' } : null];
+    if(R.levelUp) return shareCard({ eyebrow: 'Nouveau niveau', title: R.levelUp.name, sub: R.levelUp.myth ? 'Je rejoins ' + R.levelUp.myth.who : '', t: R.levelUp.t, icon: lvlIcon(R.levelUp.profile, R.levelUp.t), stats });
+    if(R.fresh && R.fresh.length) return shareCard({ eyebrow: 'Nouveau badge', title: R.fresh[0].title, sub: R.fresh[0].desc, t: 3, icon: R.fresh[0].icon, stats });
+    const L = R.level; return shareCard({ eyebrow: 'Séance terminée', title: 'Une de plus dans la boîte 💪', sub: 'Niveau ' + L.tierName + ' · ' + L.name, t: L.t, icon: lvlIcon(L.profile, L.t), stats });
+  }
+  function shareLevel(t, prof){
+    const L = window.__hsLvl; if(!L) return; prof = prof || L.profile; const my = mythOf({ profile: prof, t });
+    return shareCard({ eyebrow: 'Niveau ' + TIERS[t].n, title: LADDERS[prof][t], sub: my ? 'Comme ' + my.who : '', t, icon: lvlIcon(prof, t), stats: [{ v: String(L.pts), l: 'badges principaux' }] });
   }
 
   // Petite pastille à afficher à côté d'un nom : par défaut le niveau, ou un badge précis (s'il est réellement acquis et non annulé), ou rien ('none')
@@ -639,7 +707,8 @@
       <div style="font-size:28px;font-weight:800;line-height:1.15;margin:4px 0 14px">${esc(LADDERS[prof][t])}</div>
       ${my ? `<div style="border-top:1px solid var(--line,#2c2c30);padding-top:14px"><div style="font-size:12px;color:var(--ink-muted,#9a9a9e);margin-bottom:4px">La légende</div><div style="font-size:20px;font-weight:700;margin-bottom:8px">${esc(my.who)}</div><div style="font-size:14.5px;line-height:1.5">${esc(my.txt)}</div></div>` : ''}
       <div style="margin-top:16px;font-size:13.5px">${done && prof === L.profile ? '✅ Tu as atteint ce niveau.' : prof !== L.profile ? `Ce titre appartient au parcours ${esc(PROFILE_NAMES[prof] || '')}. Il s'obtient avec le même nombre de badges principaux (${tr.at}) : tu as ${L.pts}/${tr.at}, et le parcours se choisit selon le type de tes séances.` : `🔒 Il te manque <b>${missing} badge${missing > 1 ? 's' : ''} principa${missing > 1 ? 'ux' : 'l'}</b> (${L.pts}/${tr.at}).`}</div>
-      <button type="button" style="margin-top:18px;font-family:inherit;font-weight:700;font-size:14px;padding:12px 26px;border-radius:999px;border:0;background:var(--accent,#fff);color:var(--accent-ink,#0b0b0c);cursor:pointer" onclick="document.getElementById('hsLvlOv').remove()">Fermer</button></div>`;
+      ${done && prof === L.profile ? `<button type="button" style="margin-top:16px;font-family:inherit;font-weight:700;font-size:14px;padding:11px 22px;border-radius:999px;border:1px solid var(--accent,#fff);background:none;color:var(--ink,#f5f5f5);cursor:pointer" onclick="HSBadges.shareLevel(${t})">📤 Partager ce niveau</button><br>` : ''}
+      <button type="button" style="margin-top:14px;font-family:inherit;font-weight:700;font-size:14px;padding:12px 26px;border-radius:999px;border:0;background:var(--accent,#fff);color:var(--accent-ink,#0b0b0c);cursor:pointer" onclick="document.getElementById('hsLvlOv').remove()">Fermer</button></div>`;
     document.body.appendChild(ov);
   }
   function showLevel(celebrate){
@@ -657,7 +726,8 @@
       <div style="font-size:28px;font-weight:800;line-height:1.15;margin:4px 0 14px">${esc(L.name)}</div>
       ${m ? `<div style="border-top:1px solid var(--line,#2c2c30);padding-top:14px"><div style="font-size:12px;color:var(--ink-muted,#9a9a9e);margin-bottom:4px">Ta légende</div><div style="font-size:20px;font-weight:700;margin-bottom:8px">${esc(m.who)}</div><div style="font-size:14.5px;line-height:1.5">${esc(m.txt)}</div></div>` : '<div style="font-size:14px;color:var(--ink-muted,#9a9a9e)">Débloque ton premier badge de séances pour entrer dans la légende.</div>'}
       ${L.next ? `<div style="margin-top:16px;font-size:12.5px;color:var(--ink-muted,#9a9a9e)">Prochain palier : <b style="color:var(--ink,#f5f5f5)">${esc(L.next.n)}</b> (${L.pts}/${L.next.at} badges principaux)</div>` : '<div style="margin-top:16px;font-size:12.5px;color:var(--ink-muted,#9a9a9e)">Tu as atteint le sommet 🏛️</div>'}
-      <button type="button" style="margin-top:18px;font-family:inherit;font-weight:700;font-size:14px;padding:12px 26px;border-radius:999px;border:0;background:var(--accent,#fff);color:var(--accent-ink,#0b0b0c);cursor:pointer" onclick="document.getElementById('hsLvlOv').remove()">Fermer</button></div>`;
+      ${L.t ? `<button type="button" style="margin-top:16px;font-family:inherit;font-weight:700;font-size:14px;padding:11px 22px;border-radius:999px;border:1px solid var(--accent,#fff);background:none;color:var(--ink,#f5f5f5);cursor:pointer" onclick="HSBadges.shareLevel(${L.t})">📤 Partager mon niveau</button><br>` : ''}
+      <button type="button" style="margin-top:14px;font-family:inherit;font-weight:700;font-size:14px;padding:12px 26px;border-radius:999px;border:0;background:var(--accent,#fff);color:var(--accent-ink,#0b0b0c);cursor:pointer" onclick="document.getElementById('hsLvlOv').remove()">Fermer</button></div>`;
     document.body.appendChild(ov);
   }
   // Niveau déjà « fêté » sur cet appareil : renvoie true si le niveau vient de monter
@@ -669,5 +739,5 @@
     }catch(e){ return false; }
   }
 
-  window.HSBadges = { pickPath, renderEnd, animateEnd, showLevel, showTier, levelUpSeen, chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, openCheckin, WEEKLY_GOAL };
+  window.HSBadges = { shareEnd, shareLevel, shareCard, pickPath, renderEnd, animateEnd, showLevel, showTier, levelUpSeen, chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, openCheckin, WEEKLY_GOAL };
 })();

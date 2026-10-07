@@ -1262,6 +1262,7 @@ function showSessionSummary(programId, eyebrow, durationMs, nSets, vol, sessionI
     <button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}'">Retour au programme</button>
   `;
   window.scrollTo(0,0);
+  window.__hsEndStats = { nSets, vol, minutes: durationMs ? Math.max(1, Math.round(durationMs / 60000)) : 0 };
   if(typeof HSBadges !== 'undefined' && HSBadges.animateEnd) HSBadges.animateEnd(body);
   showNewBadges(sessionId);
 }

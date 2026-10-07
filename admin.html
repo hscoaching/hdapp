@@ -295,7 +295,7 @@ function renderDashboard(){
       <div class="stat-tile"><div class="stat-num">…</div><div class="stat-label">Messages non lus</div></div>
       ${IS_SUPER ? `<div class="stat-tile" style="cursor:pointer;" onclick="openVisitsModal()"><div class="stat-num">…</div><div class="stat-label">Visiteurs de l'appli</div></div>` : ''}
     </div>
-    <div class="row-actions" style="margin-bottom:16px;"><button class="btn btn-ghost" onclick="openEntranceQr()">QR code d'entrée de salle</button><button class="btn btn-ghost" onclick="openMyCoachCard()">🪪 Ma fiche coach</button></div>
+    <div class="row-actions" style="margin-bottom:16px;"><button class="btn btn-ghost" onclick="openEntranceQr()">QR code d'entrée de salle</button><button class="btn btn-ghost" onclick="openMyCoachCard()">🪪 Ma fiche coach</button>${IS_SUPER ? '<button class="btn btn-ghost" onclick="openBackups()">💾 Sauvegardes</button>' : ''}</div>
     <div class="tabs">
       <div class="tab" data-t="clients">Clients</div>
       <div class="tab" data-t="messages">Messages</div>
@@ -458,6 +458,41 @@ function load(){
   else if(currentTab==='programmes') renderProgramsTab();
   else if(currentTab==='challenges') renderChallengesAdmin();
   else renderExercisesTab();
+}
+
+// ================= SAUVEGARDES (grand admin) =================
+async function backupCall(action){
+  await refreshIfNeeded(); const s = getSession();
+  return fetch(`${SUPABASE_URL}/functions/v1/backup-db`, { method:'POST', headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token}`, 'Content-Type':'application/json' }, body: JSON.stringify({ action }) });
+}
+async function openBackups(){
+  const old = document.getElementById('bkOv'); if(old) old.remove();
+  const ov = document.createElement('div'); ov.id = 'bkOv';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1300;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto';
+  ov.onclick = e => { if(e.target === ov) ov.remove(); };
+  ov.innerHTML = `<div style="max-width:480px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px 18px">
+    <h2 style="margin:0 0 4px">💾 Sauvegardes</h2>
+    <div style="font-size:13px;opacity:.75;margin-bottom:12px">Une copie de toutes les données (clients, séances, programmes, messages…) est faite automatiquement chaque nuit. Les 14 dernières sont gardées.</div>
+    <div id="bkList" style="font-size:14px;margin-bottom:14px">Chargement…</div>
+    <div style="display:flex;gap:10px"><button class="btn btn-accent" style="flex:1;justify-content:center" id="bkNow">⬇️ Télécharger une sauvegarde maintenant</button><button class="btn btn-ghost" id="bkX">Fermer</button></div>
+    <div style="font-size:12px;opacity:.65;margin-top:10px">Conseil : garde un fichier téléchargé de temps en temps sur ton ordinateur ou ton cloud. C'est ta copie de secours en dehors de Supabase.</div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#bkX').onclick = () => ov.remove();
+  try{
+    const r = await backupCall('status'); const j = await r.json();
+    const f = (j.files || []).filter(x => x.name.startsWith('backup-'));
+    ov.querySelector('#bkList').innerHTML = f.length ? f.slice(0, 5).map(x => `<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line)"><span>${escapeHtml(x.name.replace('backup-','').replace('.json',''))}</span><span style="opacity:.6">${x.at ? new Date(x.at).toLocaleTimeString('fr-FR',{hour:'2-digit',minute:'2-digit'}) : ''}</span></div>`).join('') + (f.length > 5 ? `<div style="opacity:.6;padding-top:6px">+ ${f.length - 5} plus anciennes</div>` : '') : 'Aucune sauvegarde pour le moment (la première se fait cette nuit).';
+  }catch(e){ ov.querySelector('#bkList').textContent = 'Liste indisponible.'; }
+  ov.querySelector('#bkNow').onclick = async () => {
+    const b = ov.querySelector('#bkNow'); b.disabled = true; b.textContent = 'Préparation…';
+    try{
+      const r = await backupCall('download'); if(!r.ok) throw new Error('bk');
+      const blob = await r.blob(), url = URL.createObjectURL(blob), el = document.createElement('a');
+      el.href = url; el.download = 'hs-coaching-sauvegarde-' + new Date().toISOString().slice(0,10) + '.json'; document.body.appendChild(el); el.click(); el.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 4000); toast('Sauvegarde téléchargée');
+    }catch(e){ console.error(e); toast('Sauvegarde impossible, réessaie'); }
+    b.disabled = false; b.textContent = '⬇️ Télécharger une sauvegarde maintenant';
+  };
 }
 
 // ================= CHALLENGES (grand admin) =================
