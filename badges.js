@@ -256,6 +256,12 @@
         unlockedAt: unlockedAt[d.id] || null
       });
     });
+    // Badges exclusifs des challenges (un par challenge relevé)
+    (data.challengeBadges || []).forEach(cb => {
+      const medal = cb.ended && cb.rnk >= 1 && cb.rnk <= 3 ? ['🥇 1er','🥈 2e','🥉 3e'][cb.rnk - 1] + ' du challenge' : 'Challenge relevé';
+      badges.push({ id: 'ch_' + cb.challenge_id, group: 'Challenges', tag: 'événement', icon: cb.badge_icon || '🏆', title: cb.title, desc: medal, bonus: true, kind: 'event', target: 1,
+        cur: 1, unlocked: true, needsLogs: false, earned: true, revoked: false, revokedReason: '', unlockedAt: null });
+    });
     const core = badges.filter(b => !b.bonus), bonus = badges.filter(b => b.bonus);
     return { stats: st, badges, unlockedCount: core.filter(b => b.unlocked).length, coreTotal: core.length, level: levelOf(core.filter(b => b.unlocked).length, profileOf(st)), bonusUnlocked: bonus.filter(b => b.unlocked).length, bonusTotal: bonus.length, goal: WEEKLY_GOAL };
   }
@@ -266,7 +272,7 @@
     const before = compute({
       sessions: (data.sessions||[]).filter(s => s.id !== sessionId),
       logs: data.logs ? data.logs.filter(l => l.session_id !== sessionId) : data.logs,
-      revoked: data.revoked, cardioIds: data.cardioIds, checkins: data.checkins
+      revoked: data.revoked, cardioIds: data.cardioIds, checkins: data.checkins, challengeBadges: data.challengeBadges
     });
     const had = new Set(before.badges.filter(b => b.unlocked).map(b => b.id));
     return { after, before, fresh: after.badges.filter(b => b.unlocked && !had.has(b.id)), levelUp: after.level.t > before.level.t ? after.level : null };
@@ -480,7 +486,9 @@
     try{ const r = await getJson(`/rest/v1/badge_revocations?select=badge_id,reason&user_id=eq.${uid}`); if(Array.isArray(r)) revoked = r; }catch(e){ revoked = []; }
     let checkins = [];
     try{ const r = await getJson(`/rest/v1/recovery_checkins?select=day,sleep_hours,soreness,energy&user_id=eq.${uid}&order=day&limit=1000`); if(Array.isArray(r)) checkins = r; }catch(e){ checkins = []; }
-    return { sessions, logs, revoked, cardioIds, checkins };
+    let challengeBadges = [];
+    try{ const r = await getJson('/rest/v1/rpc/my_challenge_badges'); if(Array.isArray(r)) challengeBadges = r; }catch(e){ challengeBadges = []; }
+    return { sessions, logs, revoked, cardioIds, checkins, challengeBadges };
   }
 
 

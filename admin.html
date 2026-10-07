@@ -301,6 +301,7 @@ function renderDashboard(){
       <div class="tab" data-t="messages">Messages</div>
       <div class="tab" data-t="programmes">Programmes</div>
       <div class="tab" data-t="exercices">Fiches exercices</div>
+      ${IS_SUPER ? '<div class="tab" data-t="challenges">Challenges</div>' : ''}
     </div>
     <div id="tabBody"></div>
   `;
@@ -455,7 +456,106 @@ function load(){
   if(currentTab==='clients') renderClientsTab();
   else if(currentTab==='messages') renderMessages();
   else if(currentTab==='programmes') renderProgramsTab();
+  else if(currentTab==='challenges') renderChallengesAdmin();
   else renderExercisesTab();
+}
+
+// ================= CHALLENGES (grand admin) =================
+const CH_KIND = { hold: 'Tenir le plus longtemps', reps: 'Max de reps en temps limité' };
+function chFmt(c, v){ if(v == null) return '—'; if(c.kind === 'hold'){ const m = Math.floor(v/60), s = v%60; return m + ':' + String(s).padStart(2,'0'); } return v + ' reps'; }
+function chStatus(c){ const n = Date.now(); return n < new Date(c.starts_at) ? 'à venir' : (n > new Date(c.ends_at) ? 'terminé' : 'en cours'); }
+function toLocalInput(d){ const x = new Date(d); x.setMinutes(x.getMinutes() - x.getTimezoneOffset()); return x.toISOString().slice(0,16); }
+async function renderChallengesAdmin(){
+  const tb = document.getElementById('tabBody');
+  tb.innerHTML = '<div class="empty">Chargement…</div>';
+  let chs, parts;
+  try{
+    chs = await api('/rest/v1/challenges?select=*&order=starts_at.desc');
+    parts = await api('/rest/v1/challenge_participants?select=challenge_id');
+  }catch(e){ console.error(e); tb.innerHTML = '<div class="empty">Impossible de charger les challenges. Réessaie.</div>'; return; }
+  const n = id => parts.filter(p => p.challenge_id === id).length;
+  tb.innerHTML = `<div class="row-actions" style="margin-bottom:14px"><button class="btn btn-accent" onclick="openChallengeForm()">+ Nouveau challenge</button></div>
+    <div id="chForm"></div>
+    ${chs.length ? chs.map(c => `<div class="card" style="cursor:default">
+      <div class="tag">${chStatus(c)}${c.is_published ? '' : ' · masqué'}</div>
+      <h3>${escapeHtml(c.badge_icon)} ${escapeHtml(c.title)}</h3>
+      <p>${escapeHtml(c.exercise_name)} · ${CH_KIND[c.kind]}${c.kind === 'reps' ? ' (' + Math.floor(c.time_limit_seconds/60) + ' min ' + (c.time_limit_seconds%60) + ' s)' : ''}</p>
+      <p>${new Date(c.starts_at).toLocaleDateString('fr-FR')} → ${new Date(c.ends_at).toLocaleDateString('fr-FR')} · ${n(c.id)} participant${n(c.id) > 1 ? 's' : ''}</p>
+      ${c.reward_text ? `<p>🎁 ${escapeHtml(c.reward_text)}</p>` : ''}
+      <div class="row-actions" style="margin-top:10px">
+        <button class="btn btn-ghost btn-sm" onclick="openChallengeResults('${c.id}')">📊 Résultats</button>
+        ${chStatus(c) === 'en cours' ? `<button class="btn btn-ghost btn-sm" onclick="endChallengeNow('${c.id}')">⏹ Terminer maintenant</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="toggleChallenge('${c.id}', ${c.is_published ? 'false' : 'true'})">${c.is_published ? 'Masquer' : 'Publier'}</button>
+        <button class="btn btn-ghost btn-sm" onclick="deleteChallenge('${c.id}')">🗑 Supprimer</button>
+      </div></div>`).join('') : '<div class="empty">Aucun challenge. Crée le premier : un exercice à tenir ou un maximum de reps en temps limité.</div>'}`;
+}
+function openChallengeForm(){
+  const now = new Date(), end = new Date(now.getTime() + 7*864e5);
+  const inp = 'width:100%;box-sizing:border-box;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;color:inherit;padding:11px;font:inherit;font-size:16px';
+  const lab = t => `<label style="display:block;margin:12px 0 4px;font-size:13px;opacity:.8">${t}</label>`;
+  document.getElementById('chForm').innerHTML = `<div class="card" style="cursor:default;margin-bottom:16px">
+    <h3>Nouveau challenge</h3>
+    ${lab('Titre')}<input id="chTitle" style="${inp}" placeholder="Ex. Défi gainage d'octobre">
+    ${lab('Type')}<select id="chKind" style="${inp}" onchange="document.getElementById('chLimitBox').style.display = this.value === 'reps' ? 'block' : 'none'"><option value="hold">Tenir le plus longtemps (gainage, suspension…)</option><option value="reps">Maximum de répétitions en temps limité</option></select>
+    ${lab('Exercice')}<input id="chEx" style="${inp}" placeholder="Ex. Gainage planche, Pompes, Tractions">
+    <div id="chLimitBox" style="display:none">${lab('Durée de l\'essai (minutes et secondes)')}<div style="display:flex;gap:10px"><input id="chMin" type="number" min="0" max="60" value="2" style="${inp}"><input id="chSec" type="number" min="0" max="59" value="0" style="${inp}"></div></div>
+    ${lab('Description / règles')}<textarea id="chDesc" style="${inp};min-height:90px" placeholder="Comment tenir ou faire l'exercice, ce qui est valide…"></textarea>
+    ${lab('Début')}<input id="chStart" type="datetime-local" style="${inp}" value="${toLocalInput(now)}">
+    ${lab('Fin')}<input id="chEnd" type="datetime-local" style="${inp}" value="${toLocalInput(end)}">
+    ${lab('Récompense en plus du badge (facultatif)')}<input id="chReward" style="${inp}" placeholder="Ex. 1 mois de coaching offert au 1er">
+    ${lab('Icône du badge (un emoji)')}<input id="chIcon" style="${inp}" value="🏆" maxlength="4">
+    <div style="display:flex;gap:10px;margin-top:16px"><button class="btn btn-accent" style="flex:1;justify-content:center" onclick="saveChallenge()">Publier le challenge</button><button class="btn btn-ghost" onclick="document.getElementById('chForm').innerHTML=''">Annuler</button></div></div>`;
+  document.getElementById('chForm').scrollIntoView({ behavior:'smooth' });
+}
+async function saveChallenge(){
+  const v = id => document.getElementById(id).value.trim();
+  const kind = v('chKind');
+  const row = { title: v('chTitle'), kind, exercise_name: v('chEx'), description: v('chDesc') || null,
+    starts_at: new Date(v('chStart')).toISOString(), ends_at: new Date(v('chEnd')).toISOString(),
+    reward_text: v('chReward') || null, badge_icon: v('chIcon') || '🏆', is_published: true };
+  if(kind === 'reps') row.time_limit_seconds = (parseInt(v('chMin')) || 0) * 60 + (parseInt(v('chSec')) || 0);
+  if(!row.title || !row.exercise_name){ toast('Titre et exercice requis'); return; }
+  if(!(new Date(row.ends_at) > new Date(row.starts_at))){ toast('La fin doit être après le début'); return; }
+  if(kind === 'reps' && !(row.time_limit_seconds >= 10)){ toast('Durée minimale : 10 secondes'); return; }
+  try{ await api('/rest/v1/challenges', { method:'POST', headers:{ Prefer:'return=minimal' }, body: JSON.stringify(row) }); toast('Challenge publié 🎉'); renderChallengesAdmin(); }
+  catch(e){ toast('Erreur : ' + String((e && e.detail) || e).slice(0, 100)); }
+}
+async function endChallengeNow(id){
+  if(!confirm('Terminer ce challenge maintenant ? Le classement sera figé.')) return;
+  try{ await api(`/rest/v1/challenges?id=eq.${id}`, { method:'PATCH', body: JSON.stringify({ ends_at: new Date().toISOString() }) }); toast('Challenge terminé'); renderChallengesAdmin(); }catch(e){ toast('Erreur, réessaie'); }
+}
+async function toggleChallenge(id, pub){
+  try{ await api(`/rest/v1/challenges?id=eq.${id}`, { method:'PATCH', body: JSON.stringify({ is_published: pub }) }); renderChallengesAdmin(); }catch(e){ toast('Erreur, réessaie'); }
+}
+async function deleteChallenge(id){
+  if(!confirm('Supprimer ce challenge, ses participants et tous les résultats ? (les badges liés disparaissent)')) return;
+  try{ await api(`/rest/v1/challenges?id=eq.${id}`, { method:'DELETE' }); toast('Challenge supprimé'); renderChallengesAdmin(); }catch(e){ toast('Erreur, réessaie'); }
+}
+async function openChallengeResults(id){
+  const tb = document.getElementById('tabBody');
+  tb.innerHTML = '<a class="backlink" onclick="renderChallengesAdmin()">← Challenges</a><div class="empty">Chargement…</div>';
+  let c, atts, profs = [];
+  try{
+    c = (await api(`/rest/v1/challenges?select=*&id=eq.${id}`))[0];
+    atts = await api(`/rest/v1/challenge_attempts?select=id,user_id,started_at,finished_at,value,removed&challenge_id=eq.${id}&finished_at=not.is.null&order=value.desc`);
+    const ids = [...new Set(atts.map(a => a.user_id))];
+    if(ids.length) profs = await api(`/rest/v1/profiles?select=id,full_name,email&id=in.(${ids.join(',')})`);
+  }catch(e){ console.error(e); tb.innerHTML = '<a class="backlink" onclick="renderChallengesAdmin()">← Challenges</a><div class="empty">Impossible de charger les résultats.</div>'; return; }
+  const name = uid => { const p = profs.find(x => x.id === uid) || {}; return p.full_name || p.email || 'Client'; };
+  const best = {}; atts.filter(a => !a.removed && a.value > 0).forEach(a => { if(!best[a.user_id] || a.value > best[a.user_id]) best[a.user_id] = a.value; });
+  const ranking = Object.entries(best).sort((a,b) => b[1] - a[1]);
+  tb.innerHTML = `<a class="backlink" onclick="renderChallengesAdmin()">← Challenges</a>
+    <h3 style="font-family:Inter;font-weight:700;font-size:18px;margin:6px 0">${escapeHtml(c.badge_icon)} ${escapeHtml(c.title)} · résultats</h3>
+    <div style="font-size:13px;opacity:.7;margin-bottom:10px">${escapeHtml(c.exercise_name)} · ${CH_KIND[c.kind]}</div>
+    <div class="chl-h" style="font-weight:700;margin:14px 0 6px">Classement</div>
+    ${ranking.length ? ranking.map(([uid, v], i) => `<div style="display:flex;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line)"><span>${i < 3 ? ['🥇','🥈','🥉'][i] : (i + 1) + '.'} ${escapeHtml(name(uid))}</span><b>${chFmt(c, v)}</b></div>`).join('') : '<div class="empty">Aucun résultat pour le moment.</div>'}
+    <div style="font-weight:700;margin:20px 0 6px">Tous les essais <span style="font-weight:400;opacity:.7;font-size:13px">(retire un essai douteux)</span></div>
+    ${atts.map(a => `<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;padding:8px 2px;border-bottom:1px solid var(--line);${a.removed ? 'opacity:.45;text-decoration:line-through' : ''}">
+      <span style="min-width:0">${escapeHtml(name(a.user_id))} <span style="opacity:.6;font-size:12px">${new Date(a.started_at).toLocaleString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</span></span>
+      <span style="display:flex;gap:8px;align-items:center;flex:none"><b>${chFmt(c, a.value)}</b><button class="btn btn-ghost btn-sm" onclick="removeAttempt('${a.id}', ${a.removed ? 'false' : 'true'}, '${id}')">${a.removed ? 'Rétablir' : 'Retirer'}</button></span></div>`).join('')}`;
+}
+async function removeAttempt(attId, removed, chId){
+  try{ await api(`/rest/v1/challenge_attempts?id=eq.${attId}`, { method:'PATCH', body: JSON.stringify({ removed }) }); openChallengeResults(chId); }catch(e){ toast('Erreur, réessaie'); }
 }
 
 // ================= CLIENTS =================

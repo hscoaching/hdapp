@@ -136,6 +136,7 @@
 
 <script src="badges.js"></script>
 <script src="coaches.js"></script>
+<script src="challenges.js"></script>
 <script src="export.js"></script>
 <script src="history.js"></script>
 <script src="import.js"></script>
@@ -329,6 +330,7 @@ async function renderDashboard(){
       <div class="tab" data-tab="historique">Historique</div>
       <div class="tab" data-tab="progression">Progression</div>
       <div class="tab" data-tab="badges">Badges</div>
+      <div class="tab" data-tab="challenges">Challenges</div>
       <div class="tab" data-tab="repos">Repos</div>
       <div class="tab" data-tab="poids">Poids</div>
       ${isCoachAccount ? '' : '<div class="tab" data-tab="chat">Discussion coach</div>'}
@@ -378,6 +380,7 @@ function loadTab(){
   else if(currentTab==='historique') loadHistorique();
   else if(currentTab==='progression') loadProgression();
   else if(currentTab==='badges') loadBadges();
+  else if(currentTab==='challenges') loadChallenges();
   else if(currentTab==='repos') loadRepos();
   else if(currentTab==='poids') loadPoids();
   else if(currentTab==='chat') loadChat();
@@ -397,6 +400,11 @@ async function loadProgrammes(){
   `).join('') : '<div class="empty">Aucun programme pour l\'instant. Crée-en un depuis la page Programmes.</div>';
 }
 
+function loadChallenges(){
+  const box = document.getElementById('tabBody');
+  if(typeof HSChallenges === 'undefined'){ box.innerHTML = '<div class="empty">Les challenges ne sont pas disponibles pour le moment.</div>'; return; }
+  HSChallenges.render(box, { fetcher: apiFetch, userId: getSession().user.id });
+}
 async function loadRepos(){
   const box = document.getElementById('tabBody');
   box.innerHTML = '<div class="empty">Chargement…</div>';
