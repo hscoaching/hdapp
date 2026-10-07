@@ -343,7 +343,25 @@
       .lvl-hero .nm{font-size:28px;font-weight:800;line-height:1.1}
       .lvl-bar{height:7px;border-radius:99px;background:var(--surface-2,#1f2024);margin:10px 0 4px;overflow:hidden}.lvl-bar i{display:block;height:100%;background:var(--ink,#f5f5f5);border-radius:99px}
       .lvl-steps{display:flex;gap:6px;background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:18px;padding:12px 14px;margin-bottom:14px}
-      .lvl-steps span{flex:1;text-align:center;font-size:11px;color:var(--ink-muted,#9a9a9e)}.lvl-steps .medal{--s:30px;margin:0 auto 3px;font-size:13px}.lvl-steps .medal::after{display:none}
+      .lvl-title{font-size:13px;font-weight:700;margin:4px 2px 8px}.lvl-title span{display:block;font-size:11.5px;font-weight:500;color:var(--ink-muted,#9a9a9e);margin-top:2px}
+      .lvl-steps{overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;padding:10px}
+      .lvl-card{flex:0 0 118px;scroll-snap-align:start;text-align:center;border:1px solid var(--line,#2c2c30);border-radius:14px;padding:12px 6px 10px;background:var(--surface-2,#1f2024);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
+      .lvl-card b{font-size:13px;line-height:1.2;margin-top:6px}.lvl-card small{font-size:11px;color:var(--ink-muted,#9a9a9e);line-height:1.25}
+      .lvl-card .lvl-need{color:var(--ink,#f5f5f5);font-weight:600}.lvl-card .lvl-who{font-style:italic;margin-top:3px}
+      .lvl-card .lvl-m{position:relative}.lvl-card.lock .medal{filter:saturate(.55) brightness(.62)}
+      .lvl-pad{position:absolute;right:-4px;bottom:-2px;font-size:15px;font-style:normal}
+      .lvl-card.nxt{border-color:var(--accent,#fff);box-shadow:0 0 0 1px var(--accent,#fff),0 0 18px rgba(255,255,255,.12)}.lvl-card.nxt .medal{filter:saturate(.85) brightness(.85)}
+      .lvl-steps .medal::after{display:none}
+      .end-pop{opacity:0;transform:translateY(14px) scale(.96);animation:endPop .5s cubic-bezier(.2,.9,.3,1.2) forwards}
+      @keyframes endPop{to{opacity:1;transform:none}}
+      .end-card{background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:16px;padding:16px;margin-bottom:12px}
+      .end-card h4{margin:0 0 10px;font-size:14px}
+      .end-bar{height:10px;border-radius:99px;background:var(--surface-2,#1f2024);overflow:hidden}.end-bar i{display:block;height:100%;width:0;background:var(--accent,#d9ff3f);border-radius:99px;transition:width 1.1s cubic-bezier(.2,.8,.2,1)}
+      .end-sub{font-size:12.5px;color:var(--ink-muted,#9a9a9e);margin-top:8px;line-height:1.4}.end-sub b{color:var(--ink,#f5f5f5)}
+      .end-new{border-color:var(--accent,#d9ff3f);box-shadow:0 0 0 1px var(--accent,#d9ff3f),0 0 26px rgba(217,255,63,.22)}
+      .end-spark{position:relative;height:0}.end-spark i{position:absolute;left:50%;top:0;font-style:normal;font-size:16px;opacity:0;animation:endSpark 1.4s ease-out forwards}
+      @keyframes endSpark{0%{opacity:1;transform:translate(0,0) scale(.6)}100%{opacity:0;transform:translate(var(--x),var(--y)) scale(1.2)}}
+      @media (prefers-reduced-motion:reduce){.end-pop{animation:none;opacity:1;transform:none}.end-bar i{transition:none}.end-spark{display:none}}
       .fam{background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:14px;margin-bottom:10px;overflow:hidden}
       .fam>summary{display:flex;gap:12px;align-items:center;padding:12px;cursor:pointer;list-style:none}.fam>summary::-webkit-details-marker{display:none}
       .fam>summary .medal{margin:0}
@@ -401,7 +419,10 @@
     };
     const coreFams = famNames.filter(n => !res.badges.find(b => b.group === n).bonus);
     const bonusFams = famNames.filter(n => res.badges.find(b => b.group === n).bonus);
-    const steps = TIERS.slice(1).map(t => `<span>${medal(L.t >= t.t ? t.t : 0, lvlIcon(L.profile, t.t))}${esc(L.ladder[t.t])}</span>`).join('');
+    const steps = TIERS.slice(1).map(t => {
+      const done = L.t >= t.t, nxt = L.t + 1 === t.t, my = mythOf({ profile: L.profile, t: t.t });
+      return `<div class="lvl-card ${done ? 'done' : 'lock'}${nxt ? ' nxt' : ''}" onclick="HSBadges.showTier(${t.t})"><div class="lvl-m">${medal(t.t, lvlIcon(L.profile, t.t), 56)}${done ? '' : '<i class="lvl-pad">🔒</i>'}</div><b>${esc(L.ladder[t.t])}</b><small>${esc(t.n)}</small><small class="lvl-need">${done ? '✓ atteint' : (nxt ? 'Prochain · ' : '') + t.at + ' badges'}</small>${my ? `<small class="lvl-who">${esc(my.who)}</small>` : ''}</div>`;
+    }).join('');
     const pts = L.pts, pct = L.next ? Math.round((pts - TIERS[L.t].at) / (L.next.at - TIERS[L.t].at) * 100) : 100;
     const f = opts.featured, onLevel = !f || f === 'level', onNone = f === 'none';
     const pill = opts.pick ? `<div class="bdg-pill">Pastille à côté de ton nom :
@@ -412,6 +433,7 @@
       <div class="lvl-hero" style="cursor:pointer" onclick="HSBadges.showLevel()">${medal(L.t, lvlIcon(L.profile, L.t), 84)}<div style="flex:1"><div class="lv">Niveau ${esc(L.tierName)}${L.t ? ' · profil ' + esc(L.profileName) : ''}</div><div class="nm">${esc(L.name)}</div>
         <div class="lvl-bar"><i style="width:${pct}%"></i></div>
         <div class="bdg-mini" style="margin:0">${L.next ? `${pts}/${L.next.at} badges principaux pour devenir <b>${esc(L.next.n)}</b>` : 'Niveau maximum atteint 🎉'}</div>${L.t ? '<div class="bdg-mini" style="margin-top:6px"><b>Touche pour découvrir ta légende ›</b></div>' : ''}</div></div>
+      <div class="lvl-title">Les niveaux à débloquer <span>touche un niveau pour découvrir sa légende</span></div>
       <div class="lvl-steps">${steps}</div>
       <div class="bdg-hero">
         <div class="bdg-hero-top">
@@ -439,6 +461,49 @@
     if(!fresh.length) return up + `<div class="bdg-new" style="border-color:var(--line,#2c2c30)">${week}</div>`;
     return up + `<div class="bdg-new"><h3>🎉 ${fresh.length > 1 ? 'Nouveaux badges' : 'Nouveau badge'} !</h3>
       <div class="bdg-new-list">${fresh.map(b => `<div class="bdg-new-item"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div></div>`).join('')}</div>${week}</div>`;
+  }
+
+  // Écran de fin de séance : récap animé, barre de niveau, prochain objectif
+  function renderEnd(fresh, after, before, levelUp){
+    ensureCss();
+    window.__hsLvl = after.level;
+    const L = after.level, B = before ? before.level : L, st = after.stats;
+    const pctOf = lv => lv.next ? Math.max(0, Math.min(100, Math.round((lv.pts - TIERS[lv.t].at) / (lv.next.at - TIERS[lv.t].at) * 100))) : 100;
+    const from = levelUp ? 0 : pctOf(B), to = pctOf(L);
+    let d = 0; const dl = () => (d += .18).toFixed(2) + 's';
+    const up = levelUp ? `<div class="end-card end-new end-pop" style="text-align:center;cursor:pointer;animation-delay:${dl()}" onclick="HSBadges.showLevel(true)"><div class="medal t${levelUp.t}" style="--s:72px;margin-bottom:8px">${lvlIcon(levelUp.profile, levelUp.t)}</div><h3 style="margin:0 0 4px">⬆️ Nouveau niveau : ${esc(levelUp.name)}</h3><div class="end-sub">${levelUp.myth ? 'Tu rejoins <b>' + esc(levelUp.myth.who) + '</b>. ' : ''}<b>Touche pour découvrir ta légende</b></div></div>` : '';
+    const bad = fresh.length ? `<div class="end-card end-new end-pop" style="text-align:center;animation-delay:${dl()}"><div class="end-spark" data-spark="1"></div><h3 style="margin:0 0 10px">🎉 ${fresh.length > 1 ? 'Nouveaux badges' : 'Nouveau badge'} !</h3>
+      <div class="bdg-new-list">${fresh.map(b => `<div class="bdg-new-item"><div class="bdg-ico">${b.icon}</div><div class="bdg-t">${esc(b.title)}</div><div class="bdg-d">${esc(b.desc)}</div></div>`).join('')}</div></div>` : '';
+    const lvl = `<div class="end-card end-pop" style="animation-delay:${dl()}"><h4>Niveau ${esc(L.tierName)} · ${esc(L.name)}</h4><div class="end-bar"><i data-from="${from}" data-to="${to}"></i></div>
+      <div class="end-sub">${L.next ? `<b>${L.pts}/${L.next.at}</b> badges principaux${L.next.at - L.pts === 1 ? ' : <b>plus qu\'un</b> pour devenir <b>' + esc(L.next.n) + '</b>' : ' pour devenir <b>' + esc(L.next.n) + '</b>'}` : 'Niveau maximum atteint 🏛️'}</div></div>`;
+    const cands = after.badges.filter(b => !b.unlocked && !b.revoked && b.kind !== 'event' && b.target > 1 && typeof b.cur === 'number' && b.cur > 0 && b.cur < b.target)
+      .sort((a, b) => (a.bonus ? 1 : 0) - (b.bonus ? 1 : 0) || (b.cur / b.target) - (a.cur / a.target));
+    const nx = cands[0];
+    const goal = `<div class="end-card end-pop" style="animation-delay:${dl()}"><h4>Cette semaine</h4><div style="display:flex;gap:6px;margin-bottom:6px">${Array.from({ length: Math.max(after.goal, st.thisWeek) }, (_, i) => `<span class="bdg-dot ${i < st.thisWeek ? 'on' : ''}" style="flex:1;height:10px"></span>`).join('')}</div>
+      <div class="end-sub">${st.thisWeek >= after.goal ? '✅ Objectif de la semaine atteint. Le repos fait partie du programme 😴' : `<b>${st.thisWeek}/${after.goal}</b> séance${after.goal > 1 ? 's' : ''} · encore <b>${after.goal - st.thisWeek}</b> pour valider ta semaine`}${st.current > 0 ? ` · 🔥 ${st.current} semaine${st.current > 1 ? 's' : ''} de suite` : ''}</div></div>`;
+    const next = nx ? `<div class="end-card end-pop" style="animation-delay:${dl()}"><h4>Prochain badge en vue</h4><div style="display:flex;gap:12px;align-items:center"><div class="bdg-ico" style="flex:none;margin:0">${nx.icon}</div><div style="min-width:0;flex:1"><div class="bdg-t" style="text-align:left">${esc(nx.title)}</div><div class="end-bar" style="margin-top:6px;height:7px"><i data-from="0" data-to="${Math.round(nx.cur / nx.target * 100)}"></i></div><div class="end-sub" style="margin-top:6px">${esc(nx.desc || '')}</div></div></div></div>` : '';
+    return up + bad + lvl + goal + next;
+  }
+  // Anime un conteneur : compteurs [data-count], barres [data-to], étincelles, vibration à la découverte d'un badge
+  function animateEnd(root){
+    if(!root) return;
+    ensureCss();
+    const calm = window.matchMedia && matchMedia('(prefers-reduced-motion: reduce)').matches;
+    root.querySelectorAll('[data-count]').forEach(el => {
+      const to = parseFloat(el.dataset.count) || 0, suf = el.dataset.suffix || '';
+      const fmt = v => Math.round(v).toLocaleString('fr-FR') + suf;
+      if(calm || !to){ el.textContent = fmt(to); return; }
+      const t0 = performance.now(), dur = 900;
+      const tick = now => { const k = Math.min(1, (now - t0) / dur), e = 1 - Math.pow(1 - k, 3); el.textContent = fmt(to * e); if(k < 1) requestAnimationFrame(tick); };
+      requestAnimationFrame(tick);
+    });
+    root.querySelectorAll('.end-bar i[data-to]').forEach(i => { i.style.width = (i.dataset.from || 0) + '%'; setTimeout(() => { i.style.width = i.dataset.to + '%'; }, 650); });
+    const sp = root.querySelector('[data-spark]');
+    if(sp && !calm){
+      const em = ['✨', '⭐', '✨', '🌟', '✨', '⭐'];
+      sp.innerHTML = Array.from({ length: 14 }, (_, k) => `<i style="--x:${Math.round((Math.random() - .5) * 240)}px;--y:${Math.round(-30 - Math.random() * 90)}px;animation-delay:${(0.5 + Math.random() * .5).toFixed(2)}s">${em[k % em.length]}</i>`).join('');
+      try{ if(navigator.vibrate) navigator.vibrate([30, 60, 30, 60, 90]); }catch(e){}
+    }
   }
 
   // Petite pastille à afficher à côté d'un nom : par défaut le niveau, ou un badge précis (s'il est réellement acquis et non annulé), ou rien ('none')
@@ -551,6 +616,22 @@
   }
 
   // Fenêtre « ta légende » : comparaison mythologique du niveau actuel
+  function showTier(t){
+    const L = window.__hsLvl; if(!L) return; ensureCss();
+    const tr = TIERS[t], my = mythOf({ profile: L.profile, t }), done = L.t >= t, missing = Math.max(0, tr.at - L.pts);
+    const old = document.getElementById('hsLvlOv'); if(old) old.remove();
+    const ov = document.createElement('div'); ov.id = 'hsLvlOv';
+    ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1200;display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto';
+    ov.onclick = e => { if(e.target === ov) ov.remove(); };
+    ov.innerHTML = `<div style="max-width:420px;width:100%;background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:20px;padding:24px 20px;text-align:center">
+      <div class="medal t${t}" style="--s:110px;margin-bottom:12px">${lvlIcon(L.profile, t)}</div>
+      <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted,#9a9a9e);font-weight:700">Niveau ${esc(tr.n)}</div>
+      <div style="font-size:28px;font-weight:800;line-height:1.15;margin:4px 0 14px">${esc(L.ladder[t])}</div>
+      ${my ? `<div style="border-top:1px solid var(--line,#2c2c30);padding-top:14px"><div style="font-size:12px;color:var(--ink-muted,#9a9a9e);margin-bottom:4px">La légende</div><div style="font-size:20px;font-weight:700;margin-bottom:8px">${esc(my.who)}</div><div style="font-size:14.5px;line-height:1.5">${esc(my.txt)}</div></div>` : ''}
+      <div style="margin-top:16px;font-size:13.5px">${done ? '✅ Tu as atteint ce niveau.' : `🔒 Il te manque <b>${missing} badge${missing > 1 ? 's' : ''} principa${missing > 1 ? 'ux' : 'l'}</b> (${L.pts}/${tr.at}).`}</div>
+      <button type="button" style="margin-top:18px;font-family:inherit;font-weight:700;font-size:14px;padding:12px 26px;border-radius:999px;border:0;background:var(--accent,#fff);color:var(--accent-ink,#0b0b0c);cursor:pointer" onclick="document.getElementById('hsLvlOv').remove()">Fermer</button></div>`;
+    document.body.appendChild(ov);
+  }
   function showLevel(celebrate){
     const L = window.__hsLvl; if(!L) return;
     ensureCss();
@@ -578,5 +659,5 @@
     }catch(e){ return false; }
   }
 
-  window.HSBadges = { showLevel, levelUpSeen, chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, openCheckin, WEEKLY_GOAL };
+  window.HSBadges = { renderEnd, animateEnd, showLevel, showTier, levelUpSeen, chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, openCheckin, WEEKLY_GOAL };
 })();

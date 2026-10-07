@@ -1254,14 +1254,15 @@ function showSessionSummary(programId, eyebrow, durationMs, nSets, vol, sessionI
     <div class="eyebrow">${eyebrow}${activeDayLabel ? ' · ' + escHtml(activeDayLabel).toUpperCase() : ''}</div>
     <h1 class="page" style="font-size:32px;">Bravo 💪</h1>
     <div class="sess-summary">
-      ${durationMs ? `<div><b>${fmtClock(durationMs)}</b><span>Durée de la séance</span></div>` : ''}
-      <div><b>${nSets}</b><span>${nSets>1?'Séries':'Série'} ${eyebrow.indexOf('TERMIN')>=0 ? (nSets>1?'validées':'validée') : (nSets>1?'enregistrées':'enregistrée')}</span></div>
-      ${vol ? `<div><b>${Math.round(vol).toLocaleString('fr-FR')} kg</b><span>Poids total soulevé</span></div>` : ''}
+      ${durationMs ? `<div class="end-pop"><b>${fmtClock(durationMs)}</b><span>Durée de la séance</span></div>` : ''}
+      <div class="end-pop" style="animation-delay:.1s"><b data-count="${nSets}">0</b><span>${nSets>1?'Séries':'Série'} ${eyebrow.indexOf('TERMIN')>=0 ? (nSets>1?'validées':'validée') : (nSets>1?'enregistrées':'enregistrée')}</span></div>
+      ${vol ? `<div class="end-pop" style="animation-delay:.2s"><b data-count="${Math.round(vol)}" data-suffix=" kg">0 kg</b><span>Poids total soulevé</span></div>` : ''}
     </div>
     <div id="badgeBox"></div>
     <button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}'">Retour au programme</button>
   `;
   window.scrollTo(0,0);
+  if(typeof HSBadges !== 'undefined' && HSBadges.animateEnd) HSBadges.animateEnd(body);
   showNewBadges(sessionId);
 }
 // Badges débloqués grâce à la séance qui vient de se terminer (comptes connectés uniquement)
@@ -1270,10 +1271,10 @@ async function showNewBadges(sessionId){
   try{
     const getJson = async path => { const r = await authedFetch(path); if(!r.ok) throw new Error('load_failed'); return r.json(); };
     const data = await HSBadges.load(getJson, getUserSession().user.id);
-    const { after, fresh, levelUp } = HSBadges.newlyUnlocked(data, sessionId);
+    const { after, before, fresh, levelUp } = HSBadges.newlyUnlocked(data, sessionId);
     HSBadges.levelUpSeen(getUserSession().user.id, after.level);
     const box = document.getElementById('badgeBox');
-    if(box) box.innerHTML = HSBadges.renderNew(fresh, after, levelUp) + '<div style="height:14px"></div>';
+    if(box){ box.innerHTML = HSBadges.renderEnd(fresh, after, before, levelUp) + '<div style="height:14px"></div>'; HSBadges.animateEnd(box); }
   }catch(e){ console.error(e); }
 }
 // Saisie d'une séance passée : date + durée + séries renseignées
