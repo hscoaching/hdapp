@@ -96,13 +96,14 @@
     const stLab = { pending: '⏳ En attente de validation', validated: '✅ Validé', rejected: '❌ Refusé' };
     const myList = fin.length ? `<div class="chl-h">Mes essais</div>${fin.slice(0, 12).map(a => `<div class="chl-row" style="flex-wrap:wrap;gap:6px"><span class="nm">${fmtVal(c, a.value)} <span class="chl-sub">${new Date(a.started_at).toLocaleString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</span></span><span class="vl" style="font-size:13px">${stLab[a.status] || ''}</span>
       ${a.status === 'rejected' && a.review_note ? `<div class="chl-sub" style="width:100%">Motif : ${esc(a.review_note)}</div>` : ''}
-      ${a.status !== 'validated' ? `<div style="width:100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="chl-btn chl-vid" data-a="${a.id}" style="width:auto;padding:9px 14px;font-size:13px">${a.video_path ? '📹 Renvoyer une vidéo' : '📹 Envoyer ma vidéo'}</button>${a.video_path ? '<span class="chl-sub">Vidéo envoyée</span>' : '<span class="chl-sub">ou fais-le valider devant un coach</span>'}</div>` : ''}</div>`).join('')}` : '';
+      ${a.status !== 'validated' && s !== 'ended' ? `<div style="width:100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="chl-btn chl-vid" data-a="${a.id}" style="width:auto;padding:9px 14px;font-size:13px">${a.video_path ? '📹 Renvoyer une vidéo' : '📹 Envoyer ma vidéo'}</button>${a.video_path ? '<span class="chl-sub">Vidéo envoyée</span>' : '<span class="chl-sub">ou fais-le valider devant un coach</span>'}</div>` : ''}</div>`).join('')}` : '';
     const pod = lb.filter(r => r.rnk <= 3).slice(0, 3);
     BOX.innerHTML = `
       <a class="backlink" id="chBack" style="cursor:pointer;display:inline-block;margin-bottom:10px">← Tous les challenges</a>
       <div class="chl-pill ${s}">${s === 'live' ? 'En cours' : s === 'soon' ? 'À venir' : 'Terminé'}</div>
       <h2 style="margin:0 0 4px">${esc(c.badge_icon)} ${esc(c.title)}</h2>
       <div class="chl-sub">${kindLabel(c)}</div>
+      ${c.demo_video_path ? '<button class="chl-btn" id="chDemo" style="background:transparent;color:inherit;border:1px solid currentColor">🎬 Voir la démonstration en vidéo</button>' : ''}
       ${c.description ? `<p style="font-size:14px;line-height:1.45;white-space:pre-line">${esc(c.description)}</p>` : ''}
       <div class="chl-bar" style="margin-top:10px"><i style="width:${s === 'ended' ? 100 : Math.round(done / total * 100)}%"></i></div>
       <div class="chl-sub" style="margin-top:4px">${dFmt(c.starts_at)} → ${dFmt(c.ends_at)} · ${s === 'live' ? (left <= 1 ? 'dernier jour !' : 'encore ' + left + ' jours') : s === 'soon' ? 'commence bientôt' : 'terminé'}</div>
@@ -110,13 +111,26 @@
       ${s === 'ended' ? '' : (isJoined
         ? (s === 'live' ? `<button class="chl-btn" id="chGo" ${usedToday >= 3 ? 'disabled' : ''}>▶ Lancer un essai</button><div class="chl-sub" style="text-align:center">Essais aujourd'hui : ${usedToday}/3 · seul ton meilleur résultat compte</div>` : '<div class="chl-sub">Tu es inscrit. Rendez-vous au lancement !</div>')
         : `<button class="chl-btn" id="chJoin">Je participe</button><div class="chl-sub" style="text-align:center">Ton prénom et l'initiale de ton nom apparaîtront dans le classement.</div>`)}
-      <div class="chl-reward" style="margin-top:12px">🎥 <b>Anti-triche :</b> chaque résultat doit être validé par un coach pour entrer au classement. Soit tu le réalises devant un coach, soit tu te filmes en entier (corps visible, du début à la fin) et tu envoies la vidéo ici : seuls les coachs et l'admin peuvent la voir.</div>
+      <div class="chl-reward" style="margin-top:12px">🎥 <b>Anti-triche :</b> chaque résultat doit être validé par un coach pour entrer au classement. Soit tu le réalises devant un coach, soit tu te filmes en entier (corps visible, du début à la fin) et tu envoies la vidéo ici : seuls les coachs et l'admin peuvent la voir. L'envoi de vidéo se termine à la fin du challenge, et les vidéos sont supprimées une semaine après l'annonce du vainqueur.</div>
       ${myBest ? `<div style="margin:12px 0;font-weight:700">Ton meilleur résultat validé : ${fmtVal(c, myBest)}</div>` : ''}
       ${myList}
+      ${s === 'ended' ? (c.winner_announced_at ? `<div class="chl-reward">🏆 Vainqueur annoncé le ${dFmt(c.winner_announced_at)}.</div>` : `<div class="chl-reward">⏳ Challenge terminé : les coachs valident les derniers essais. Résultats provisoires, vainqueur annoncé bientôt.</div>`) : ''}
       <div class="chl-h">Classement</div>
       ${pod.length ? `<div class="chl-pod">${pod.map(r => `<div><div class="m">${MEDAL[r.rnk - 1]}</div><div class="n">${esc(r.name)}</div><div class="v">${fmtVal(c, r.best)}</div></div>`).join('')}</div>` : ''}
       ${lb.length ? lb.map(r => `<div class="chl-row ${r.is_me ? 'me' : ''}"><span class="rk">${r.rnk}</span><span class="nm">${esc(r.name)}${r.is_me ? ' (toi)' : ''}</span><span class="bw"><div class="chl-bar"><i style="width:${top ? Math.max(4, Math.round(r.best / top * 100)) : 0}%"></i></div></span><span class="vl">${fmtVal(c, r.best)}</span></div>`).join('') : '<div class="chl-sub">Personne n\'a encore de résultat. Sois le premier !</div>'}`;
     BOX.querySelector('#chBack').onclick = () => list();
+    const dm = BOX.querySelector('#chDemo');
+    if(dm) dm.onclick = async () => {
+      dm.disabled = true;
+      try{
+        const r = await CTX.fetcher('/storage/v1/object/sign/challenge-demos/' + c.demo_video_path, { method:'POST', body: JSON.stringify({ expiresIn: 3600 }) });
+        if(!r.ok) throw new Error('sign');
+        const url = (CTX.baseUrl || '') + '/storage/v1' + (await r.json()).signedURL;
+        const ov = overlay(); ov.innerHTML = `<div style="width:100%;max-width:560px"><div style="font-weight:800;margin-bottom:10px">${esc(c.title)} · démonstration</div><video src="${url}" controls playsinline autoplay style="width:100%;max-height:68vh;border-radius:12px"></video><button class="chl-btn" id="chDemoX" style="margin-top:14px">Fermer</button></div>`;
+        ov.querySelector('#chDemoX').onclick = () => ov.remove();
+      }catch(e){ alert('Vidéo indisponible pour le moment.'); }
+      dm.disabled = false;
+    };
     const j = BOX.querySelector('#chJoin');
     if(j) j.onclick = async () => { j.disabled = true; try{ await rpc('challenge_join', { p_id: c.id }); detail(c, true); }catch(e){ j.disabled = false; alert(e.message); } };
     const g = BOX.querySelector('#chGo');

@@ -482,8 +482,11 @@ async function renderChallengesAdmin(){
       <p>${escapeHtml(c.exercise_name)} · ${CH_KIND[c.kind]}${c.kind === 'reps' ? ' (' + Math.floor(c.time_limit_seconds/60) + ' min ' + (c.time_limit_seconds%60) + ' s)' : ''}</p>
       <p>${new Date(c.starts_at).toLocaleDateString('fr-FR')} → ${new Date(c.ends_at).toLocaleDateString('fr-FR')} · ${n(c.id)} participant${n(c.id) > 1 ? 's' : ''}</p>
       ${c.reward_text ? `<p>🎁 ${escapeHtml(c.reward_text)}</p>` : ''}
+      ${c.winner_announced_at ? `<p>🏆 Vainqueur annoncé le ${new Date(c.winner_announced_at).toLocaleDateString('fr-FR')} · ${c.videos_purged_at ? 'vidéos supprimées' : 'vidéos supprimées le ' + new Date(new Date(c.winner_announced_at).getTime() + 7*864e5).toLocaleDateString('fr-FR')}</p>` : ''}
       <div class="row-actions" style="margin-top:10px">
         <button class="btn btn-ghost btn-sm" onclick="openChallengeResults('${c.id}')">📊 Résultats</button>
+        ${IS_SUPER ? `<button class="btn btn-ghost btn-sm" onclick="setDemoVideo('${c.id}')">🎬 ${c.demo_video_path ? 'Changer la vidéo démo' : 'Ajouter une vidéo démo'}</button>` : ''}
+        ${IS_SUPER && chStatus(c) === 'terminé' && !c.winner_announced_at ? `<button class="btn btn-accent btn-sm" onclick="announceWinner('${c.id}')">🏆 Annoncer le vainqueur</button>` : ''}
         ${IS_SUPER && chStatus(c) === 'en cours' ? `<button class="btn btn-ghost btn-sm" onclick="endChallengeNow('${c.id}')">⏹ Terminer maintenant</button>` : ''}
         ${IS_SUPER ? `<button class="btn btn-ghost btn-sm" onclick="toggleChallenge('${c.id}', ${c.is_published ? 'false' : 'true'})">${c.is_published ? 'Masquer' : 'Publier'}</button>
         <button class="btn btn-ghost btn-sm" onclick="deleteChallenge('${c.id}')">🗑 Supprimer</button>` : ''}
@@ -519,6 +522,28 @@ async function saveChallenge(){
   if(kind === 'reps' && !(row.time_limit_seconds >= 10)){ toast('Durée minimale : 10 secondes'); return; }
   try{ await api('/rest/v1/challenges', { method:'POST', headers:{ Prefer:'return=minimal' }, body: JSON.stringify(row) }); toast('Challenge publié 🎉'); renderChallengesAdmin(); }
   catch(e){ toast('Erreur : ' + String((e && e.detail) || e).slice(0, 100)); }
+}
+function setDemoVideo(id){
+  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'video/*'; inp.style.display = 'none'; document.body.appendChild(inp);
+  inp.onchange = async () => {
+    const f = inp.files && inp.files[0]; inp.remove(); if(!f) return;
+    if(f.size > 50*1024*1024){ toast('Vidéo trop lourde (50 Mo max)'); return; }
+    const ext = (f.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0,5) || 'mp4';
+    const path = id + '/demo-' + Date.now() + '.' + ext;
+    toast('Envoi en cours…');
+    try{
+      await refreshIfNeeded(); const s = getSession();
+      const res = await fetch(`${SUPABASE_URL}/storage/v1/object/challenge-demos/${path}`, { method:'POST', headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token}`, 'Content-Type': f.type || 'video/mp4' }, body: f });
+      if(!res.ok) throw new Error('upload');
+      await api(`/rest/v1/challenges?id=eq.${id}`, { method:'PATCH', body: JSON.stringify({ demo_video_path: path }) });
+      toast('Vidéo démo ajoutée 🎬'); renderChallengesAdmin();
+    }catch(e){ console.error(e); toast('Envoi impossible, réessaie'); }
+  };
+  inp.click();
+}
+async function announceWinner(id){
+  if(!confirm('Annoncer le vainqueur ? Les médailles et badges deviennent définitifs, et les vidéos seront supprimées automatiquement dans 7 jours. Pense à valider d\'abord tous les essais en attente.')) return;
+  try{ await api('/rest/v1/rpc/challenge_announce', { method:'POST', body: JSON.stringify({ p_id: id }) }); toast('Vainqueur annoncé 🏆'); renderChallengesAdmin(); }catch(e){ toast('Erreur, réessaie'); }
 }
 async function endChallengeNow(id){
   if(!confirm('Terminer ce challenge maintenant ? Le classement sera figé.')) return;

@@ -403,7 +403,7 @@ async function loadProgrammes(){
 function loadChallenges(){
   const box = document.getElementById('tabBody');
   if(typeof HSChallenges === 'undefined'){ box.innerHTML = '<div class="empty">Les challenges ne sont pas disponibles pour le moment.</div>'; return; }
-  HSChallenges.render(box, { fetcher: apiFetch, userId: getSession().user.id });
+  HSChallenges.render(box, { fetcher: apiFetch, baseUrl: SUPABASE_URL, userId: getSession().user.id });
 }
 async function loadRepos(){
   const box = document.getElementById('tabBody');
