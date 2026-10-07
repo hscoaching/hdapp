@@ -76,15 +76,16 @@
     const ov = shell(`
       <div class="hsc-top"><h2>${coach ? 'Contacter ' + esc(coach.display_name) : 'Contacter un coach'}</h2><button class="hsc-x" aria-label="Fermer">✕</button></div>
       <p class="hsc-lede">${logged ? 'Tu es connecté : si le coach accepte, il te suit directement dans l\'appli (programmes, discussion).' : 'Laisse tes coordonnées, le coach te recontacte. Aucun compte requis.'}</p>
-      <label class="hsc-f">Nom</label><input class="hsc-in" id="hscName" type="text" placeholder="Ton prénom" value="${esc(opts.name || '')}">
+      <div style="display:flex;gap:10px"><div style="flex:1;min-width:0"><label class="hsc-f">Prénom</label><input class="hsc-in" id="hscFirst" type="text" placeholder="Ton prénom" autocomplete="given-name"></div>
+      <div style="flex:1;min-width:0"><label class="hsc-f">Nom</label><input class="hsc-in" id="hscLast" type="text" placeholder="Ton nom" autocomplete="family-name"></div></div>
       <label class="hsc-f">Téléphone ou email</label><input class="hsc-in" id="hscContact" type="text" placeholder="06 12 34 56 78 ou email" value="${esc(opts.email || '')}">
       <label class="hsc-f">Message (optionnel)</label><textarea class="hsc-in" id="hscMsg" placeholder="Ton objectif, tes dispos..."></textarea>
       <div style="display:flex;gap:10px;margin-top:16px"><button class="hsc-btn" id="hscSend">Envoyer la demande</button></div>
       ${opts.fromList !== false && (cache && cache.length) ? '<button class="hsc-btn ghost" id="hscBack" style="margin-top:10px">← Voir les coachs</button>' : ''}`);
     const back = ov.querySelector('#hscBack'); if(back) back.onclick = () => openDirectory(opts);
     ov.querySelector('#hscSend').onclick = async () => {
-      const name = ov.querySelector('#hscName').value.trim(), contact = ov.querySelector('#hscContact').value.trim(), msg = ov.querySelector('#hscMsg').value.trim();
-      if(!name || !contact){ alert('Nom et contact requis'); return; }
+      const first = ov.querySelector('#hscFirst').value.trim(), last = ov.querySelector('#hscLast').value.trim(), name = (first + ' ' + last).trim(), contact = ov.querySelector('#hscContact').value.trim(), msg = ov.querySelector('#hscMsg').value.trim();
+      if(!first || !last || !contact){ alert('Prénom, nom et contact requis'); return; }
       const btn = ov.querySelector('#hscSend'); btn.disabled = true;
       const isEmail = contact.includes('@');
       try{
