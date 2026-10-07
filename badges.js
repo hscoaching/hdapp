@@ -344,6 +344,7 @@
       .lvl-bar{height:7px;border-radius:99px;background:var(--surface-2,#1f2024);margin:10px 0 4px;overflow:hidden}.lvl-bar i{display:block;height:100%;background:var(--ink,#f5f5f5);border-radius:99px}
       .lvl-steps{display:flex;gap:6px;background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:18px;padding:12px 14px;margin-bottom:14px}
       .lvl-title{font-size:13px;font-weight:700;margin:4px 2px 8px}.lvl-title span{display:block;font-size:11.5px;font-weight:500;color:var(--ink-muted,#9a9a9e);margin-top:2px}
+      .lvl-tabs{display:flex;gap:6px;margin:0 0 8px;overflow-x:auto}.lvl-tab{flex:none;font-family:inherit;font-size:12.5px;font-weight:700;padding:7px 12px;border-radius:999px;border:1px solid var(--line,#2c2c30);background:var(--surface-2,#1f2024);color:var(--ink-muted,#9a9a9e);cursor:pointer}.lvl-tab.on{background:var(--accent,#fff);color:var(--accent-ink,#0b0b0c);border-color:var(--accent,#fff)}
       .lvl-steps{overflow-x:auto;-webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;padding:10px}
       .lvl-card{flex:0 0 118px;scroll-snap-align:start;text-align:center;border:1px solid var(--line,#2c2c30);border-radius:14px;padding:12px 6px 10px;background:var(--surface-2,#1f2024);cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px}
       .lvl-card b{font-size:13px;line-height:1.2;margin-top:6px}.lvl-card small{font-size:11px;color:var(--ink-muted,#9a9a9e);line-height:1.25}
@@ -419,10 +420,14 @@
     };
     const coreFams = famNames.filter(n => !res.badges.find(b => b.group === n).bonus);
     const bonusFams = famNames.filter(n => res.badges.find(b => b.group === n).bonus);
-    const steps = TIERS.slice(1).map(t => {
-      const done = L.t >= t.t, nxt = L.t + 1 === t.t, my = mythOf({ profile: L.profile, t: t.t });
-      return `<div class="lvl-card ${done ? 'done' : 'lock'}${nxt ? ' nxt' : ''}" onclick="HSBadges.showTier(${t.t})"><div class="lvl-m">${medal(t.t, lvlIcon(L.profile, t.t), 56)}${done ? '' : '<i class="lvl-pad">🔒</i>'}</div><b>${esc(L.ladder[t.t])}</b><small>${esc(t.n)}</small><small class="lvl-need">${done ? '✓ atteint' : (nxt ? 'Prochain · ' : '') + t.at + ' badges'}</small>${my ? `<small class="lvl-who">${esc(my.who)}</small>` : ''}</div>`;
+    const PATHS = [['muscu', '🏋️ Force', 'Tes séances sont surtout de la musculation.'], ['cardio', '🏃 Endurance', 'Tes séances sont surtout du cardio (course, vélo, rameur…).'], ['hybrid', '⚡ Hybride', 'Tu alternes les deux : au moins 3 séances de cardio et 3 de musculation, chacune représentant au moins un quart de tes séances.']];
+    const strip = prof => TIERS.slice(1).map(t => {
+      const own = prof === L.profile, done = own && L.t >= t.t, nxt = own && L.t + 1 === t.t, my = mythOf({ profile: prof, t: t.t });
+      return `<div class="lvl-card ${done ? 'done' : 'lock'}${nxt ? ' nxt' : ''}" onclick="HSBadges.showTier(${t.t}, '${prof}')"><div class="lvl-m">${medal(t.t, lvlIcon(prof, t.t), 56)}${done ? '' : '<i class="lvl-pad">🔒</i>'}</div><b>${esc(LADDERS[prof][t.t])}</b><small>${esc(t.n)}</small><small class="lvl-need">${done ? '✓ atteint' : (nxt ? 'Prochain · ' : '') + t.at + ' badge' + (t.at > 1 ? 's' : '')}</small>${my ? `<small class="lvl-who">${esc(my.who)}</small>` : ''}</div>`;
     }).join('');
+    const tabs = PATHS.map(([k, lab]) => `<button type="button" class="lvl-tab${k === L.profile ? ' on' : ''}" data-p="${k}" onclick="HSBadges.pickPath('${k}')">${lab}</button>`).join('');
+    const strips = PATHS.map(([k, , rule]) => `<div class="lvl-path" data-p="${k}" style="${k === L.profile ? '' : 'display:none'}"><div class="lvl-steps">${strip(k)}</div><div class="end-sub" style="margin:-6px 4px 12px">${k === L.profile ? 'C\'est ton parcours actuel.' : 'Parcours ' + (k === 'hybrid' ? 'hybride' : k === 'cardio' ? 'endurance' : 'force') + ' : ' + esc(rule) + ' Tes badges comptent pour tous les parcours : seul le titre change.'}</div></div>`).join('');
+    const steps = '';
     const pts = L.pts, pct = L.next ? Math.round((pts - TIERS[L.t].at) / (L.next.at - TIERS[L.t].at) * 100) : 100;
     const f = opts.featured, onLevel = !f || f === 'level', onNone = f === 'none';
     const pill = opts.pick ? `<div class="bdg-pill">Pastille à côté de ton nom :
@@ -433,8 +438,8 @@
       <div class="lvl-hero" style="cursor:pointer" onclick="HSBadges.showLevel()">${medal(L.t, lvlIcon(L.profile, L.t), 84)}<div style="flex:1"><div class="lv">Niveau ${esc(L.tierName)}${L.t ? ' · profil ' + esc(L.profileName) : ''}</div><div class="nm">${esc(L.name)}</div>
         <div class="lvl-bar"><i style="width:${pct}%"></i></div>
         <div class="bdg-mini" style="margin:0">${L.next ? `${pts}/${L.next.at} badges principaux pour devenir <b>${esc(L.next.n)}</b>` : 'Niveau maximum atteint 🎉'}</div>${L.t ? '<div class="bdg-mini" style="margin-top:6px"><b>Touche pour découvrir ta légende ›</b></div>' : ''}</div></div>
-      <div class="lvl-title">Les niveaux à débloquer <span>touche un niveau pour découvrir sa légende</span></div>
-      <div class="lvl-steps">${steps}</div>
+      <div class="lvl-title">Les niveaux à débloquer <span>trois parcours : force, endurance, hybride. Touche un niveau pour découvrir sa légende</span></div>
+      <div class="lvl-tabs">${tabs}</div>${strips}
       <div class="bdg-hero">
         <div class="bdg-hero-top">
           <div class="bdg-streak">${streakTxt}<small>Meilleure série : ${st.best} semaine${st.best > 1 ? 's' : ''} · ${st.total} séance${st.total > 1 ? 's' : ''} comptée${st.total > 1 ? 's' : ''}</small></div>
@@ -616,19 +621,24 @@
   }
 
   // Fenêtre « ta légende » : comparaison mythologique du niveau actuel
-  function showTier(t){
+  function pickPath(k){
+    document.querySelectorAll('.lvl-path').forEach(el => { el.style.display = el.dataset.p === k ? '' : 'none'; });
+    document.querySelectorAll('.lvl-tab').forEach(el => el.classList.toggle('on', el.dataset.p === k));
+  }
+  function showTier(t, prof){
     const L = window.__hsLvl; if(!L) return; ensureCss();
-    const tr = TIERS[t], my = mythOf({ profile: L.profile, t }), done = L.t >= t, missing = Math.max(0, tr.at - L.pts);
+    prof = prof || L.profile;
+    const tr = TIERS[t], my = mythOf({ profile: prof, t }), done = L.t >= t, missing = Math.max(0, tr.at - L.pts);
     const old = document.getElementById('hsLvlOv'); if(old) old.remove();
     const ov = document.createElement('div'); ov.id = 'hsLvlOv';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1200;display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto';
     ov.onclick = e => { if(e.target === ov) ov.remove(); };
     ov.innerHTML = `<div style="max-width:420px;width:100%;background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:20px;padding:24px 20px;text-align:center">
-      <div class="medal t${t}" style="--s:110px;margin-bottom:12px">${lvlIcon(L.profile, t)}</div>
-      <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted,#9a9a9e);font-weight:700">Niveau ${esc(tr.n)}</div>
-      <div style="font-size:28px;font-weight:800;line-height:1.15;margin:4px 0 14px">${esc(L.ladder[t])}</div>
+      <div class="medal t${t}" style="--s:110px;margin-bottom:12px">${lvlIcon(prof, t)}</div>
+      <div style="font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--ink-muted,#9a9a9e);font-weight:700">Niveau ${esc(tr.n)} · parcours ${esc(PROFILE_NAMES[prof] || '')}</div>
+      <div style="font-size:28px;font-weight:800;line-height:1.15;margin:4px 0 14px">${esc(LADDERS[prof][t])}</div>
       ${my ? `<div style="border-top:1px solid var(--line,#2c2c30);padding-top:14px"><div style="font-size:12px;color:var(--ink-muted,#9a9a9e);margin-bottom:4px">La légende</div><div style="font-size:20px;font-weight:700;margin-bottom:8px">${esc(my.who)}</div><div style="font-size:14.5px;line-height:1.5">${esc(my.txt)}</div></div>` : ''}
-      <div style="margin-top:16px;font-size:13.5px">${done ? '✅ Tu as atteint ce niveau.' : `🔒 Il te manque <b>${missing} badge${missing > 1 ? 's' : ''} principa${missing > 1 ? 'ux' : 'l'}</b> (${L.pts}/${tr.at}).`}</div>
+      <div style="margin-top:16px;font-size:13.5px">${done && prof === L.profile ? '✅ Tu as atteint ce niveau.' : prof !== L.profile ? `Ce titre appartient au parcours ${esc(PROFILE_NAMES[prof] || '')}. Il s'obtient avec le même nombre de badges principaux (${tr.at}) : tu as ${L.pts}/${tr.at}, et le parcours se choisit selon le type de tes séances.` : `🔒 Il te manque <b>${missing} badge${missing > 1 ? 's' : ''} principa${missing > 1 ? 'ux' : 'l'}</b> (${L.pts}/${tr.at}).`}</div>
       <button type="button" style="margin-top:18px;font-family:inherit;font-weight:700;font-size:14px;padding:12px 26px;border-radius:999px;border:0;background:var(--accent,#fff);color:var(--accent-ink,#0b0b0c);cursor:pointer" onclick="document.getElementById('hsLvlOv').remove()">Fermer</button></div>`;
     document.body.appendChild(ov);
   }
@@ -659,5 +669,5 @@
     }catch(e){ return false; }
   }
 
-  window.HSBadges = { renderEnd, animateEnd, showLevel, showTier, levelUpSeen, chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, openCheckin, WEEKLY_GOAL };
+  window.HSBadges = { pickPath, renderEnd, animateEnd, showLevel, showTier, levelUpSeen, chip, compute, newlyUnlocked, renderFull, renderNew, summaryLine, load, openCheckin, WEEKLY_GOAL };
 })();
