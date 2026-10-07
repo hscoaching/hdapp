@@ -106,6 +106,14 @@
     margin-left:4px; width:42px; height:42px; border-radius:10px; border:1px solid var(--line); background:var(--surface-2);
     color:var(--ink-muted); cursor:pointer; flex:none; font-size:17px;
   }
+  .set-line .chrono-btn{margin-left:4px; width:42px; height:42px; border-radius:10px; border:1px solid var(--accent); background:transparent; color:var(--accent); cursor:pointer; flex:none; font-size:15px;}
+  .set-line .chrono-btn.on{background:var(--accent); color:#111;}
+  .chrono-row{display:flex; align-items:center; gap:12px; padding:12px 14px; margin:6px 0 4px; border:1px solid var(--accent); border-radius:14px; background:var(--surface-2);}
+  .chrono-row .cr-main{flex:1; min-width:0;}
+  .chrono-row .cr-time{font-size:34px; font-weight:800; font-variant-numeric:tabular-nums; line-height:1.05;}
+  .chrono-row .cr-sub{font-size:12.5px; color:var(--ink-muted); margin-top:2px;}
+  .chrono-row.alarm{animation:crFlash .6s ease-in-out 6; border-color:var(--ok);}
+  @keyframes crFlash{0%,100%{background:var(--surface-2);}50%{background:var(--ok); color:#04170c;}}
   .set-line .valid.done{background:var(--ok); border-color:var(--ok); color:#04170c;}
 
   .session-bar{position:sticky; bottom:0; padding:14px 0; padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));
@@ -437,7 +445,7 @@ function loadActive(){
   return null;
 }
 function saveActive(){ if(!activeMeta) return; try{ localStorage.setItem(ACTIVE_KEY, JSON.stringify(activeMeta)); }catch(e){} }
-function clearActive(){ activeMeta = null; try{ localStorage.removeItem(ACTIVE_KEY); }catch(e){} }
+function clearActive(){ activeMeta = null; try{ localStorage.removeItem(ACTIVE_KEY); localStorage.removeItem('hs_set_chrono'); }catch(e){} }
 function activeBannerHtml(){
   const a = loadActive(); if(!a) return '';
   return `<div class="resume-banner"><div class="rb-text"><b>⏱ Séance en cours</b><span>${escHtml(a.programName||'Programme')}${a.dayLabel?' · '+escHtml(a.dayLabel):''}</span></div>
@@ -910,14 +918,15 @@ async function renderSession(programId, dayIdx, manual){
     if(isTimed(u)){
       const pd = prev && prev.duration_seconds ? prev.duration_seconds : 0;
       const phm = pd ? Math.floor(pd/60) : 'min', phs = pd ? (pd%60) : 'sec';
-      return `<div class="set-line" data-slot="${u.k}" data-ex="${u.ex.id}" data-set="${s}" data-timed="1">
+      const tg = parseTargetSec(u.it.reps);
+      return `<div class="set-line" data-slot="${u.k}" data-ex="${u.ex.id}" data-set="${s}" data-timed="1"${tg ? ` data-lo="${tg.lo}" data-hi="${tg.hi}"` : ''}>
         <div class="setnum">S${s}</div>
         <input type="number" class="reps-input" style="display:none"><input type="number" class="charge-input" style="display:none">
         <input type="number" inputmode="numeric" min="0" placeholder="${phm}" class="min-input">
         <span class="unit">min</span>
         <input type="number" inputmode="numeric" min="0" max="59" placeholder="${phs}" class="sec-input">
         <span class="unit">s</span>
-        ${manual ? '' : '<button class="valid" onclick="validateSet(this)">✓</button>'}
+        ${manual ? '' : '<button type="button" class="chrono-btn" aria-label="Lancer le chrono" onclick="toggleSetChrono(this)">▶</button><button class="valid" onclick="validateSet(this)">✓</button>'}
       </div>`;
     }
     const ph = prev ? `${prev.reps||''}` : (u.it.reps||'');
@@ -1014,6 +1023,7 @@ async function renderSession(programId, dayIdx, manual){
       line.querySelector('.valid').classList.add('done');
       sessDone[`${line.dataset.ex}_${setNum}`] = (!v.sec && v.reps && v.charge) ? v.reps*v.charge : 0;
     });
+    restoreSetChrono();
   }
   sessTick = setInterval(sessTickFn, 250);
   sessTickFn();
@@ -1068,6 +1078,100 @@ async function validateSetInner(btn){
   }catch(e){ toast('Erreur, réessaie'); }
 }
 
+
+// ---- Chrono des séries chronométrées (compte vers l'objectif, alerte visuelle + vibration + son) ----
+function parseTargetSec(str){
+  str = String(str || '');
+  const one = t => {
+    const m = t.match(/(\d+)\s*min/i), s = t.match(/(\d+)\s*(?:s\b|sec|")/i);
+    return (m ? parseInt(m[1]) * 60 : 0) + (s ? parseInt(s[1]) : 0);
+  };
+  let lo = 0, hi = 0;
+  const r = str.match(/(\d+)\s*-\s*(\d+)\s*(min|s\b|sec)/i);
+  if(r){ const u = /min/i.test(r[3]) ? 60 : 1; lo = parseInt(r[1]) * u; hi = parseInt(r[2]) * u; }
+  else if(/\sà\s/.test(str)){ const [a, b] = str.split(/\sà\s/); lo = one(a); hi = one(b); }
+  else { lo = hi = one(str); }
+  if(!lo) return null;
+  if(hi < lo) hi = lo;
+  return { lo, hi };
+}
+let setChrono = null;
+const CHRONO_SOUND = false;   // son du chrono désactivé pour l'instant (passer à true pour le réactiver)
+function chronoBeep(ctx){
+  try{
+    if(!ctx) return;
+    [0, .35, .7].forEach(d => { const o = ctx.createOscillator(), g = ctx.createGain(); o.frequency.value = 880; o.connect(g); g.connect(ctx.destination);
+      g.gain.setValueAtTime(.0001, ctx.currentTime + d); g.gain.exponentialRampToValueAtTime(.4, ctx.currentTime + d + .02); g.gain.exponentialRampToValueAtTime(.0001, ctx.currentTime + d + .25);
+      o.start(ctx.currentTime + d); o.stop(ctx.currentTime + d + .28); });
+  }catch(e){}
+}
+function chronoAlarm(msg){
+  try{ if(navigator.vibrate) navigator.vibrate([300,120,300,120,300]); }catch(e){}
+  if(CHRONO_SOUND) chronoBeep(setChrono && setChrono.ctx);
+  const row = document.getElementById('chronoRow');
+  if(row){ row.classList.remove('alarm'); void row.offsetWidth; row.classList.add('alarm'); }
+  toast(msg);
+}
+function toggleSetChrono(btn){
+  const line = btn.closest('.set-line');
+  if(setChrono && setChrono.line === line){ stopSetChrono(true); return; }
+  if(setChrono) stopSetChrono(true);
+  startSetChrono(line, Date.now());
+}
+function startSetChrono(line, start){
+  const lo = parseInt(line.dataset.lo) || 0, hi = parseInt(line.dataset.hi) || lo;
+  let ctx = null;
+  try{ const AC = CHRONO_SOUND && (window.AudioContext || window.webkitAudioContext); if(AC){ ctx = new AC(); ctx.resume(); } }catch(e){}
+  setChrono = { line, start, lo, hi, firedLo: false, firedHi: false, ctx, wake: null, tick: null };
+  try{ if(navigator.wakeLock) navigator.wakeLock.request('screen').then(w => { if(setChrono) setChrono.wake = w; else w.release(); }).catch(()=>{}); }catch(e){}
+  const b = line.querySelector('.chrono-btn'); if(b){ b.classList.add('on'); b.textContent = '■'; b.setAttribute('aria-label','Arrêter le chrono'); }
+  const old = document.getElementById('chronoRow'); if(old) old.remove();
+  const row = document.createElement('div'); row.className = 'chrono-row'; row.id = 'chronoRow';
+  row.innerHTML = `<div class="cr-main"><div class="cr-time" id="crTime">00:00</div><div class="cr-sub" id="crSub"></div></div><button type="button" class="btn btn-accent" onclick="stopSetChrono(true)">■ Terminer</button>`;
+  line.after(row);
+  try{ localStorage.setItem('hs_set_chrono', JSON.stringify({ slot: line.dataset.slot, set: line.dataset.set, start })); }catch(e){}
+  setChrono.tick = setInterval(setChronoTick, 250);
+  setChronoTick();
+}
+function setChronoTick(){
+  const c = setChrono; if(!c) return;
+  if(!document.body.contains(c.line)){ stopSetChrono(false); return; }
+  const el = Math.floor((Date.now() - c.start) / 1000);
+  const t = document.getElementById('crTime'), sub = document.getElementById('crSub');
+  if(t) t.textContent = fmtClock(el * 1000);
+  if(sub){
+    if(!c.lo) sub.textContent = 'Appuie sur Terminer quand tu as fini';
+    else if(el < c.lo) sub.textContent = `Reste ${fmtClock((c.lo - el) * 1000)} · objectif ${fmtClock(c.lo * 1000)}`;
+    else if(c.hi > c.lo && el < c.hi) sub.textContent = `✅ Objectif atteint · tu peux continuer jusqu'à ${fmtClock(c.hi * 1000)}`;
+    else sub.textContent = `✅ Objectif atteint · +${fmtClock((el - (c.hi || c.lo)) * 1000)}`;
+  }
+  if(c.lo && el >= c.lo && !c.firedLo){ c.firedLo = true; chronoAlarm('⏱ Temps atteint !'); }
+  if(c.hi > c.lo && el >= c.hi && !c.firedHi){ c.firedHi = true; chronoAlarm('⏱ Temps maximum atteint !'); }
+}
+function stopSetChrono(fill){
+  const c = setChrono; if(!c) return;
+  clearInterval(c.tick); setChrono = null;
+  try{ if(c.wake) c.wake.release(); }catch(e){}
+  try{ if(c.ctx) c.ctx.close(); }catch(e){}
+  try{ localStorage.removeItem('hs_set_chrono'); }catch(e){}
+  const row = document.getElementById('chronoRow'); if(row) row.remove();
+  const b = c.line.querySelector('.chrono-btn'); if(b){ b.classList.remove('on'); b.textContent = '▶'; b.setAttribute('aria-label','Lancer le chrono'); }
+  if(fill && document.body.contains(c.line)){
+    const el = Math.max(1, Math.round((Date.now() - c.start) / 1000));
+    const mi = c.line.querySelector('.min-input'), si = c.line.querySelector('.sec-input');
+    if(mi && si){ mi.value = Math.floor(el / 60); si.value = el % 60; }
+    toast('Durée enregistrée dans la ligne : appuie sur ✓ pour valider');
+  }
+}
+function restoreSetChrono(){
+  try{
+    const v = JSON.parse(localStorage.getItem('hs_set_chrono') || 'null'); if(!v) return;
+    const line = document.querySelector(`.set-line[data-slot="${v.slot}"][data-set="${v.set}"]`);
+    if(!line || line.querySelector('.valid.done') || Date.now() - v.start > 6*3600*1000){ localStorage.removeItem('hs_set_chrono'); return; }
+    startSetChrono(line, v.start);
+  }catch(e){}
+}
+
 // Chrono de séance (durée totale) + minuteur de repos.
 // Basé sur des horodatages : reste juste même si l'écran se met en veille.
 let sessStart = 0, sessTick = null, restEnd = 0, sessDone = {};
@@ -1102,6 +1206,7 @@ function endRest(alarm){
 // Terminer : on demande la durée (pré-remplie avec le chrono) pour pouvoir la corriger
 // si le téléphone s'est éteint ou si le chrono n'a pas été lancé à temps.
 function finishSession(programId){
+  if(setChrono) stopSetChrono(true);
   const durationMs = Date.now() - sessStart;
   const origMin = Math.max(1, Math.round(durationMs/60000));
   const ov = document.createElement('div');
