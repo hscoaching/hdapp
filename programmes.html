@@ -651,7 +651,6 @@ async function renderList(){
   // Vue coach : on indique qui a créé chaque programme (nom du client, « Visiteur », ou le coach)
   creatorProfiles = {};
   if(isCoachView()){
-    const h = document.querySelector('#mineGrid')?.previousElementSibling; if(h) h.textContent = 'Programmes des clients et visiteurs';
     try{
       const ids = [...new Set(allPrograms.flatMap(p=>[p.owner_user_id, p.created_by]).filter(Boolean))];
       if(ids.length){
@@ -663,23 +662,37 @@ async function renderList(){
   markProgramsSeen(allPrograms);
   renderProgramGrids(allPrograms);
 }
+let othersOpen = false;
 function renderProgramGrids(programs){
   const official = programs.filter(p=>p.is_official);
   let mine = programs.filter(p=>!p.is_official);
-  let chips = '';
+  let othersHtml = '';
   if(isCoachView()){
-    const counts = { all: mine.length };
-    mine.forEach(p => { const o = progOrigin(p); counts[o] = (counts[o]||0) + 1; });
-    chips = '<div class="fchips">' + [['all','Tous'],['coach','Créés par moi'],['client','Clients'],['visitor','Visiteurs'],['unknown','Inconnus']]
-      .filter(([k]) => k === 'all' || counts[k])
-      .map(([k,l]) => `<button type="button" class="fchip ${coachFilter===k?'active':''}" onclick="setCoachFilter('${k}')">${l} <span>${counts[k]||0}</span></button>`).join('') + '</div>';
-    if(coachFilter !== 'all') mine = mine.filter(p => progOrigin(p) === coachFilter);
+    // Vue coach : « Mes programmes » = les miens ; ceux des clients et visiteurs sont rangés dans une case dépliable
+    const myId = getUserSession().user.id;
+    let others = mine.filter(p => p.owner_user_id !== myId);
+    mine = mine.filter(p => p.owner_user_id === myId);
+    if(others.length || allPrograms.some(p => !p.is_official && p.owner_user_id !== myId)){
+      const all = allPrograms.filter(p => !p.is_official && p.owner_user_id !== myId);
+      const counts = { all: all.length };
+      all.forEach(p => { const o = progOrigin(p); counts[o] = (counts[o]||0) + 1; });
+      const chips = '<div class="fchips">' + [['all','Tous'],['coach','Créés par moi'],['client','Clients'],['visitor','Visiteurs'],['unknown','Inconnus']]
+        .filter(([k]) => k === 'all' || counts[k])
+        .map(([k,l]) => `<button type="button" class="fchip ${coachFilter===k?'active':''}" onclick="setCoachFilter('${k}')">${l} <span>${counts[k]||0}</span></button>`).join('') + '</div>';
+      if(coachFilter !== 'all') others = others.filter(p => progOrigin(p) === coachFilter);
+      const searching = !!(document.getElementById('progSearch') && document.getElementById('progSearch').value.trim());
+      othersHtml = `<details class="others-box" ${(othersOpen || searching) ? 'open' : ''} ontoggle="othersOpen = this.open" style="margin-top:16px;border:1px solid var(--line);border-radius:16px;padding:4px 14px 14px">
+        <summary style="cursor:pointer;font-weight:700;padding:12px 0">👥 Programmes des clients et visiteurs <span style="opacity:.6;font-weight:500">(${all.length})</span></summary>
+        ${chips}${others.length ? '<div class="prog-grid" style="margin:0;">' + others.map(cardHtml).join('') + '</div>' : '<div class="empty">Aucun programme.</div>'}
+      </details>`;
+    }
   }
   document.getElementById('officialGrid').innerHTML = official.length ? official.map(cardHtml).join('') :
     '<div class="empty">Aucun programme du coach pour le moment.</div>';
-  if(chips) document.getElementById('mineGrid').style.display = 'block';
-  document.getElementById('mineGrid').innerHTML = chips + (mine.length ? '<div class="prog-grid" style="margin:0;">' + mine.map(cardHtml).join('') + '</div>' :
-    '<div class="empty">Tu n\'as pas encore créé de programme perso.</div>');
+  const mg = document.getElementById('mineGrid');
+  if(othersHtml) mg.style.display = 'block';
+  mg.innerHTML = (mine.length ? '<div class="prog-grid" style="margin:0;">' + mine.map(cardHtml).join('') + '</div>' :
+    '<div class="empty">Tu n\'as pas encore créé de programme perso.</div>') + othersHtml;
 }
 function filterProgramList(){
   const q = document.getElementById('progSearch').value.trim().fold();

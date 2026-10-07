@@ -576,11 +576,43 @@ function renderClientRows(rows){
         <button class="btn btn-ghost btn-sm" onclick="goToNewProgramFor('${r.client.id}')">+ Assigner un programme</button>
         <button class="btn btn-ghost btn-sm" onclick="openClientSessions('${r.client.id}','${esc}')">📅 Séances</button>
         <button class="btn btn-ghost btn-sm" onclick="openClientProgress('${r.client.id}','${esc}')">📈 Progression</button>
+        <button class="btn btn-ghost btn-sm" onclick="openClientRecovery('${r.client.id}','${esc}')">😴 Repos</button>
         <button class="btn btn-ghost btn-sm" onclick="openBadgesModal('${r.client.id}','${esc}')">🏅 Badges</button>
         <button class="btn btn-ghost btn-sm" onclick="printClientReport('${r.client.id}')">📄 Export PDF</button>
       </div>
     </div>`;
   }).join('') : '<div class="empty">Aucun client ne correspond à cette recherche.</div>';
+}
+// ---- Bilans de récupération d'un client (sommeil, courbatures, énergie) ----
+async function openClientRecovery(clientId, name){
+  const tb = document.getElementById('tabBody');
+  const back = '<a class="backlink" onclick="renderClientsTab()">← Clients</a>';
+  tb.innerHTML = back + '<div class="empty">Chargement…</div>';
+  let rows;
+  try{
+    rows = await api(`/rest/v1/recovery_checkins?select=day,sleep_hours,soreness,energy&user_id=eq.${encodeURIComponent(clientId)}&order=day.desc&limit=60`);
+  }catch(e){
+    console.error(e);
+    tb.innerHTML = back + '<div class="empty">Impossible de charger les bilans. Réessaie.</div>';
+    return;
+  }
+  const head = `${back}<h3 style="font-family:Inter; font-weight:700; font-size:18px; margin:6px 0 4px;">Récupération · ${escapeHtml(name)}</h3>`;
+  if(!rows.length){ tb.innerHTML = head + '<div class="empty">Ce client n\'a pas encore rempli de bilan.</div>'; return; }
+  const SO = ['😀','🙂','😐','😣','🥵'], EN = ['🪫','😴','😐','💪','⚡'];
+  const last7 = rows.slice(0, 7), avg = last7.reduce((a,x) => a + Number(x.sleep_hours), 0) / last7.length;
+  const last3 = rows.slice(0, 3);
+  const alerts = [];
+  if(last7.length >= 3 && avg < 6.5) alerts.push(`😴 Sommeil court : ${avg.toFixed(1).replace('.', ',')} h en moyenne sur ses ${last7.length} derniers bilans`);
+  if(last3.length >= 3 && last3.every(x => x.soreness >= 4)) alerts.push('🥵 Courbatures fortes sur les 3 derniers bilans');
+  if(last3.length >= 3 && last3.every(x => x.energy && x.energy <= 2)) alerts.push('🪫 Énergie basse sur les 3 derniers bilans');
+  const fmtD = s => new Date(s + 'T12:00:00').toLocaleDateString('fr-FR', { weekday:'short', day:'numeric', month:'short' });
+  tb.innerHTML = head + `
+    ${alerts.length ? `<div style="padding:12px 14px;border:1px solid #c0562f;border-radius:12px;margin:10px 0">${alerts.map(a => `<div>${a}</div>`).join('')}</div>` : ''}
+    <div style="display:flex;gap:10px;margin:12px 0">
+      <div style="flex:1;padding:12px;border:1px solid var(--line);border-radius:12px;text-align:center"><div style="font-size:22px;font-weight:800">${avg.toFixed(1).replace('.', ',')} h</div><div style="font-size:12px;opacity:.7">Sommeil moyen (7 derniers)</div></div>
+      <div style="flex:1;padding:12px;border:1px solid var(--line);border-radius:12px;text-align:center"><div style="font-size:22px;font-weight:800">${rows.length}</div><div style="font-size:12px;opacity:.7">Bilans remplis</div></div>
+    </div>
+    ${rows.slice(0, 30).map(x => `<div style="display:flex;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--line)"><span style="text-transform:capitalize">${fmtD(x.day)}</span><span>${String(x.sleep_hours).replace('.', ',')} h${x.soreness ? ' · courbatures ' + SO[x.soreness-1] : ''}${x.energy ? ' · énergie ' + EN[x.energy-1] : ''}</span></div>`).join('')}`;
 }
 // ---- Séances réalisées par un client (consultation coach) ----
 let csClient = null, csSessions = [], csShowAll = false;
