@@ -216,6 +216,7 @@
 <div id="printAreaAdmin" style="display:none;"></div>
 <div id="printClientArea"></div>
 
+<script src="monitor.js"></script>
 <script src="badges.js"></script>
 <script src="export.js"></script>
 <script src="history.js"></script>
@@ -295,7 +296,7 @@ function renderDashboard(){
       <div class="stat-tile"><div class="stat-num">…</div><div class="stat-label">Messages non lus</div></div>
       ${IS_SUPER ? `<div class="stat-tile" style="cursor:pointer;" onclick="openVisitsModal()"><div class="stat-num">…</div><div class="stat-label">Visiteurs de l'appli</div></div>` : ''}
     </div>
-    <div class="row-actions" style="margin-bottom:16px;"><button class="btn btn-ghost" onclick="openEntranceQr()">QR code d'entrée de salle</button><button class="btn btn-ghost" onclick="openMyCoachCard()">🪪 Ma fiche coach</button>${IS_SUPER ? '<button class="btn btn-ghost" onclick="openBackups()">💾 Sauvegardes</button>' : ''}</div>
+    <div class="row-actions" style="margin-bottom:16px;"><button class="btn btn-ghost" onclick="openEntranceQr()">QR code d'entrée de salle</button><button class="btn btn-ghost" onclick="openMyCoachCard()">🪪 Ma fiche coach</button>${IS_SUPER ? '<button class="btn btn-ghost" onclick="openBackups()">💾 Sauvegardes</button><button class="btn btn-ghost" onclick="openErrors()" id="errBtn">🛠 Erreurs</button>' : ''}</div>
     <div class="tabs">
       <div class="tab" data-t="clients">Clients</div>
       <div class="tab" data-t="messages">Messages</div>
@@ -306,7 +307,7 @@ function renderDashboard(){
     <div id="tabBody"></div>
   `;
   [...document.querySelectorAll('.tab')].forEach(t=> t.addEventListener('click', ()=>{ currentTab=t.dataset.t; paint(); load(); }));
-  paint(); load(); refreshChPending();
+  paint(); load(); refreshChPending(); refreshErrBadge();
   renderCoachStats();
 }
 async function renderCoachStats(){
@@ -493,6 +494,43 @@ async function openBackups(){
     }catch(e){ console.error(e); toast('Sauvegarde impossible, réessaie'); }
     b.disabled = false; b.textContent = '⬇️ Télécharger une sauvegarde maintenant';
   };
+}
+
+async function opsCall(action){
+  await refreshIfNeeded(); const s = getSession();
+  return fetch(`${SUPABASE_URL}/functions/v1/ops-monitor`, { method:'POST', headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token}`, 'Content-Type':'application/json' }, body: JSON.stringify({ action }) });
+}
+async function refreshErrBadge(){
+  const b = document.getElementById('errBtn'); if(!b || !IS_SUPER) return;
+  try{ const r = await api('/rest/v1/app_errors?select=id&resolved=eq.false&limit=100'); const n = (await r.json()).length; b.textContent = '🛠 Erreurs' + (n ? ' (' + n + ')' : ''); b.style.borderColor = n ? '#ff5a5a' : ''; }catch(e){}
+}
+async function openErrors(){
+  const old = document.getElementById('erOv'); if(old) old.remove();
+  const ov = document.createElement('div'); ov.id = 'erOv';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1300;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto';
+  ov.onclick = e => { if(e.target === ov) ov.remove(); };
+  ov.innerHTML = `<div style="max-width:560px;width:100%;max-height:90vh;overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px 18px">
+    <h2 style="margin:0 0 4px">🛠 Erreurs de l'appli</h2>
+    <div style="font-size:13px;opacity:.75;margin-bottom:12px">Chaque plantage rencontré par un client ou par toi est enregistré ici. Tu es prévenu sur ton téléphone dans les 10 minutes.</div>
+    <div id="erAlert" style="font-size:13px;border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:12px">Chargement…</div>
+    <div id="erList" style="font-size:13px;margin-bottom:14px"></div>
+    <div style="display:flex;gap:10px"><button class="btn btn-ghost" id="erDone" style="flex:1;justify-content:center">✓ Tout marquer comme résolu</button><button class="btn btn-ghost" id="erX">Fermer</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#erX').onclick = () => { ov.remove(); refreshErrBadge(); };
+  const load = async () => {
+    try{
+      const r = await api('/rest/v1/app_errors?select=id,created_at,last_seen,kind,message,source,page,count&resolved=eq.false&order=last_seen.desc&limit=50'); const rows = await r.json();
+      ov.querySelector('#erList').innerHTML = rows.length ? rows.map(e => `<div style="padding:8px 0;border-bottom:1px solid var(--line)"><div style="font-weight:600;word-break:break-word">${escapeHtml(e.message)}</div><div style="opacity:.65">${escapeHtml(e.page || '')} · ${escapeHtml(e.source || '')} · ${new Date(e.last_seen).toLocaleString('fr-FR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}${e.count > 1 ? ' · ×' + e.count : ''}</div></div>`).join('') : '<div style="opacity:.7">✅ Aucune erreur en cours.</div>';
+    }catch(e){ ov.querySelector('#erList').textContent = 'Liste indisponible.'; }
+  };
+  load();
+  ov.querySelector('#erDone').onclick = async () => { await api('/rest/v1/app_errors?resolved=eq.false', { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ resolved:true }) }); toast('Marquées comme résolues'); load(); };
+  try{
+    const j = await (await opsCall('status')).json();
+    ov.querySelector('#erAlert').innerHTML = `<b>📲 Alertes sur ton téléphone</b><br>1. Installe l'appli gratuite <b>ntfy</b> (App Store / Google Play).<br>2. Appuie sur « + » et abonne-toi au sujet :<br><code style="user-select:all;display:block;margin:6px 0;padding:6px 8px;background:var(--surface-2,#1d1e22);border-radius:8px;word-break:break-all">${escapeHtml(j.topic || '')}</code>
+      <button class="btn btn-ghost" id="erTest" style="margin-top:4px">Envoyer une notification d'essai</button><div style="opacity:.6;margin-top:6px">Garde ce sujet pour toi : quiconque le connaît peut lire les alertes (elles ne contiennent aucune donnée de client).</div>`;
+    ov.querySelector('#erTest').onclick = async () => { const r = await (await opsCall('test')).json(); toast(r.sent ? 'Notification envoyée' : 'Envoi impossible'); };
+  }catch(e){ ov.querySelector('#erAlert').textContent = 'Alertes indisponibles.'; }
 }
 
 // ================= CHALLENGES (grand admin) =================

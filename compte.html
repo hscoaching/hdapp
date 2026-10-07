@@ -134,10 +134,12 @@
 <main class="wrap" id="app"></main>
 <footer>HS Coaching · Régularité &amp; dépassement de soi</footer>
 
+<script src="monitor.js"></script>
 <script src="badges.js"></script>
 <script src="coaches.js"></script>
 <script src="challenges.js"></script>
 <script src="export.js"></script>
+<script src="account.js"></script>
 <script src="history.js"></script>
 <script src="import.js"></script>
 <script>
@@ -982,7 +984,14 @@ async function loadProfil(){
       <div class="profile-row"><span>Statut</span><b>${p.role==='admin' ? 'Coach (admin)' : (p.role==='coach' ? 'Coach' : 'Client')}</b></div>
     </div>
     <button class="btn btn-ghost btn-block" onclick="logout()">Se déconnecter</button>
+    ${p.role === 'client' ? '<button class="btn btn-ghost btn-block" style="margin-top:10px" onclick="openMyData()">🔐 Mes données &amp; suppression du compte</button>' : ''}
   `;
+  window.__myName = p.full_name || '';
+}
+async function openMyData(){
+  if(typeof HSAccount === 'undefined'){ alert('Indisponible hors connexion. Réessaie.'); return; }
+  try{ await apiFetch('/rest/v1/profiles?select=id&limit=1'); }catch(e){}
+  HSAccount.open({ fetcher: apiFetch, session: getSession(), baseUrl: SUPABASE_URL, anonKey: SUPABASE_ANON_KEY, name: window.__myName, onDeleted: () => { clearSession(); location.href = 'index.html'; } });
 }
 
 // ---------- Boot ----------
