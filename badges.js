@@ -19,7 +19,6 @@
     { id:'w12',  group:'Régularité', icon:'💎', title:'Inarrêtable',        desc:'12 semaines d\'affilée',             kind:'streak', target:12 },
     { id:'w26',  group:'Régularité', icon:'🌋', title:'Un semestre de feu', desc:'26 semaines d\'affilée',             kind:'streak', target:26 },
     { id:'w52',  group:'Régularité', icon:'🏛️', title:'Une année entière',  desc:'52 semaines d\'affilée',             kind:'streak', target:52 },
-    { id:'cb',   group:'Retour en force', icon:'💪', title:'Retour en force',   desc:`Une séance après ${COMEBACK_DAYS} jours ou plus de pause`, kind:'comeback', bonus:true, target:1 },
     { id:'t1',   group:'Poids soulevé', tag:'muscu', icon:'🏋️', title:'1 tonne',         desc:'1 000 kg soulevés au total',         bonus:true, kind:'tonnage', target:1000 },
     { id:'t10',  group:'Poids soulevé', tag:'muscu', icon:'🦾', title:'10 tonnes',       desc:'10 000 kg soulevés au total',        bonus:true, kind:'tonnage', target:10000 },
     { id:'t50',  group:'Poids soulevé', tag:'muscu', icon:'🏗️', title:'50 tonnes',       desc:'50 000 kg soulevés au total',        bonus:true, kind:'tonnage', target:50000 },
