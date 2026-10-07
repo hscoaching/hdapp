@@ -624,7 +624,6 @@ let allPrograms = [];
 async function renderList(){
   app.innerHTML = `
     ${activeBannerHtml()}
-    <div id="ckCard"></div>
     <div class="eyebrow">PROGRAMMES</div>
     <h1 class="page">Suis ton parcours.</h1>
     <p class="subtitle">Programmes construits par ton coach, ou crée le tien. Tes séries et charges sont sauvegardées automatiquement d'une séance à l'autre.</p>
@@ -647,7 +646,6 @@ async function renderList(){
       <button class="btn btn-accent" onclick="openContactModal()">Je veux être coaché</button>
     </div>
   `;
-  showCheckinCard();
   allPrograms = [];
   try{ allPrograms = await listPrograms(); }catch(e){ console.error(e); }
   // Vue coach : on indique qui a créé chaque programme (nom du client, « Visiteur », ou le coach)
@@ -1137,29 +1135,6 @@ function showSessionSummary(programId, eyebrow, durationMs, nSets, vol, sessionI
   `;
   window.scrollTo(0,0);
   showNewBadges(sessionId);
-}
-// Carte « bilan du matin » sur la page Programmes (comptes clients, 1 fois par jour)
-async function showCheckinCard(){
-  try{
-    if(!isLoggedIn() || isCoachView() || typeof HSBadges === 'undefined') return;
-    const day = new Date(), key = 'hs_ck_skip_' + day.getFullYear() + '-' + (day.getMonth()+1) + '-' + day.getDate();
-    if(localStorage.getItem(key)) return;
-    const d = day.getFullYear() + '-' + String(day.getMonth()+1).padStart(2,'0') + '-' + String(day.getDate()).padStart(2,'0');
-    const r = await authedFetch(`/rest/v1/recovery_checkins?select=day&day=eq.${d}&user_id=eq.${getUserSession().user.id}`);
-    if(!r.ok) return;
-    const rows = await r.json(); if(!Array.isArray(rows) || rows.length) return;
-    const box = document.getElementById('ckCard'); if(!box) return;
-    box.innerHTML = `<div style="display:flex;align-items:center;gap:12px;padding:14px 16px;margin-bottom:18px;border:1px solid var(--line,#2c2c30);border-radius:16px;background:var(--surface,#16171a)">
-      <div style="font-size:26px">😴</div>
-      <div style="flex:1;min-width:0"><div style="font-weight:700">Ton bilan du jour</div><div style="font-size:13px;opacity:.7">Sommeil, courbatures, énergie · 30 s</div></div>
-      <button class="btn btn-accent" onclick="openRecoveryCheckin()">Remplir</button>
-      <button class="btn btn-ghost" aria-label="Masquer" onclick="try{localStorage.setItem('${key}','1')}catch(e){};document.getElementById('ckCard').innerHTML=''">✕</button></div>`;
-  }catch(e){}
-}
-function openRecoveryCheckin(){
-  if(typeof HSBadges === 'undefined' || !isLoggedIn()) return;
-  const getJson = async path => { const r = await authedFetch(path); if(!r.ok) throw new Error('load_failed'); return r.json(); };
-  HSBadges.openCheckin({ fetcher: authedFetch, getJson, userId: getUserSession().user.id, onDone: () => { const c = document.getElementById('ckCard'); if(c) c.innerHTML = ''; } });
 }
 // Badges débloqués grâce à la séance qui vient de se terminer (comptes connectés uniquement)
 async function showNewBadges(sessionId){
