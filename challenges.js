@@ -103,7 +103,7 @@
       <div class="chl-pill ${s}">${s === 'live' ? 'En cours' : s === 'soon' ? 'À venir' : 'Terminé'}</div>
       <h2 style="margin:0 0 4px">${esc(c.badge_icon)} ${esc(c.title)}</h2>
       <div class="chl-sub">${kindLabel(c)}</div>
-      ${c.demo_video_path ? '<button class="chl-btn" id="chDemo" style="background:transparent;color:inherit;border:1px solid currentColor">🎬 Voir la démonstration en vidéo</button>' : ''}
+      ${c.demo_video_path && s !== 'ended' ? '<button class="chl-btn" id="chDemo" style="background:transparent;color:inherit;border:1px solid currentColor">🎬 Voir la démonstration en vidéo</button>' : ''}
       ${c.description ? `<p style="font-size:14px;line-height:1.45;white-space:pre-line">${esc(c.description)}</p>` : ''}
       <div class="chl-bar" style="margin-top:10px"><i style="width:${s === 'ended' ? 100 : Math.round(done / total * 100)}%"></i></div>
       <div class="chl-sub" style="margin-top:4px">${dFmt(c.starts_at)} → ${dFmt(c.ends_at)} · ${s === 'live' ? (left <= 1 ? 'dernier jour !' : 'encore ' + left + ' jours') : s === 'soon' ? 'commence bientôt' : 'terminé'}</div>

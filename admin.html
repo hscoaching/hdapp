@@ -485,7 +485,7 @@ async function renderChallengesAdmin(){
       ${c.winner_announced_at ? `<p>🏆 Vainqueur annoncé le ${new Date(c.winner_announced_at).toLocaleDateString('fr-FR')} · ${c.videos_purged_at ? 'vidéos supprimées' : 'vidéos supprimées le ' + new Date(new Date(c.winner_announced_at).getTime() + 7*864e5).toLocaleDateString('fr-FR')}</p>` : ''}
       <div class="row-actions" style="margin-top:10px">
         <button class="btn btn-ghost btn-sm" onclick="openChallengeResults('${c.id}')">📊 Résultats</button>
-        ${IS_SUPER ? `<button class="btn btn-ghost btn-sm" onclick="setDemoVideo('${c.id}')">🎬 ${c.demo_video_path ? 'Changer la vidéo démo' : 'Ajouter une vidéo démo'}</button>` : ''}
+        ${IS_SUPER && chStatus(c) !== 'terminé' ? `<button class="btn btn-ghost btn-sm" onclick="setDemoVideo('${c.id}')">🎬 ${c.demo_video_path ? 'Changer la vidéo démo' : 'Ajouter une vidéo démo'}</button>` : ''}
         ${IS_SUPER && chStatus(c) === 'terminé' && !c.winner_announced_at ? `<button class="btn btn-accent btn-sm" onclick="announceWinner('${c.id}')">🏆 Annoncer le vainqueur</button>` : ''}
         ${IS_SUPER && chStatus(c) === 'en cours' ? `<button class="btn btn-ghost btn-sm" onclick="endChallengeNow('${c.id}')">⏹ Terminer maintenant</button>` : ''}
         ${IS_SUPER ? `<button class="btn btn-ghost btn-sm" onclick="toggleChallenge('${c.id}', ${c.is_published ? 'false' : 'true'})">${c.is_published ? 'Masquer' : 'Publier'}</button>
