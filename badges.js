@@ -46,9 +46,9 @@
   // Niveaux : calculés avec les badges principaux (séances + régularité), jamais avec les bonus
   const TIERS = [
     { n:'Recrue',  at:0,  t:0 }, { n:'Bronze', at:1,  t:1 }, { n:'Argent', at:3,  t:2 },
-    { n:'Or',      at:6,  t:3 }, { n:'Platine', at:9, t:4 }, { n:'Diamant', at:12, t:5 }
+    { n:'Or',      at:6,  t:3 }, { n:'Rubis', at:9, t:4 }, { n:'Diamant', at:12, t:5 }
   ];
-  const TIER_NAMES = ['', 'Bronze', 'Argent', 'Or', 'Platine'];
+  const TIER_NAMES = ['', 'Bronze', 'Argent', 'Or', 'Rubis'];
   // Titres par profil (même palier = même difficulté, vocabulaire du domaine)
   const LADDERS = {
     muscu:  ['Recrue', 'Initié', 'Costaud', 'Athlète de force', 'Colosse', 'Titan'],
@@ -334,7 +334,7 @@
       .medal.t1{--c1:#e7a26b;--c2:#8a4f27;--rim:#c2773b}
       .medal.t2{--c1:#f1f3f6;--c2:#8d95a3;--rim:#c9cfd9}
       .medal.t3{--c1:#ffe27a;--c2:#b8860b;--rim:#f2c744}
-      .medal.t4{--c1:#b8f3ff;--c2:#2f8fae;--rim:#7fdcf2}
+      .medal.t4{--c1:#ff9a9a;--c2:#a30f26;--rim:#e5484d;box-shadow:0 0 14px rgba(229,72,77,.45),inset 0 0 0 3px rgba(0,0,0,.18)}
       .medal.t5{--c1:#e5c8ff;--c2:#7a3fd1;--rim:#b784f5;box-shadow:0 0 18px rgba(155,100,255,.55),inset 0 0 0 3px rgba(0,0,0,.18)}
       .medal svg{width:64%;height:64%;color:#1d1608;filter:drop-shadow(0 1px 0 rgba(255,255,255,.35))}
       .bdg-chip .medal svg{width:70%;height:70%}
