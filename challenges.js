@@ -83,7 +83,7 @@
     try{
       [lb, atts] = await Promise.all([
         rpc('challenge_leaderboard', { p_id: c.id }),
-        get(`/rest/v1/challenge_attempts?select=started_at,finished_at,value,removed&challenge_id=eq.${c.id}&user_id=eq.${CTX.userId}&order=started_at.desc`).catch(() => [])
+        get(`/rest/v1/challenge_attempts?select=id,started_at,finished_at,value,removed,status,video_path,review_note&challenge_id=eq.${c.id}&user_id=eq.${CTX.userId}&order=started_at.desc`).catch(() => [])
       ]);
     }catch(e){ console.error(e); BOX.innerHTML = '<div class="empty">Impossible de charger le challenge. Réessaie.</div>'; return; }
     const s = status(c), top = lb[0] ? lb[0].best : 0;
@@ -92,6 +92,11 @@
     const myBest = (lb.find(r => r.is_me) || {}).best;
     const total = new Date(c.ends_at) - new Date(c.starts_at), done = Math.min(total, Math.max(0, Date.now() - new Date(c.starts_at)));
     const left = Math.ceil((new Date(c.ends_at) - Date.now()) / 864e5);
+    const fin = atts.filter(a => a.finished_at && !a.removed && a.value > 0);
+    const stLab = { pending: '⏳ En attente de validation', validated: '✅ Validé', rejected: '❌ Refusé' };
+    const myList = fin.length ? `<div class="chl-h">Mes essais</div>${fin.slice(0, 12).map(a => `<div class="chl-row" style="flex-wrap:wrap;gap:6px"><span class="nm">${fmtVal(c, a.value)} <span class="chl-sub">${new Date(a.started_at).toLocaleString('fr-FR', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}</span></span><span class="vl" style="font-size:13px">${stLab[a.status] || ''}</span>
+      ${a.status === 'rejected' && a.review_note ? `<div class="chl-sub" style="width:100%">Motif : ${esc(a.review_note)}</div>` : ''}
+      ${a.status !== 'validated' ? `<div style="width:100%;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="chl-btn chl-vid" data-a="${a.id}" style="width:auto;padding:9px 14px;font-size:13px">${a.video_path ? '📹 Renvoyer une vidéo' : '📹 Envoyer ma vidéo'}</button>${a.video_path ? '<span class="chl-sub">Vidéo envoyée</span>' : '<span class="chl-sub">ou fais-le valider devant un coach</span>'}</div>` : ''}</div>`).join('')}` : '';
     const pod = lb.filter(r => r.rnk <= 3).slice(0, 3);
     BOX.innerHTML = `
       <a class="backlink" id="chBack" style="cursor:pointer;display:inline-block;margin-bottom:10px">← Tous les challenges</a>
@@ -105,7 +110,9 @@
       ${s === 'ended' ? '' : (isJoined
         ? (s === 'live' ? `<button class="chl-btn" id="chGo" ${usedToday >= 3 ? 'disabled' : ''}>▶ Lancer un essai</button><div class="chl-sub" style="text-align:center">Essais aujourd'hui : ${usedToday}/3 · seul ton meilleur résultat compte</div>` : '<div class="chl-sub">Tu es inscrit. Rendez-vous au lancement !</div>')
         : `<button class="chl-btn" id="chJoin">Je participe</button><div class="chl-sub" style="text-align:center">Ton prénom et l'initiale de ton nom apparaîtront dans le classement.</div>`)}
-      ${myBest ? `<div style="margin:12px 0;font-weight:700">Ton meilleur résultat : ${fmtVal(c, myBest)}</div>` : ''}
+      <div class="chl-reward" style="margin-top:12px">🎥 <b>Anti-triche :</b> chaque résultat doit être validé par un coach pour entrer au classement. Soit tu le réalises devant un coach, soit tu te filmes en entier (corps visible, du début à la fin) et tu envoies la vidéo ici : seuls les coachs et l'admin peuvent la voir.</div>
+      ${myBest ? `<div style="margin:12px 0;font-weight:700">Ton meilleur résultat validé : ${fmtVal(c, myBest)}</div>` : ''}
+      ${myList}
       <div class="chl-h">Classement</div>
       ${pod.length ? `<div class="chl-pod">${pod.map(r => `<div><div class="m">${MEDAL[r.rnk - 1]}</div><div class="n">${esc(r.name)}</div><div class="v">${fmtVal(c, r.best)}</div></div>`).join('')}</div>` : ''}
       ${lb.length ? lb.map(r => `<div class="chl-row ${r.is_me ? 'me' : ''}"><span class="rk">${r.rnk}</span><span class="nm">${esc(r.name)}${r.is_me ? ' (toi)' : ''}</span><span class="bw"><div class="chl-bar"><i style="width:${top ? Math.max(4, Math.round(r.best / top * 100)) : 0}%"></i></div></span><span class="vl">${fmtVal(c, r.best)}</span></div>`).join('') : '<div class="chl-sub">Personne n\'a encore de résultat. Sois le premier !</div>'}`;
@@ -114,6 +121,28 @@
     if(j) j.onclick = async () => { j.disabled = true; try{ await rpc('challenge_join', { p_id: c.id }); detail(c, true); }catch(e){ j.disabled = false; alert(e.message); } };
     const g = BOX.querySelector('#chGo');
     if(g) g.onclick = () => attempt(c);
+    BOX.querySelectorAll('.chl-vid').forEach(b => b.onclick = () => pickVideo(b.dataset.a, () => detail(c, isJoined)));
+  }
+
+  // ---- Envoi de la vidéo (privée : coachs et admin seulement) ----
+  function pickVideo(attemptId, after){
+    const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'video/*'; inp.style.display = 'none';
+    document.body.appendChild(inp);
+    inp.onchange = async () => {
+      const f = inp.files && inp.files[0]; inp.remove(); if(!f) return;
+      if(f.size > 50 * 1024 * 1024){ alert('Vidéo trop lourde (' + Math.round(f.size / 1048576) + ' Mo, maximum 50 Mo). Filme en qualité 720p ou plus court, ou fais-toi valider devant un coach.'); return; }
+      const ext = (f.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'mp4';
+      const path = CTX.userId + '/' + attemptId + '-' + Date.now() + '.' + ext;
+      const ov = overlay(); ov.innerHTML = '<div><div style="font-size:18px;font-weight:700">Envoi de la vidéo…</div><div class="chl-sub" style="margin-top:8px">Ne ferme pas cette page.</div></div>';
+      try{
+        const r = await CTX.fetcher('/storage/v1/object/challenge-videos/' + path, { method: 'POST', headers: { 'Content-Type': f.type || 'video/mp4', 'x-upsert': 'false' }, body: f });
+        if(!r.ok) throw new Error('upload');
+        await rpc('challenge_attach_video', { p_attempt: attemptId, p_path: path });
+        ov.remove(); alert('Vidéo envoyée ✅ Un coach va valider ton essai.');
+      }catch(e){ ov.remove(); alert('Envoi impossible. Vérifie ta connexion et réessaie (vidéo de 50 Mo max).'); }
+      after();
+    };
+    inp.click();
   }
 
   // ---- Essai plein écran ----
@@ -169,8 +198,11 @@
       const v = await rpc('challenge_finish', { p_attempt: id, p_value: value });
       ov.classList.remove('flash');
       ov.innerHTML = `<div><div style="font-size:20px;opacity:.8">Résultat enregistré</div><div class="chl-big" style="margin:12px 0">${fmtVal(c, v)}</div>
-        <button class="chl-btn" id="chDone">Voir le classement</button></div>`;
+        <div class="chl-sub" style="margin-bottom:16px">⏳ Pour compter au classement, ce résultat doit être validé par un coach : envoie ta vidéo (depuis « Mes essais ») ou montre ta performance à un coach.</div>
+        <button class="chl-btn" id="chVid" style="margin-bottom:10px">📹 Envoyer ma vidéo maintenant</button>
+        <button class="chl-btn" id="chDone" style="background:transparent;color:inherit;border:1px solid currentColor">Plus tard</button></div>`;
       ov.querySelector('#chDone').onclick = () => done(true);
+      ov.querySelector('#chVid').onclick = () => pickVideo(id, () => done(true));
     }catch(e){
       ov.innerHTML = `<div><div style="font-size:18px;margin-bottom:14px">Résultat non enregistré</div><div class="chl-sub" style="margin-bottom:16px">${esc(e.message)}</div><button class="chl-btn" id="chDone">Fermer</button></div>`;
       ov.querySelector('#chDone').onclick = () => done(true);
