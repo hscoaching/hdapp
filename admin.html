@@ -242,7 +242,7 @@ async function api(path, opts={}){
   await refreshIfNeeded();
   const s = getSession();
   const res = await fetch(`${SUPABASE_URL}${path}`, { cache:'no-store', ...opts, headers:{ apikey:SUPABASE_ANON_KEY, Authorization:`Bearer ${s?.access_token}`, 'Content-Type':'application/json', ...(opts.headers||{}) } });
-  if(!res.ok){ console.error(await res.text()); throw new Error('api_error'); }
+  if(!res.ok){ const t = await res.text(); console.error(t); const er = new Error('api_error'); er.detail = t; throw er; }
   const text = await res.text();
   return text ? JSON.parse(text) : null;
 }
@@ -274,26 +274,28 @@ async function boot(){
   let profile;
   try{ profile = (await api(`/rest/v1/profiles?select=*&id=eq.${s.user.id}`))[0]; }
   catch(e){ app.innerHTML = `<div class="center-msg"><h1>Erreur</h1><p>Impossible de vérifier ton accès.</p></div>`; return; }
-  if(!profile || profile.role !== 'admin'){
+  if(!profile || (profile.role !== 'admin' && profile.role !== 'coach')){
     app.innerHTML = `<div class="center-msg"><h1>Accès refusé</h1><p>Cette section est réservée au coach.</p></div>`;
     return;
   }
+  IS_SUPER = profile.role === 'admin'; MY_ID = profile.id;
   exercises = await api('/rest/v1/exercises?select=*&order=category,name');
   exercisesById = Object.fromEntries(exercises.map(e=>[e.id,e]));
   renderDashboard();
 }
 
+let IS_SUPER = false, MY_ID = null, coachList = [], coachesOpen = false;
 let currentTab = 'clients';
 function renderDashboard(){
   app.innerHTML = `
-    <h1>Bonjour coach 👋</h1>
+    <h1>Bonjour coach 👋${IS_SUPER ? '' : ' <span style="font-size:13px;font-weight:600;opacity:.6">(espace coach)</span>'}</h1>
     <div id="coachStats" class="stats-row">
       <div class="stat-tile"><div class="stat-num">…</div><div class="stat-label">Séances cette semaine</div></div>
       <div class="stat-tile"><div class="stat-num">…</div><div class="stat-label">Clients ayant fait une séance (7 derniers jours)</div></div>
       <div class="stat-tile"><div class="stat-num">…</div><div class="stat-label">Messages non lus</div></div>
-      <div class="stat-tile" style="cursor:pointer;" onclick="openVisitsModal()"><div class="stat-num">…</div><div class="stat-label">Visiteurs de l'appli</div></div>
+      ${IS_SUPER ? `<div class="stat-tile" style="cursor:pointer;" onclick="openVisitsModal()"><div class="stat-num">…</div><div class="stat-label">Visiteurs de l'appli</div></div>` : ''}
     </div>
-    <div class="row-actions" style="margin-bottom:16px;"><button class="btn btn-ghost" onclick="openEntranceQr()">QR code d'entrée de salle</button></div>
+    <div class="row-actions" style="margin-bottom:16px;"><button class="btn btn-ghost" onclick="openEntranceQr()">QR code d'entrée de salle</button><button class="btn btn-ghost" onclick="openMyCoachCard()">🪪 Ma fiche coach</button></div>
     <div class="tabs">
       <div class="tab" data-t="clients">Clients</div>
       <div class="tab" data-t="messages">Messages</div>
@@ -316,11 +318,20 @@ async function renderCoachStats(){
     const weekAgo = new Date(now.getTime() - 7*24*60*60*1000);
     const [weekSessions, allClients, recentSessions, unread, visits] = await Promise.all([
       api(`/rest/v1/sessions?select=id&imported=is.false&started_at=gte.${monday.toISOString()}`),
-      api('/rest/v1/profiles?select=id&role=eq.client'),
+      api('/rest/v1/profiles?select=id,coach_id&role=eq.client'),
       api(`/rest/v1/sessions?select=user_id&imported=is.false&started_at=gte.${weekAgo.toISOString()}`),
-      api('/rest/v1/messages?select=id&sender=eq.user&read=eq.false'),
-      api('/rest/v1/app_visits?select=user_id')
+      api('/rest/v1/messages?select=conversation_id&sender=eq.user&read=eq.false'),
+      IS_SUPER ? api('/rest/v1/app_visits?select=user_id') : Promise.resolve([])
     ]);
+    let unreadN = unread.length;
+    if(IS_SUPER){
+      try{
+        const cv = await api('/rest/v1/conversations?select=id,user_id');
+        const ownClient = new Set(allClients.filter(c => !c.coach_id).map(c => c.id));
+        const ownConv = new Set(cv.filter(c => ownClient.has(c.user_id) || !allClients.some(k => k.id === c.user_id)).map(c => c.id));
+        unreadN = unread.filter(m => ownConv.has(m.conversation_id)).length;
+      }catch(e){}
+    }
     const clientIds = new Set(allClients.map(c=>c.id));
     const activeClients = new Set(recentSessions.map(s=>s.user_id).filter(id=>id && clientIds.has(id))).size;
     // Un compte utilisé sur plusieurs appareils ne compte qu'une fois
@@ -331,8 +342,8 @@ async function renderCoachStats(){
     el.innerHTML = `
       <div class="stat-tile"><div class="stat-num">${weekSessions.length}</div><div class="stat-label">Séances cette semaine</div></div>
       <div class="stat-tile"><div class="stat-num">${activeClients}/${allClients.length}</div><div class="stat-label">Clients ayant fait une séance (7 derniers jours)</div></div>
-      <div class="stat-tile"><div class="stat-num">${unread.length}</div><div class="stat-label">Messages non lus</div></div>
-      <div class="stat-tile" style="cursor:pointer;" onclick="openVisitsModal()"><div class="stat-num">${totalVisitors}</div><div class="stat-label">Visiteurs de l'appli (${withAccount} comptes, ${anonymous} invités)</div></div>
+      <div class="stat-tile"><div class="stat-num">${unreadN}</div><div class="stat-label">Messages non lus</div></div>
+      ${!IS_SUPER ? '' : `<div class="stat-tile" style="cursor:pointer;" onclick="openVisitsModal()"><div class="stat-num">${totalVisitors}</div><div class="stat-label">Visiteurs de l'appli (${withAccount} comptes, ${anonymous} invités)</div></div>`}
     `;
   }catch(e){
     console.error(e);
@@ -479,13 +490,41 @@ async function decideEditRequest(id, approve){
   renderEditRequests();
   toast(approve ? 'Modification autorisée' : 'Demande refusée');
 }
+// ---- Gestion des coachs (grand admin uniquement) ----
+function coachesBoxHtml(clients){
+  if(!IS_SUPER) return '';
+  const n = id => (clients || []).filter(c => c.coach_id === id).length;
+  const rows = coachList.length ? coachList.map(co => `<div style="display:flex;align-items:center;justify-content:space-between;gap:10px;padding:10px 0;border-top:1px solid var(--line)">
+      <div style="min-width:0"><div style="font-weight:700">${escapeHtml(co.full_name || 'Coach')}</div><div style="font-size:12.5px;opacity:.7;overflow:hidden;text-overflow:ellipsis">${escapeHtml(co.email || '')} · ${n(co.id)} client${n(co.id) > 1 ? 's' : ''}</div></div>
+      <button class="btn btn-ghost btn-sm" style="flex:none" onclick="demoteCoach('${co.id}','${escapeHtml(co.full_name || co.email || 'ce coach').replace(/'/g, "\\'")}')">Retirer les droits</button></div>`).join('')
+    : '<div style="font-size:13px;opacity:.7;padding-top:8px">Aucun coach pour le moment. Pour en ajouter : ouvre la fiche d\'un client inscrit et appuie sur « 🎓 Promouvoir coach ». Tu pourras ensuite lui attribuer des clients.</div>';
+  return `<details class="coaches-box" ${coachesOpen ? 'open' : ''} ontoggle="coachesOpen = this.open" style="border:1px solid var(--line);border-radius:16px;padding:4px 14px 12px;margin-bottom:16px">
+    <summary style="cursor:pointer;font-weight:700;padding:12px 0">🎓 Coachs <span style="opacity:.6;font-weight:500">(${coachList.length})</span></summary>${rows}</details>`;
+}
+async function promoteCoach(id, name){
+  if(!confirm(`Promouvoir « ${name} » coach ?\n\nIl aura accès à l'espace coach, mais seulement pour les clients que tu lui attribues. Tu peux retirer ses droits à tout moment.`)) return;
+  try{ await api('/rest/v1/rpc/set_coach_role', { method:'POST', body: JSON.stringify({ p_user: id, p_make: true }) }); coachesOpen = true; toast(name + ' est maintenant coach (voir l’encadré Coachs)'); renderClientsTab(); }
+  catch(e){ toast('Erreur : ' + String((e && e.detail) || (e && e.message) || e).slice(0, 120)); }
+}
+async function demoteCoach(id, name){
+  if(!confirm(`Retirer les droits de coach à « ${name} » ?\n\nIl redevient simple client et perd l'accès à l'espace coach. Ses clients te sont réattribués.`)) return;
+  try{ await api('/rest/v1/rpc/set_coach_role', { method:'POST', body: JSON.stringify({ p_user: id, p_make: false }) }); toast('Droits retirés'); renderClientsTab(); }
+  catch(e){ toast('Erreur : ' + String((e && e.detail) || (e && e.message) || e).slice(0, 120)); }
+}
+async function assignClientTo(clientId, coachId, sel){
+  try{ await api('/rest/v1/rpc/assign_client', { method:'POST', body: JSON.stringify({ p_client: clientId, p_coach: coachId || null }) });
+    const r = clientRows.find(x => x.client.id === clientId); if(r) r.client.coach_id = coachId || null;
+    toast(coachId ? 'Client attribué' : 'Client repris par toi'); }
+  catch(e){ toast('Erreur, réessaie'); renderClientsTab(); }
+}
 let clientSearchQ = '';
 async function renderClientsTab(){
   document.getElementById('tabBody').innerHTML = '<div class="empty">Chargement…</div>';
   let clients, progs, sessions, convs, unreadMsgs, revs = [], editReqs = [];
   try{
-    clients = await api('/rest/v1/profiles?select=id,full_name,email,featured_badge&role=eq.client&order=full_name');
-    if(!clients.length){ document.getElementById('tabBody').innerHTML = '<div class="empty">Aucun client pour le moment.</div>'; return; }
+    clients = await api('/rest/v1/profiles?select=id,full_name,email,featured_badge,coach_id&role=eq.client&order=full_name');
+    coachList = IS_SUPER ? ((await api('/rest/v1/profiles?select=id,full_name,email&role=eq.coach&order=full_name').catch(()=>[])) || []) : [];
+    if(!clients.length){ document.getElementById('tabBody').innerHTML = coachesBoxHtml([]) + '<div class="empty">Aucun client pour le moment.</div>'; return; }
     const idList = clients.map(c=>c.id).join(',');
     [progs, sessions, convs, unreadMsgs] = await Promise.all([
       api(`/rest/v1/programs?select=id,name,owner_user_id,created_at&owner_user_id=in.(${idList})&is_official=eq.false&order=created_at.desc`),
@@ -516,7 +555,7 @@ async function renderClientsTab(){
     const prog = progsOfUser[0] || null;
     const last = lastActivityByUser[c.id] || null;
     const convId = convByUser[c.id] || null;
-    const unread = convId ? (unreadByConv[convId]||0) : 0;
+    const unread = (convId && !(IS_SUPER && c.coach_id)) ? (unreadByConv[convId]||0) : 0;
     let badgeLine = '', badgeChip = '';
     try{ if(typeof HSBadges !== 'undefined'){ const bres = HSBadges.compute({ sessions: sessionsByUser[c.id] || [], revoked: revs.filter(r => r.user_id === c.id) }); badgeLine = HSBadges.summaryLine(bres); badgeChip = HSBadges.chip(bres, c.featured_badge); } }catch(e){}
     return { client:c, prog, progs: progsOfUser, last, convId, unread, badgeLine, badgeChip };
@@ -529,7 +568,7 @@ async function renderClientsTab(){
   });
   clientSearchQ = '';
   pendingEditReqs = editReqs;
-  document.getElementById('tabBody').innerHTML = `
+  document.getElementById('tabBody').innerHTML = coachesBoxHtml(clients) + `
     <div id="editReqBox"></div>
     <div class="field"><label>Chercher un client</label><input id="clientSearch" type="text" placeholder="Nom ou email…" oninput="filterClientsTab(this.value)"></div>
     <div id="clientsList"></div>
@@ -569,6 +608,11 @@ function renderClientRows(rows){
       <p style="margin-top:8px;">${progLine}</p>
       <p>${lastLine}</p>
       ${r.badgeLine ? `<p>${escapeHtml(r.badgeLine)}</p>` : ''}
+      ${IS_SUPER ? `<p style="margin-top:6px;">Coach :
+        <select style="background:var(--surface-2);color:inherit;border:1px solid var(--line);border-radius:8px;padding:6px 8px;font:inherit;" onchange="assignClientTo('${r.client.id}', this.value, this)">
+          <option value="">Moi (grand admin)</option>
+          ${coachList.map(co => `<option value="${co.id}" ${r.client.coach_id === co.id ? 'selected' : ''}>${escapeHtml(co.full_name || co.email || 'Coach')}</option>`).join('')}
+        </select></p>` : ''}
       <div class="row-actions" style="margin-top:10px;">
         ${r.convId
           ? `<button class="btn btn-ghost btn-sm" onclick="goToClientConversation('${r.convId}','${esc}')">💬 Message${r.unread?` (${r.unread})`:''}</button>`
@@ -579,6 +623,7 @@ function renderClientRows(rows){
         <button class="btn btn-ghost btn-sm" onclick="openClientRecovery('${r.client.id}','${esc}')">😴 Repos</button>
         <button class="btn btn-ghost btn-sm" onclick="openBadgesModal('${r.client.id}','${esc}')">🏅 Badges</button>
         <button class="btn btn-ghost btn-sm" onclick="printClientReport('${r.client.id}')">📄 Export PDF</button>
+        ${IS_SUPER ? `<button class="btn btn-ghost btn-sm" onclick="promoteCoach('${r.client.id}','${esc}')">🎓 Promouvoir coach</button>` : ''}
       </div>
     </div>`;
   }).join('') : '<div class="empty">Aucun client ne correspond à cette recherche.</div>';
@@ -940,6 +985,7 @@ async function goToNewProgramFor(clientId){
 
 // ================= MESSAGES =================
 let msgSub = 'conversations';
+const coachNameById = {};
 async function renderMessages(){
   document.getElementById('tabBody').innerHTML = `
     <div class="subtabs">
@@ -960,8 +1006,9 @@ async function loadConversations(){
     convs = await api('/rest/v1/conversations?select=*&order=created_at.desc');
     if(!convs.length){ document.getElementById('msgBody').innerHTML = '<div class="empty">Aucune discussion pour le moment.</div>'; return; }
     const ids = [...new Set(convs.map(c=>c.user_id))];
-    profs = await api(`/rest/v1/profiles?select=id,full_name,email&id=in.(${ids.join(',')})`);
+    profs = await api(`/rest/v1/profiles?select=id,full_name,email,coach_id&id=in.(${ids.join(',')})`);
     unread = await api(`/rest/v1/messages?select=conversation_id&sender=eq.user&read=eq.false`);
+    if(IS_SUPER){ try{ (await api('/rest/v1/coach_profiles?select=user_id,display_name') || []).forEach(cp => coachNameById[cp.user_id] = cp.display_name); }catch(e){} }
   }catch(e){
     console.error(e);
     document.getElementById('msgBody').innerHTML = '<div class="empty">Impossible de charger les discussions. Réessaie.</div>';
@@ -971,21 +1018,25 @@ async function loadConversations(){
   const unreadCount = {}; unread.forEach(m=> unreadCount[m.conversation_id] = (unreadCount[m.conversation_id]||0)+1);
   document.getElementById('msgBody').innerHTML = convs.map(c=>{
     const p = profById[c.user_id] || {};
-    const n = unreadCount[c.id];
-    return `<div class="card" onclick="openConversation('${c.id}','${escapeHtml(p.full_name||p.email||'Client').replace(/'/g,"\\'")}')">
+    const other = IS_SUPER && p.coach_id;           // client suivi par un autre coach : lecture seule pour toi
+    const n = other ? 0 : unreadCount[c.id];
+    const cn = other ? (coachNameById[p.coach_id] || 'un coach') : '';
+    return `<div class="card" onclick="openConversation('${c.id}','${escapeHtml(p.full_name||p.email||'Client').replace(/'/g,"\\'")}', ${other ? 'true' : 'false'}, '${escapeHtml(cn).replace(/'/g,"\\'")}')">
       <h3>${escapeHtml(p.full_name || p.email || 'Client')} ${n?`<span class="badge">${n}</span>`:''}</h3>
       <p>${escapeHtml(p.email||'')}</p>
+      ${other ? `<p style="opacity:.75">👁 Suivi par ${escapeHtml(cn)} · lecture seule</p>` : ''}
     </div>`;
   }).join('');
 }
-async function openConversation(convId, name){
+async function openConversation(convId, name, ro, coachName){
   document.getElementById('msgBody').innerHTML = `
     <a class="backlink" onclick="loadConversations()">← Toutes les discussions</a>
     <h3 style="font-family:Inter; font-weight:700; margin-bottom:10px;">${escapeHtml(name)}</h3>
+    ${ro ? `<div style="padding:10px 12px;border:1px solid var(--line);border-radius:12px;margin-bottom:10px;font-size:13px">👁 Lecture seule · discussion entre ${escapeHtml(name)} et ${escapeHtml(coachName || 'son coach')}</div>` : ''}
     <div class="chat-box"><div class="chat-msgs" id="cMsgs"><div class="empty">Chargement…</div></div>
-      <div class="chat-input"><input id="cInput" type="text" placeholder="Répondre…" onkeydown="if(event.key==='Enter')sendCoachMsg('${convId}')"><button onclick="sendCoachMsg('${convId}')">Envoyer</button></div></div>
+      ${ro ? '' : `<div class="chat-input"><input id="cInput" type="text" placeholder="Répondre…" onkeydown="if(event.key==='Enter')sendCoachMsg('${convId}')"><button onclick="sendCoachMsg('${convId}')">Envoyer</button></div>`}</div>
   `;
-  await api(`/rest/v1/messages?conversation_id=eq.${convId}&sender=eq.user&read=eq.false`, { method:'PATCH', body: JSON.stringify({ read:true }) });
+  if(!ro) await api(`/rest/v1/messages?conversation_id=eq.${convId}&sender=eq.user&read=eq.false`, { method:'PATCH', body: JSON.stringify({ read:true }) });
   const msgs = await api(`/rest/v1/messages?select=*&conversation_id=eq.${convId}&order=created_at`);
   document.getElementById('cMsgs').innerHTML = msgs.map(m=>`<div class="msg ${m.sender}">${escapeHtml(m.content)}</div>`).join('') || '<div class="empty">Pas encore de message.</div>';
   document.getElementById('cMsgs').scrollTop = 999999;
@@ -1011,24 +1062,73 @@ async function sendCoachMsg(convId){
   }
 }
 async function loadContacts(){
-  let reqs;
+  let reqs, names = {};
   try{
     reqs = await api('/rest/v1/coach_contact_requests?select=*&order=created_at.desc');
+    try{ (await api('/rest/v1/coach_profiles?select=user_id,display_name') || []).forEach(cp => names[cp.user_id] = cp.display_name); }catch(e){}
   }catch(e){
     console.error(e);
     document.getElementById('msgBody').innerHTML = '<div class="empty">Impossible de charger les demandes. Réessaie.</div>';
     return;
   }
-  document.getElementById('msgBody').innerHTML = reqs.length ? reqs.map(r=>`
-    <div class="card" onclick="markContact('${r.id}')">
-      <div class="tag">${escapeHtml(r.status)}</div>
-      <h3>${escapeHtml(r.name)}</h3>
+  document.getElementById('msgBody').innerHTML = reqs.length ? reqs.map(r=>{
+    const pending = r.status !== 'handled';
+    const follow = pending && r.user_id && r.coach_id;
+    return `<div class="card" style="cursor:default">
+      <div class="tag">${escapeHtml(r.status === 'handled' ? 'traitée' : 'nouvelle')}</div>
+      <h3>${escapeHtml(r.name)}${r.user_id ? ' <span style="font-size:12px;opacity:.7">· a un compte</span>' : ''}</h3>
       <p>${escapeHtml(r.email||r.phone||'')} ${r.message?'— '+escapeHtml(r.message):''}</p>
-    </div>`).join('') : '<div class="empty">Aucune demande de contact.</div>';
+      ${IS_SUPER ? `<p style="opacity:.75">Pour : ${r.coach_id ? escapeHtml(names[r.coach_id] || 'un coach') : 'le premier coach disponible'}</p>` : ''}
+      ${pending ? `<div class="row-actions" style="margin-top:8px">
+        ${follow ? `<button class="btn btn-accent btn-sm" onclick="acceptContact('${r.id}')">✅ Accepter et suivre ce client</button>` : ''}
+        <button class="btn btn-ghost btn-sm" onclick="markContact('${r.id}')">Marquer traitée</button></div>` : ''}
+    </div>`;
+  }).join('') : '<div class="empty">Aucune demande de contact.</div>';
 }
 async function markContact(id){
   await api(`/rest/v1/coach_contact_requests?id=eq.${id}`, { method:'PATCH', body: JSON.stringify({ status:'handled' }) });
   toast('Marquée comme traitée'); loadContacts();
+}
+async function acceptContact(id){
+  try{
+    const r = await api('/rest/v1/rpc/accept_contact_request', { method:'POST', body: JSON.stringify({ p_id: id }) });
+    toast(r === 'assigned' ? 'Client ajouté à ta liste' : 'Demande traitée'); loadContacts();
+  }catch(e){ toast('Impossible : ce client est peut-être déjà suivi par un autre coach'); }
+}
+// ---- Ma fiche coach (présentation visible par les clients dans la liste des coachs) ----
+async function openMyCoachCard(){
+  let cp = {};
+  try{ cp = ((await api(`/rest/v1/coach_profiles?select=*&user_id=eq.${MY_ID}`)) || [])[0] || {}; }catch(e){}
+  const old = document.getElementById('myCoachOv'); if(old) old.remove();
+  const ov = document.createElement('div'); ov.id = 'myCoachOv';
+  ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1300;display:flex;align-items:center;justify-content:center;padding:16px;overflow:auto';
+  ov.onclick = e => { if(e.target === ov) ov.remove(); };
+  const f = (id, label, val, ph, area) => `<label style="display:block;margin:12px 0 4px;font-size:13px;opacity:.8">${label}</label>` + (area
+    ? `<textarea id="${id}" placeholder="${ph}" style="width:100%;box-sizing:border-box;min-height:110px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;color:inherit;padding:12px;font:inherit;font-size:16px">${escapeHtml(val || '')}</textarea>`
+    : `<input id="${id}" type="text" placeholder="${ph}" value="${escapeHtml(val || '')}" style="width:100%;box-sizing:border-box;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;color:inherit;padding:12px;font:inherit;font-size:16px">`);
+  ov.innerHTML = `<div style="max-width:520px;width:100%;background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px 18px">
+    <h2 style="margin:0 0 4px">🪪 Ma fiche coach</h2>
+    <div style="font-size:13px;opacity:.7">C'est ce que verront les clients et visiteurs quand ils choisiront un coach.</div>
+    ${f('mcName','Nom affiché', cp.display_name, 'Ton prénom ou nom de coach')}
+    ${f('mcHead','Accroche (une ligne)', cp.headline, 'Ex. Coach prise de masse & force')}
+    ${f('mcBio','Présentation', cp.bio, 'Ton parcours, ta méthode, pour qui tu es fait…', true)}
+    ${f('mcSpec','Spécialités (séparées par des virgules)', cp.specialties, 'Musculation, Perte de poids, Cardio')}
+    ${f('mcPhoto','Photo (adresse https d’une image, facultatif)', cp.photo_url, 'https://…')}
+    <label style="display:flex;gap:10px;align-items:center;margin:16px 0 4px;font-size:15px"><input type="checkbox" id="mcListed" ${cp.listed ? 'checked' : ''} style="width:20px;height:20px"> Afficher ma fiche dans la liste des coachs</label>
+    <div style="display:flex;gap:10px;margin-top:16px"><button class="btn btn-accent" style="flex:1;justify-content:center" id="mcSave">Enregistrer</button><button class="btn btn-ghost" id="mcClose">Fermer</button></div></div>`;
+  document.body.appendChild(ov);
+  ov.querySelector('#mcClose').onclick = () => ov.remove();
+  ov.querySelector('#mcSave').onclick = async () => {
+    const v = id => ov.querySelector('#' + id).value.trim();
+    const photo = v('mcPhoto');
+    if(!v('mcName')){ toast('Le nom est requis'); return; }
+    if(photo && !/^https:\/\//.test(photo)){ toast('La photo doit commencer par https://'); return; }
+    const row = { user_id: MY_ID, display_name: v('mcName'), headline: v('mcHead') || null, bio: v('mcBio') || null, specialties: v('mcSpec') || null, photo_url: photo || null, listed: ov.querySelector('#mcListed').checked, updated_at: new Date().toISOString() };
+    try{
+      await api('/rest/v1/coach_profiles?on_conflict=user_id', { method:'POST', headers:{ Prefer:'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(row) });
+      toast(row.listed ? 'Fiche enregistrée et visible' : 'Fiche enregistrée (masquée)'); ov.remove();
+    }catch(e){ toast('Erreur, vérifie les champs (accroche 120 car., présentation 1200 car.)'); }
+  };
 }
 
 // ================= PROGRAMMES =================
@@ -1477,7 +1577,7 @@ function exerciseFormHtml(exId){
     <div class="field"><label>Points techniques (un par ligne)</label><textarea id="efPoints">${(ex?.technique_points||[]).join('\n')}</textarea></div>
     <div class="row-actions">
       <button class="btn btn-accent" onclick="saveExercise('${exId||''}')">${exId?'Enregistrer':'Creer la fiche'}</button>
-      ${exId?`<button class="btn btn-danger" onclick="deleteExercise('${exId}')">Supprimer</button>`:''}
+      ${(exId && IS_SUPER)?`<button class="btn btn-danger" onclick="deleteExercise('${exId}')">Supprimer</button>`:''}
       <button class="btn btn-ghost" onclick="closeExerciseModal()">Annuler</button>
     </div>
   `;
