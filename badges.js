@@ -414,7 +414,7 @@
         </div>
         <div class="bdg-week">${weekLine}<div class="bdg-dots">${weekDots(st.thisWeek, res.goal)}</div></div>
         <div class="bdg-mini">Objectif : ${res.goal} séances par semaine. Une semaine de pause par mois ne casse pas ta série.</div>
-        <div class="bdg-rule">Une séance compte pour les badges si elle est faite en direct, dure au moins 10 minutes, avec au moins 4 séries ou au moins 10 minutes de cardio, et une seule par jour. Les séances saisies après coup ou importées restent dans ton historique mais ne comptent pas. Les badges « bonus » sont facultatifs : muscu, cardio ou retour après une pause, pas besoin de tous les faire.</div>
+        <div class="bdg-rule">Une séance compte pour les badges si elle est faite en direct, dure au moins 10 minutes, avec au moins 4 séries ou au moins 10 minutes de cardio, et une seule par jour. Les séances saisies après coup ou importées restent dans ton historique mais ne comptent pas. Les badges « bonus » sont facultatifs : muscu, cardio ou récupération, pas besoin de tous les faire.</div>
       </div>
       ${pill}
       <div class="bdg-group">Badges principaux</div>${coreFams.map(famHtml).join('')}

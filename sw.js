@@ -3,7 +3,7 @@
 // et met en cache les réponses Supabase (exercices, images) en "stale-while-revalidate"
 // pour que la bibliothèque reste consultable même avec un wifi de salle capricieux.
 
-const CACHE_NAME = 'hs-coaching-v82';
+const CACHE_NAME = 'hs-coaching-v84';
 const APP_SHELL = [
   'index.html',
   'programmes.html',
@@ -91,7 +91,7 @@ self.addEventListener('fetch', (event) => {
   } else {
     // Endpoints propres à un utilisateur (messages, conversations, programmes assignés,
     // profil...) : jamais de cache, même en secours — toujours le réseau.
-    const isPersonal = /\/rest\/v1\/(messages|conversations|profiles|programs|program_exercises|coach_contact_requests|session_logs|sessions)\b/.test(url.pathname);
+    const isPersonal = /\/(rest\/v1|auth\/v1|functions\/v1)\//.test(url.pathname) && !/\/rest\/v1\/exercises\b/.test(url.pathname);
     if (isPersonal) {
       event.respondWith(fetch(event.request));
     } else {
