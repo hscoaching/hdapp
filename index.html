@@ -728,6 +728,7 @@ if('serviceWorker' in navigator){
     if (closeBtn) closeBtn.addEventListener('click', ()=>{ localStorage.setItem(KEY, String(Date.now())); bar.remove(); document.body.classList.remove('has-install-banner'); });
     const installBtn = bar.querySelector('.installGo');
     if (installBtn && onInstall) installBtn.addEventListener('click', onInstall);
+    setTimeout(()=>{ if(!bar.isConnected) return; try{ localStorage.setItem(KEY, String(Date.now())); }catch(e){} bar.style.transition='opacity .4s'; bar.style.opacity='0'; setTimeout(()=>{ bar.remove(); document.body.classList.remove('has-install-banner'); }, 400); }, 7000);
   }
 
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent) && !window.MSStream;
