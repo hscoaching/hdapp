@@ -99,3 +99,40 @@ footer::before{margin-bottom:22px;}
 @media(min-width:1500px){
   .pg-admin .clients-grid{grid-template-columns:repeat(4,minmax(0,1fr)) !important;}
 }
+
+
+/* ===== Ergonomie v142 ===== */
+/* Alertes et invitation aux notifications : même largeur que la page */
+@media(min-width:701px) and (max-width:1099px){ #hsAlerts,#hsPushBar{max-width:900px !important;} }
+@media(min-width:1100px){
+  .pg-home #hsAlerts,.pg-home #hsPushBar{max-width:1240px !important;}
+  .pg-prog #hsAlerts,.pg-prog #hsPushBar{max-width:1040px !important;}
+  .pg-account #hsAlerts,.pg-account #hsPushBar{max-width:960px !important;}
+  .pg-admin #hsAlerts,.pg-admin #hsPushBar{max-width:1280px !important;}
+}
+/* Téléphone : alertes compactes pour laisser la place au contenu, titres moins massifs */
+@media(max-width:700px){
+  #hsAlerts{margin-top:8px !important; gap:6px !important;}
+  .hs-alert{padding:8px 10px !important; gap:10px !important; font-size:13.5px !important; border-width:1px !important; box-shadow:none !important; animation:none !important;}
+  .hs-alert .ico{font-size:17px !important;}
+  .hs-alert .go{display:none !important;}
+  .hs-alert .x{font-size:16px !important;}
+  #hsPushBar{margin-top:8px !important;}
+  #hsPushBar > div{padding:8px 10px !important; gap:10px !important; font-size:13px !important; border-width:1px !important;}
+  #hsPushBar .hsp-sub{display:none;}
+  #hsPushBar span[style*="font-size:22px"]{font-size:18px !important;}
+  h1.page{font-size:clamp(25px,7.2vw,31px) !important; line-height:1.05 !important;}
+  .pg-admin h1{font-size:25px !important; line-height:1.1 !important;}
+  .stats-row{gap:8px !important;}
+  .stat-tile{padding:8px 4px !important;}
+  .stat-num{font-size:20px !important;}
+  .stat-label{font-size:9.5px !important; letter-spacing:.04em !important;}
+  .top-actions{flex-wrap:nowrap !important; overflow-x:auto; scrollbar-width:none; margin-left:-2px; padding-bottom:2px;}
+  .top-actions::-webkit-scrollbar{display:none;}
+  .top-actions .btn{flex:none; white-space:nowrap; padding:9px 12px !important; font-size:11px !important;}
+}
+/* Séance : champs de saisie à taille raisonnable sur grand écran */
+@media(min-width:701px){
+  .set-line .reps-input,.set-line .charge-input{max-width:150px;}
+  .set-line{gap:10px;}
+}
