@@ -1,0 +1,62 @@
+/* © 2026 HS Coaching – Tous droits réservés. Reproduction, extraction ou réutilisation, même partielle, interdites sans autorisation écrite. */
+/* Thème « Grèce antique » : noir & blanc, capitales à empattements, frise de clés grecques. S'applique par-dessus la feuille de style de chaque page. */
+:root{--radius:2px; --line:#34343a; --ink-muted:#a2a2a7;}
+body{font-family:'Source Sans 3','Inter',system-ui,sans-serif;}
+h1,h2,h3,.display{font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.07em; line-height:1.18;}
+
+/* En-tête : médaillon, marque et frise */
+.mark{border-radius:50%; background:transparent; border:1px solid var(--ink); color:var(--ink); font-family:'Cinzel',Georgia,serif; font-weight:700; font-size:13px; letter-spacing:.04em;}
+.brand .b1{font-family:'Cinzel',Georgia,serif; font-weight:700; font-size:14px; letter-spacing:.24em;}
+.brand .b2{font-size:11px; letter-spacing:.18em; text-transform:uppercase;}
+header.top{border-bottom:0;}
+header.top::after,footer::before{content:''; display:block; height:10px; background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='10'%3E%3Cpath d='M0,9.5 H14 M2,9.5 V1 H11 V6 H5 V4 H8' fill='none' stroke='%23f5f5f3' stroke-width='1'/%3E%3C/svg%3E") repeat-x left center;}
+footer{border-top:0; padding-top:0;}
+footer::before{margin-bottom:22px;}
+
+/* Navigation et filtres : angles droits, capitales espacées */
+.nav-link,.navrow a,.chip,.subchip,.printBtn{border-radius:0; text-transform:uppercase; letter-spacing:.12em; font-size:11.5px; font-weight:600;}
+.navrow a{font-size:11.5px; padding:11px 12px;}
+.subchip{font-size:10.5px; padding:6px 12px;}
+.muscle-tag{border-radius:0; text-transform:uppercase; letter-spacing:.08em; font-size:11px;}
+
+/* Accueil */
+.hero .eyebrow{font-family:'Cinzel',Georgia,serif; letter-spacing:.24em; font-size:11.5px; color:var(--ink-muted);}
+.hero h1{font-size:clamp(26px,6vw,42px); max-width:20ch;}
+.searchbar{border-radius:0;}
+.card,.sheet,.install-banner{border-radius:2px;}
+.card h3{font-size:15px; letter-spacing:.06em; text-transform:uppercase;}
+.card .cat{font-family:'Cinzel',Georgia,serif; letter-spacing:.18em; color:var(--ink-muted);}
+.field input,.field select,.field textarea{border-radius:0;}
+.qr-box{border-radius:0;}
+
+/* Fiche exercice */
+.sheet{border-top-left-radius:2px; border-top-right-radius:2px;}
+.sheet h2{font-size:26px;}
+.block h4{font-family:'Cinzel',Georgia,serif; letter-spacing:.22em; font-size:11.5px;}
+.points{counter-reset:pt;}
+.points li:before{counter-increment:pt; content:counter(pt,upper-roman); font-family:'Cinzel',Georgia,serif; font-weight:700; color:var(--ink); min-width:26px;}
+@media(min-width:700px){.sheet{border-radius:2px;}}
+@media(max-width:600px){
+  .card:not(:has(.card-img)) h3{padding-right:24px;}
+  .card h3{font-size:9.5px; letter-spacing:.02em; line-height:1.2;}
+  .hero h1{font-size:25px;}
+}
+
+/* ===== Extension à toutes les pages (programmes, compte, admin) ===== */
+/* Angles droits partout, sauf les formes volontairement rondes */
+:where(*:not([style*="border-radius:50%"]):not([style*="border-radius: 50%"]):not([style*="border-radius:999"]):not(svg):not(svg *)){border-radius:2px !important;}
+.mark,.nav-dot,.fav-star,.closeBtn,.editBtn,.visit-avatar,.visit-dot,.keep-round,.logo{border-radius:50% !important;}
+/* Boutons : capitales espacées, empattements */
+.btn,button.btn,a.btn{font-family:'Cinzel',Georgia,serif; font-weight:700; letter-spacing:.14em; text-transform:uppercase; font-size:12.5px; line-height:1.2;}
+.subtab,.day-chip,.fchip,.rest-chip,.rest-stop,.origin-pill,.ss-chip,.badge{text-transform:uppercase; letter-spacing:.1em; font-size:10.5px;}
+.origin-pill,.origin-pill *{color:var(--ink) !important; border-color:var(--ink) !important; background:transparent !important;}
+.eyebrow,.prog-card .eyebrow{font-family:'Cinzel',Georgia,serif; letter-spacing:.2em; color:var(--ink-muted);}
+.promo{background:var(--surface) !important;}
+.stat-num{font-family:'Cinzel',Georgia,serif;}
+/* Cartes : filet fin, pas d'ombre */
+.prog-card,.ex-row,.panel,.stat-tile,.draft-row,.fin-card,.resume-banner,.qr-sheet,.ex-modal{box-shadow:none !important;}
+.ex-row,.prog-card{border-color:var(--line);}
+/* Messagerie : bulles à angles droits */
+.msg{border-radius:2px !important;}
+/* Pastille COACH : on garde ses couleurs dorées (badge), seule la police change */
+.coach-pill{font-family:'Cinzel',Georgia,serif; letter-spacing:.2em;}
