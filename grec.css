@@ -127,12 +127,62 @@ footer::before{margin-bottom:22px;}
   .stat-tile{padding:8px 4px !important;}
   .stat-num{font-size:20px !important;}
   .stat-label{font-size:9.5px !important; letter-spacing:.04em !important;}
-  .top-actions{flex-wrap:nowrap !important; overflow-x:auto; scrollbar-width:none; margin-left:-2px; padding-bottom:2px;}
-  .top-actions::-webkit-scrollbar{display:none;}
-  .top-actions .btn{flex:none; white-space:nowrap; padding:9px 12px !important; font-size:11px !important;}
+  .top-actions{display:grid !important; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px !important; overflow:visible; margin-left:0;}
+  .top-actions .btn{white-space:normal; text-align:center; min-height:44px; padding:9px 10px !important; font-size:11px !important; line-height:1.25;}
 }
 /* Séance : champs de saisie à taille raisonnable sur grand écran */
 @media(min-width:701px){
   .set-line .reps-input,.set-line .charge-input{max-width:150px;}
   .set-line{gap:10px;}
+}
+
+/* ===== Confort tactile, tablette et ordinateur (v181) ===== */
+html{-webkit-text-size-adjust:100%; text-size-adjust:100%;}
+body{-webkit-tap-highlight-color:transparent;}
+button,a,.tab,.subtab,.chip{touch-action:manipulation;}
+:focus-visible{outline:2px solid #d9b25c; outline-offset:2px;}
+.tabs,.subtabs{scrollbar-width:none; -webkit-overflow-scrolling:touch;}
+.tabs::-webkit-scrollbar,.subtabs::-webkit-scrollbar{display:none;}
+.subtabs{scroll-snap-type:x proximity;}
+.subtab{scroll-snap-align:start; flex:0 0 auto;}
+
+/* Bords d'écran (encoche, mode paysage) */
+@supports(padding:max(0px)){
+  .wrap,.top-inner{padding-left:max(20px,env(safe-area-inset-left)) !important; padding-right:max(20px,env(safe-area-inset-right)) !important;}
+}
+
+/* Écrans tactiles : zones de toucher d'au moins 40 px, champs à 16 px (pas de zoom automatique sur iPhone) */
+@media(pointer:coarse){
+  .subtab{min-height:40px; padding:9px 16px !important;}
+  .tab{min-height:46px; display:flex; align-items:center; justify-content:center;}
+  .pz-seg,.hchip,.chip,.btn-sm{min-height:40px;}
+  input:not([type=checkbox]):not([type=radio]),select,textarea{font-size:16px !important;}
+  input:not([type=checkbox]):not([type=radio]),select{min-height:42px;}
+  .chat-input input{min-height:40px;}
+}
+
+/* Téléphone en paysage : barre du bas plus fine pour garder de la place */
+@media(max-width:900px) and (max-height:480px){
+  :root{--nav-h:44px;}
+}
+
+/* Fenêtres : jamais plus hautes que l'écran visible (barre d'adresse mobile comprise) */
+@supports(height:1dvh){
+  div[style*="max-height:90vh"]{max-height:90dvh !important;}
+  div[style*="max-height:80vh"]{max-height:80dvh !important;}
+}
+
+/* Tablette et ordinateur : les listes de la page compte s'étalent en deux colonnes */
+@media(min-width:760px){
+  .pg-account .rg-lifts,.pg-account .rg-grid{display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px;}
+}
+
+/* Animations : respecter le réglage « réduire les animations » du téléphone */
+@media(prefers-reduced-motion:reduce){
+  *,*::before,*::after{animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; scroll-behavior:auto !important;}
+}
+/* Espace coach sur téléphone : les 5 onglets tiennent sur la largeur */
+@media(max-width:700px){
+  .pg-admin .tabs{gap:0;}
+  .pg-admin .tabs .tab{flex:1 1 auto; margin-right:0; padding:12px 3px; text-align:center; font-size:12px;}
 }
