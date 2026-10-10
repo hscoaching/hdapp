@@ -1023,7 +1023,7 @@ async function printProgram(){
     : pexList(items);
   document.getElementById('printProgramArea').innerHTML = `
     <h1>${escHtml(name)}</h1>
-    ${description ? `<p>${description}</p>` : ''}
+    ${description ? `<p>${escHtml(description)}</p>` : ''}
     <div class="pmeta">HS Coaching — Programme d'entraînement</div>
     ${rows}
   `;
