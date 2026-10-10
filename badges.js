@@ -749,6 +749,16 @@
     let data = null, cur = null;
     try{ data = await load(opts.getJson, opts.userId, false); cur = (data.checkins || []).find(c => c.day === today) || null; }catch(e){ data = null; }
     let sleep = cur ? Number(cur.sleep_hours) : 7.5, sore = cur ? cur.soreness : null, en = cur ? cur.energy : null;
+    // plage horaire : coucher → réveil, la durée est calculée (on ne stocke que les heures de sommeil)
+    const hhmm = m => { m = ((Math.round(m) % 1440) + 1440) % 1440; return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0'); };
+    const toMin = t => { const x = /^(\d{1,2}):(\d{2})$/.exec(t || ''); return x ? (+x[1]) * 60 + (+x[2]) : null; };
+    let wake = '07:00', bed = null;
+    try{ const sv = JSON.parse(localStorage.getItem('hs_sleep_times') || 'null'); if(sv && toMin(sv.wake) != null) wake = sv.wake; if(!cur && sv && toMin(sv.bed) != null) bed = sv.bed; }catch(e){}
+    if(!bed) bed = hhmm(toMin(wake) - Math.round(sleep * 60));
+    const durMin = () => { const b = toMin(bed), w = toMin(wake); if(b == null || w == null) return null; let d = w - b; if(d <= 0) d += 1440; return d; };
+    const fmtDur = h => { const t = Math.round(h * 60), hh = Math.floor(t / 60), mm = t % 60; return hh + ' h' + (mm ? ' ' + String(mm).padStart(2, '0') : ''); };
+    const sync = () => { const d = durMin(); if(d == null) return false; sleep = Math.round(d / 6) / 10; return true; };
+    sync();
     const ov = document.createElement('div'); ov.id = 'hsCkOv';
     ov.style.cssText = 'position:fixed;inset:0;background:rgba(0,0,0,.78);z-index:1200;display:flex;align-items:center;justify-content:center;padding:18px;overflow:auto';
     ov.onclick = e => { if(e.target === ov) ov.remove(); };
@@ -757,26 +767,36 @@
       ov.innerHTML = `<div style="max-width:420px;width:100%;background:var(--surface,#16171a);border:1px solid var(--line,#2c2c30);border-radius:20px;padding:22px 20px;text-align:center">
         <h3 style="margin:0 0 4px;font-size:20px">😴 Bilan de récupération</h3>
         <div class="bdg-mini" style="margin-bottom:16px">30 secondes · la récup compte autant que l'entraînement</div>
-        <div style="font-weight:600">Combien d'heures as-tu dormi cette nuit ?</div>
-        <div style="display:flex;align-items:center;justify-content:center;gap:18px;margin:10px 0 16px">
-          <button type="button" id="ckMinus" style="width:44px;height:44px;border-radius:50%;border:1px solid var(--line,#2c2c30);background:transparent;color:inherit;font-size:22px;cursor:pointer">−</button>
-          <div style="font-size:34px;font-weight:800;min-width:90px">${String(sleep).replace('.', ',')} h</div>
-          <button type="button" id="ckPlus" style="width:44px;height:44px;border-radius:50%;border:1px solid var(--line,#2c2c30);background:transparent;color:inherit;font-size:22px;cursor:pointer">+</button>
+        <div style="font-weight:600">À quelle heure t'es-tu couché et réveillé ?</div>
+        <div style="display:flex;gap:12px;justify-content:center;margin:12px 0 6px">
+          <label style="flex:1;max-width:150px;font-size:12px;opacity:.75;text-align:center">🌙 Coucher<input type="time" id="ckBed" value="${bed}" style="display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:10px 6px;font-size:20px;font-weight:700;text-align:center;background:var(--surface-2,#1f2024);border:1px solid var(--line,#2c2c30);color:inherit;border-radius:12px"></label>
+          <label style="flex:1;max-width:150px;font-size:12px;opacity:.75;text-align:center">☀️ Réveil<input type="time" id="ckWake" value="${wake}" style="display:block;width:100%;box-sizing:border-box;margin-top:5px;padding:10px 6px;font-size:20px;font-weight:700;text-align:center;background:var(--surface-2,#1f2024);border:1px solid var(--line,#2c2c30);color:inherit;border-radius:12px"></label>
         </div>
+        <div style="margin:6px 0 18px"><div style="font-size:12px;opacity:.7">Temps dormi</div><div id="ckDur" style="font-size:34px;font-weight:800">${sleep > 16 ? '—' : fmtDur(sleep)}</div></div>
         <div style="font-weight:600">Courbatures (facultatif)</div>${scale('sore', ['😀','🙂','😐','😣','🥵'], sore)}
         <div style="font-weight:600">Énergie (facultatif)</div>${scale('en', ['🪫','😴','😐','💪','⚡'], en)}
         <div id="ckRes"></div>
         <button id="ckSave" class="btn btn-accent" style="width:100%;justify-content:center">Enregistrer</button>
         <button id="ckClose" class="btn btn-ghost" style="width:100%;justify-content:center;margin-top:8px">Plus tard</button>
       </div>`;
-      ov.querySelector('#ckMinus').onclick = () => { sleep = Math.max(0, Math.round((sleep - 0.5) * 10) / 10); paint(); };
-      ov.querySelector('#ckPlus').onclick = () => { sleep = Math.min(16, Math.round((sleep + 0.5) * 10) / 10); paint(); };
+      const upd = () => {
+        bed = ov.querySelector('#ckBed').value; wake = ov.querySelector('#ckWake').value;
+        const ok = sync(), d = ov.querySelector('#ckDur'), sv = ov.querySelector('#ckSave');
+        const bad = !ok || sleep > 16;
+        d.textContent = bad ? (ok ? 'Vérifie tes horaires' : '—') : fmtDur(sleep);
+        d.style.fontSize = bad ? '18px' : '34px';
+        if(sv) sv.disabled = bad;
+      };
+      ov.querySelector('#ckBed').oninput = upd; ov.querySelector('#ckWake').oninput = upd;
+      ov.querySelector('#ckBed').onchange = upd; ov.querySelector('#ckWake').onchange = upd;
       ov.querySelectorAll('[data-k]').forEach(b => b.onclick = () => { const v = +b.dataset.v; if(b.dataset.k === 'sore') sore = sore === v ? null : v; else en = en === v ? null : v; paint(); });
       ov.querySelector('#ckClose').onclick = () => ov.remove();
       ov.querySelector('#ckSave').onclick = save;
     }
     async function save(){
       const btn = ov.querySelector('#ckSave'); btn.disabled = true;
+      if(!sync() || sleep > 16){ btn.disabled = false; return; }
+      try{ localStorage.setItem('hs_sleep_times', JSON.stringify({ bed, wake })); }catch(e){}
       const row = { user_id: opts.userId, day: today, sleep_hours: sleep, soreness: sore, energy: en };
       try{
         const r = await opts.fetcher('/rest/v1/recovery_checkins?on_conflict=user_id,day', { method:'POST', headers:{ Prefer:'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify(row) });
