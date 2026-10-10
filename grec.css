@@ -212,3 +212,7 @@ button,a,.tab,.subtab,.chip{touch-action:manipulation;}
   .tp-w{flex-wrap:wrap;}
   .tp-d{margin-left:0;}
 }
+
+/* v195 : sur iPhone, un <button> sans couleur de texte s'affiche en bleu système. On impose la couleur du thème (les boutons qui ont leur propre couleur gardent la leur). */
+button{color:var(--ink,#f5f5f5);}
+.prog-card{color:var(--ink,#f5f5f5);}
