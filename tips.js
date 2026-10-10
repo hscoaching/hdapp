@@ -55,7 +55,9 @@
     catch(e){ return; }   // script SQL pas encore lancé : on n'affiche rien
     let edit = null;
     const draw = () => {
-      const opts = `<option value="">Tous mes clients</option>` + clients.map(c => `<option value="${c.id}">${esc(c.name)}</option>`).join('');
+      const cl = clients.filter(c => c.role !== 'coach'), co = clients.filter(c => c.role === 'coach');
+      const opt = c => `<option value="${c.id}">${esc(c.name)}</option>`;
+      const opts = `<option value="">Tous mes clients</option>` + (co.length ? `<optgroup label="Clients">${cl.map(opt).join('')}</optgroup><optgroup label="Coachs">${co.map(opt).join('')}</optgroup>` : cl.map(opt).join(''));
       const list = mine.length ? `<div class="tp-h" style="margin-top:14px">Déjà écrits sur cet exercice</div><div class="tp-ed" style="margin-top:0">${mine.map((t, i) => `<div class="tp-li"><span><b>${t.client_id ? esc(t.client_name) : 'Tous mes clients'}</b> · ${esc(t.body.length > 60 ? t.body.slice(0, 60) + '…' : t.body)}</span><span style="flex:none"><a data-e="${i}">Modifier</a><a data-d="${i}">Supprimer</a></span></div>`).join('')}</div>` : '';
       box.innerHTML = `<div class="tp-h">Conseil pour tes clients</div><div class="tp-ed"><label>Pour</label><select id="tpWho">${opts}</select><label>Ton conseil</label><textarea id="tpBody" maxlength="1200" placeholder="Ex. : garde les genoux dans l'axe des pieds…"></textarea><button type="button" class="tp-go" id="tpGo">Enregistrer le conseil</button><div class="tp-m" id="tpMsg"></div></div>${list}`;
       const who = box.querySelector('#tpWho'), body = box.querySelector('#tpBody'), msg = box.querySelector('#tpMsg'), go = box.querySelector('#tpGo');
@@ -86,7 +88,11 @@
     css();
     const role = localStorage.getItem('hs_role');
     try{
-      if(role === 'coach' || role === 'admin') await coachBlock(host, exId, o);
+      if(role === 'coach' || role === 'admin'){
+        host.innerHTML = '<div data-r></div><div data-w></div>';
+        try{ host.querySelector('[data-r]').innerHTML = clientHtml(await rpc(o, 'exercise_tips_for_me', { p_exercise: exId })); }catch(e){}
+        await coachBlock(host.querySelector('[data-w]'), exId, o);
+      }
       else { const rows = await rpc(o, 'exercise_tips_for_me', { p_exercise: exId }); host.innerHTML = clientHtml(rows); }
     }catch(e){ /* silencieux : pas de conseil ou script SQL pas encore lancé */ }
   }
