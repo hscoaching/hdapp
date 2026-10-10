@@ -15,7 +15,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@500;700&family=Source+Sans+3:wght@400;500;600;700&display=swap" rel="stylesheet">
 <script src="monitor.js"></script><script src="alerts.js"></script>
-<script src="coaches.js"></script>
+<script src="coaches.js"></script><script src="tips.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <style>
   :root{
@@ -506,6 +506,7 @@ function openSheet(slug, pushHash){
     </div>
     ${imgTag(ex, '', 'width:100%;border-radius:12px;margin-top:16px;')}
     <p class="lede">${escHtml(ex.short_description||'')}</p>
+    <div id="tipsBox"></div>
     <div class="block">
       <h4>Consigne</h4>
       <p>${escHtml(ex.instructions||'—')}</p>
@@ -541,6 +542,7 @@ function openSheet(slug, pushHash){
     const editBtn = document.getElementById('editSheetBtn');
     if(editBtn) editBtn.addEventListener('click', ()=> renderSheetEdit(ex));
   }
+  if(window.HSTips) HSTips.mount(document.getElementById('tipsBox'), ex.id, { url: SUPABASE_URL, key: SUPABASE_ANON_KEY, refresh: (typeof refreshIfNeeded === 'function' ? refreshIfNeeded : null) });
   overlay.classList.add('open');
   if(pushHash) history.replaceState(null,'', '#'+ex.slug);
 }
