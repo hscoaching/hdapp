@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta name="theme-color" content="#0b0b0c">
+<title>HS Coaching — Confidentialité</title>
+<link rel="icon" href="icon-192.png">
+<style>
+  :root{ --bg:#0b0b0c; --surface:#16171a; --line:#2c2c30; --ink:#f5f5f5; --ink-muted:#9a9a9e; color-scheme:dark; box-sizing:border-box; }
+  *{box-sizing:inherit; margin:0; padding:0;}
+  body{background:var(--bg); color:var(--ink); font-family:'Inter',system-ui,sans-serif; line-height:1.6; font-size:16px;
+    padding:env(safe-area-inset-top,0) 0 env(safe-area-inset-bottom,0); -webkit-font-smoothing:antialiased;}
+  .wrap{max-width:760px; margin:0 auto; padding:28px 20px 60px;}
+  a{color:inherit;}
+  .back{display:inline-block; margin-bottom:22px; font-size:14px; color:var(--ink-muted); text-decoration:none;}
+  h1{font-family:'Cinzel',Georgia,serif; font-size:30px; line-height:1.1; margin-bottom:6px;}
+  .upd{color:var(--ink-muted); font-size:13px; margin-bottom:26px;}
+  h2{font-size:18px; margin:30px 0 8px;}
+  p,li{color:#dcdcde;}
+  p{margin-bottom:10px;}
+  ul{margin:0 0 10px 20px;}
+  li{margin-bottom:5px;}
+  .box{background:var(--surface); border:1px solid var(--line); border-radius:14px; padding:14px 16px; margin:12px 0;}
+  table{width:100%; border-collapse:collapse; margin:10px 0; font-size:14.5px;}
+  th,td{text-align:left; padding:9px 10px; border-bottom:1px solid var(--line); vertical-align:top;}
+  th{color:var(--ink-muted); font-weight:600; font-size:12.5px; letter-spacing:.04em; text-transform:uppercase;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <a class="back" href="index.html" onclick="if(history.length>1){history.back();return false;}">← Retour</a>
+  <h1>Confidentialité et données personnelles</h1>
+  <p class="upd">Version du 10 octobre 2026</p>
+
+  <p>Cette page explique, simplement, quelles données HS Coaching enregistre sur toi, pourquoi, qui peut les voir et comment tu gardes la main dessus.</p>
+
+  <h2>Qui est responsable de tes données ?</h2>
+  <p>HS Coaching, application de suivi d'entraînement tenue par un coach sportif indépendant. Pour toute question ou demande sur tes données : <a href="mailto:hscoach78@gmail.com">hscoach78@gmail.com</a>.</p>
+
+  <h2>Les données enregistrées</h2>
+  <table>
+    <tr><th>Donnée</th><th>À quoi elle sert</th></tr>
+    <tr><td>Prénom, email, mot de passe (stocké chiffré)</td><td>Ton compte et ta connexion</td></tr>
+    <tr><td>Sexe (facultatif)</td><td>Estimer ton niveau de force dans l'onglet Rang</td></tr>
+    <tr><td>Séances, charges, répétitions, cardio</td><td>Ton historique, tes rangs, tes badges</td></tr>
+    <tr><td>Poids de corps et objectifs</td><td>Suivre ton évolution, calculer ton rang</td></tr>
+    <tr><td>Bilan de récupération (sommeil, courbatures, forme)</td><td>Adapter ton entraînement avec ton coach</td></tr>
+    <tr><td>Messages avec ton coach, vidéos de challenge</td><td>Le coaching et les challenges</td></tr>
+    <tr><td>Abonnement aux notifications</td><td>T'envoyer les notifications que tu as acceptées</td></tr>
+    <tr><td>Visites de l'appli, erreurs techniques</td><td>Mesurer l'usage et corriger les bugs</td></tr>
+  </table>
+
+  <div class="box">
+    <p><b>Données de santé.</b> Ton poids de corps, ton sommeil et ton état de forme sont des informations sur ta santé. Elles ne sont enregistrées que si tu les saisis, et seulement avec ton accord, que tu donnes en créant ton compte. Tu peux retirer cet accord à tout moment en supprimant ton compte, ou en nous écrivant.</p>
+  </div>
+
+  <h2>Qui peut voir tes données ?</h2>
+  <ul>
+    <li><b>Toi</b>, sur tous tes appareils.</li>
+    <li><b>Ton coach</b>, si tu es suivi par un coach dans l'appli.</li>
+    <li><b>L'administrateur de l'appli</b>, pour le fonctionnement et l'assistance.</li>
+  </ul>
+  <p>Tes données ne sont pas vendues et ne sont pas utilisées pour de la publicité. Les autres utilisateurs ne voient jamais tes données personnelles, seulement ce que tu choisis de partager (par exemple ton rang ou un résultat de challenge).</p>
+
+  <h2>Où sont-elles stockées ?</h2>
+  <ul>
+    <li><b>Supabase</b> héberge la base de données, les comptes et les vidéos de challenge.</li>
+    <li><b>GitHub Pages</b> héberge les pages du site.</li>
+    <li><b>Google Fonts</b> fournit les polices de caractères : ton adresse IP est alors transmise à Google pour charger le style des pages.</li>
+  </ul>
+
+  <h2>Combien de temps ?</h2>
+  <p>Tant que ton compte existe. Quand tu supprimes ton compte, tes séances, ton poids, tes bilans, tes messages et tes vidéos sont effacés. Des copies de sauvegarde automatiques, gardées 14 jours, disparaissent ensuite d'elles-mêmes.</p>
+
+  <h2>Tes droits</h2>
+  <ul>
+    <li><b>Voir et récupérer tes données</b> : onglet Historique de « Mon compte » (export en PDF) ou sur demande par email.</li>
+    <li><b>Corriger</b> tes informations : par email.</li>
+    <li><b>Tout supprimer</b> : « Mon compte » puis « Supprimer mon compte ».</li>
+    <li><b>Retirer ton accord</b> pour les données de santé : en supprimant ton compte ou par email. Tu peux aussi simplement ne pas saisir ces informations.</li>
+    <li><b>Réclamation</b> : tu peux saisir la CNIL (cnil.fr) si tu estimes que tes droits ne sont pas respectés.</li>
+  </ul>
+
+  <h2>Mineurs</h2>
+  <p>L'appli est destinée aux personnes d'au moins 15 ans. En dessous, l'accord d'un parent ou tuteur est nécessaire pour créer un compte.</p>
+
+  <h2>Cookies et stockage</h2>
+  <p>L'appli utilise le stockage de ton navigateur pour te garder connecté et mémoriser tes réglages. Elle n'utilise pas de cookies publicitaires.</p>
+
+  <h2>Changements</h2>
+  <p>Si cette page change de façon importante, la date en haut est mise à jour et tu en es informé dans l'appli.</p>
+</div>
+</body>
+</html>
