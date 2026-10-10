@@ -155,8 +155,15 @@
     return cands.sort((a, b) => b.pos - a.pos)[0];
   }
 
-  function enduHtml(en, sum){
+  function enduPreview(sex){
+    const run = RUN5[sex === 'female' ? 'female' : sex === 'male' ? 'male' : null];
+    const vol = `<div class="rg-tg">${[1, 2, 3, 4].map(i => `<div><span>${RK[i]}</span><b>${VOLW[i - 1] >= 60 ? fmtDur(VOLW[i - 1] * 60) : VOLW[i - 1] + ' min'} / semaine</b></div>`).join('')}</div>`;
+    const r5 = run ? `<div class="rg-d" style="margin:12px 0 4px">Ou courir un 5 km en :</div><div class="rg-tg">${[1, 2, 3, 4].map(i => `<div><span>${RK[i]}</span><b>${fmtDur(run[i - 1])}</b></div>`).join('')}</div>` : '';
+    return `<div class="rg-sec">Endurance</div><div class="rg-row"><div class="rg-d" style="margin:0">Pas de cardio enregistré. Le rang d'endurance apparaît dès que tu notes une séance de cardio (durée, et distance pour la course).</div></div><div class="rg-sec">Aperçu des perfs · cardio</div><div class="rg-row"><div class="rg-d" style="margin:0 0 6px">Cardio moyen à tenir sur les 4 dernières semaines pour atteindre chaque rang :</div>${vol}${r5}</div>`;
+  }
+  function enduHtml(en, sum, sex){
     let h = '';
+    if(!en.run && !en.vol) return enduPreview(sex);
     if(en.run){
       const r = en.run, e = r.e, pace = e.sec / e.km;
       h += `<div class="rg-sec">Course à pied · ta meilleure sortie</div><div class="rg-row"><div class="rg-t"><span class="rg-n">${esc(e.name)}</span><span class="rg-d" style="margin:0">${new Date(e.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span></div>
@@ -230,7 +237,7 @@
       out += bw ? `<div class="rg-sec">Force</div><div class="rg-row"><div class="rg-d" style="margin:0">Pas de musculation enregistrée. Le rang de force apparaît dès que tu notes une charge sur un grand mouvement : squat, développé couché, soulevé de terre, développé militaire ou tirage.</div></div>` + previewHtml(bw, sex)
         : `<div class="rg-sec">Force</div><div class="rg-row"><div class="rg-d" style="margin:0">Ajoute ton poids (onglet Poids) pour estimer ton rang de force.</div><button type="button" class="btn btn-accent btn-sm" id="rgGoW" style="margin-top:10px">Ajouter mon poids</button></div>`;
     }
-    out += enduHtml(en, esum);
+    out += enduHtml(en, esum, sex);
     // sexe non renseigné
     if(!sex){
       out += `<div class="rg-sec">${o.coach ? 'Sexe du client (pour estimer son niveau de force)' : 'Pour estimer ton niveau de force'}</div><p class="rg-d" style="margin:0 0 14px">${o.coach ? 'Sert uniquement à choisir les bons barèmes. Le poids est celui de l\'onglet Poids du client.' : 'Ton sexe sert uniquement à choisir les bons barèmes. Ton poids est celui de l\'onglet Poids.'}</p>
