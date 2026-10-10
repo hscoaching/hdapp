@@ -95,9 +95,17 @@
     document.head.appendChild(st);
   }
 
-  function liftHtml(x, bw){
+  // aperçu des performances attendues pour un poids de corps donné (avant toute série)
+  function previewRows(L, bw, sex){
+    const thr = sex === 'female' ? L.f : L.m;
+    return `<div class="rg-tg">${[1, 2, 3, 4].map(i => `<div><span>${RK[i]}</span><b>${kg(thr[i - 1] * bw)} kg</b></div>`).join('')}</div>`;
+  }
+  function previewHtml(bw, sex){
+    return `<div class="rg-sec">Aperçu des perfs · pour ${kg(bw)} kg</div><div class="rg-d" style="margin:0 2px 10px">Charge à soulever (une série, maximum estimé) pour atteindre chaque rang à ton poids de corps.</div>${LIFTS.map(L => `<details class="rg-row"><summary><div class="rg-t"><span class="rg-n">${esc(L.name)}</span><span class="rg-r">${kg((sex === 'female' ? L.f : L.m)[0] * bw)} kg → ${kg((sex === 'female' ? L.f : L.m)[3] * bw)} kg</span></div></summary>${previewRows(L, bw, sex)}</details>`).join('')}`;
+  }
+  function liftHtml(x, bw, sex){
     const L = x.lift;
-    if(x.none) return `<div class="rg-row" style="opacity:.6"><div class="rg-t"><span class="rg-n">${esc(L.name)}</span><span class="rg-d" style="margin:0">Pas encore de série</span></div></div>`;
+    if(x.none) return `<details class="rg-row" style="opacity:.85"><summary><div class="rg-t"><span class="rg-n">${esc(L.name)}</span><span class="rg-d" style="margin:0">Pas encore de série · voir les objectifs</span></div></summary>${previewRows(L, bw, sex)}</details>`;
     const tg = x.hi ? `<div class="rg-sec" style="margin:16px 0 8px">Pour passer ${RK[x.lvl + 1]}, une seule série :</div><div class="rg-tg" style="margin:0">${x.targets.map(t => `<div><b>${kg(t.charge)} kg × ${t.reps} reps</b><span>${kg(t.e)} kg estimé</span></div>`).join('')}</div>` : '';
     const ladder = `<div class="rg-tg">${[1, 2, 3, 4].map(i => `<div style="${x.lvl + 1 === i ? 'color:var(--ink);font-weight:700' : ''}"><span>${x.lvl + 1 === i ? '→ ' : ''}${RK[i]}</span><span>${kg(x.thr[i - 1] * bw)} kg</span></div>`).join('')}</div>`;
     const top = x.top.length ? `<div class="rg-sec" style="margin:16px 0 8px">Tes meilleures séries</div>${x.top.map(t => `<div class="rg-d" style="display:flex;justify-content:space-between;margin:4px 0"><span>${new Date(t.date).toLocaleDateString('fr-FR', { day: 'numeric', month: 'short', year: 'numeric' })}</span><span><b style="color:var(--ink)">${kg(t.charge)} kg × ${t.reps}</b> · ${kg(t.e)} kg estimé</span></div>`).join('')}` : '';
@@ -217,9 +225,9 @@
     if(sum){
       const nx = sum.near;
       if(nx) out += `<div class="rg-sec">Mon prochain objectif · force</div><div class="rg-row" style="border-color:${GOLD}"><div class="rg-t"><span class="rg-n">${esc(nx.lift.name)}</span><span class="rg-r">→ ${RK[nx.lvl + 1]}</span></div><div class="rg-d">+${kg(nx.need)} kg sur ton maximum estimé · par exemple <b style="color:var(--ink)">${kg(nx.targets[1].charge)} kg × ${nx.targets[1].reps} reps</b></div></div>`;
-      out += `<div class="rg-sec">Force · par mouvement</div>${rated.map(x => liftHtml(x, bw)).join('')}<div class="rg-note">Estimation d'après des moyennes de pratiquants. Le rang compte ta meilleure série de toutes tes séances (jusqu'à 10 reps), avec la formule charge × (1 + reps ÷ 30). Le rang de force est la moyenne des 5 mouvements de base : un mouvement jamais fait compte comme Recrue, donc travailler les 5 fait monter ton rang. Il évolue avec ton poids de corps.</div>`;
+      out += `<div class="rg-sec">Force · par mouvement</div>${rated.map(x => liftHtml(x, bw, sex)).join('')}<div class="rg-note">Estimation d'après des moyennes de pratiquants. Le rang compte ta meilleure série de toutes tes séances (jusqu'à 10 reps), avec la formule charge × (1 + reps ÷ 30). Le rang de force est la moyenne des 5 mouvements de base : un mouvement jamais fait compte comme Recrue, donc travailler les 5 fait monter ton rang. Il évolue avec ton poids de corps.</div>`;
     } else if(sex === 'male' || sex === 'female'){
-      out += bw ? `<div class="rg-sec">Force</div><div class="rg-row"><div class="rg-d" style="margin:0">Pas de musculation enregistrée. Le rang de force apparaît dès que tu notes une charge sur un grand mouvement : squat, développé couché, soulevé de terre, développé militaire ou tirage.</div></div>`
+      out += bw ? `<div class="rg-sec">Force</div><div class="rg-row"><div class="rg-d" style="margin:0">Pas de musculation enregistrée. Le rang de force apparaît dès que tu notes une charge sur un grand mouvement : squat, développé couché, soulevé de terre, développé militaire ou tirage.</div></div>` + previewHtml(bw, sex)
         : `<div class="rg-sec">Force</div><div class="rg-row"><div class="rg-d" style="margin:0">Ajoute ton poids (onglet Poids) pour estimer ton rang de force.</div><button type="button" class="btn btn-accent btn-sm" id="rgGoW" style="margin-top:10px">Ajouter mon poids</button></div>`;
     }
     out += enduHtml(en, esum);
