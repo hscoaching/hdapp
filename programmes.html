@@ -595,7 +595,7 @@ function openExFiche(exId){
   document.getElementById('exSheet').innerHTML = `
     <div class="sheet-top">
       <div><div class="cat">${escHtml(ex.category)}</div><h2>${escHtml(ex.name)}</h2></div>
-      <button class="closeBtn" onclick="document.getElementById('exOverlay').classList.remove('open')">✕</button>
+      <button class="closeBtn" onclick="document.getElementById('exOverlay').classList.remove('open')" aria-label="Fermer">✕</button>
     </div>
     <p class="lede">${escHtml(ex.short_description||'')}</p>
     ${imgTag(ex, '', 'width:100%;border-radius:12px;margin-bottom:4px;')}
@@ -628,7 +628,7 @@ function openContactModal(){
   document.getElementById('modalSheet').innerHTML = `
     <div class="sheet-top">
       <div><div class="cat">SANS ENGAGEMENT</div><h2>Contacter un coach</h2></div>
-      <button class="closeBtn" onclick="document.getElementById('modalOverlay').classList.remove('open')">✕</button>
+      <button class="closeBtn" onclick="document.getElementById('modalOverlay').classList.remove('open')" aria-label="Fermer">✕</button>
     </div>
     <p class="lede">Laisse tes coordonnées, un coach te recontacte pour un programme personnalisé — aucun compte requis.</p>
     <div class="field"><label>Prénom et nom</label><input id="cName" type="text" placeholder="Ton prénom et ton nom"></div>
@@ -1122,7 +1122,7 @@ async function renderSession(programId, dayIdx, manual){
         <span class="unit">min</span>
         <input type="number" inputmode="numeric" min="0" max="59" placeholder="${phs}" class="sec-input">
         <span class="unit">s</span>
-        ${manual ? '' : '<button type="button" class="chrono-btn" aria-label="Lancer le chrono" onclick="toggleSetChrono(this)">▶</button><button class="valid" onclick="validateSet(this)">✓</button>'}
+        ${manual ? '' : '<button type="button" class="chrono-btn" aria-label="Lancer le chrono" onclick="toggleSetChrono(this)">▶</button><button class="valid" onclick="validateSet(this)" aria-label="Valider la série">✓</button>'}
         ${(isLoggedIn() && (u.ex.category || '').toLowerCase() === 'cardio') ? '<div class="dist-wrap"><input type="number" inputmode="decimal" step="0.01" min="0" placeholder="km" class="dist-input" oninput="updPace(this)"><span class="unit">km (facultatif)</span><span class="pace"></span></div>' : ''}
       </div>`;
     }
@@ -1134,7 +1134,7 @@ async function renderSession(programId, dayIdx, manual){
         <span class="unit">reps</span>
         <input type="number" inputmode="decimal" placeholder="${phc||'kg'}" class="charge-input">
         <span class="unit">kg</span>
-        ${manual ? '' : '<button class="valid" onclick="validateSet(this)">✓</button>'}
+        ${manual ? '' : '<button class="valid" onclick="validateSet(this)" aria-label="Valider la série">✓</button>'}
       </div>`;
   };
   const rows = blocks.map(b=>{
@@ -1792,14 +1792,14 @@ function renderDraftList(){
     return `<div class="draft-row ${tags[idx]?'in-ss':''}">
       <div class="draft-main">
         ${tags[idx]?`<span class="ss-chip">SUPERSET ${tags[idx]}</span> `:''}${escHtml(d.name)} — ${d.sets}×${escHtml(d.reps)}
-        ${vex?`<div class="draft-var">↔ Variante : ${escHtml(vex.name)} <button type="button" class="rm-var" title="Retirer la variante" onclick="clearVariant(${i})">✕</button></div>`:''}
+        ${vex?`<div class="draft-var">↔ Variante : ${escHtml(vex.name)} <button type="button" class="rm-var" title="Retirer la variante" onclick="clearVariant(${i})" aria-label="Retirer la variante">✕</button></div>`:''}
       </div>
       <div class="draft-actions">
-        <button type="button" class="mini-btn" title="Monter" onclick="moveDraft(${i},-1)">↑</button>
-        <button type="button" class="mini-btn" title="Descendre" onclick="moveDraft(${i},1)">↓</button>
-        <button type="button" class="mini-btn ${d.linkPrev?'on':''}" ${canLink?'':'disabled'} title="Enchaîner avec l'exercice du dessus (superset)" onclick="toggleLink(${i})">🔗</button>
-        <button type="button" class="mini-btn" title="Variante : utilise l'exercice sélectionné dans la grille" onclick="setVariant(${i})">↔</button>
-        <button type="button" class="rm" onclick="removeDraft(${i})">✕</button>
+        <button type="button" class="mini-btn" title="Monter" onclick="moveDraft(${i},-1)" aria-label="Monter">↑</button>
+        <button type="button" class="mini-btn" title="Descendre" onclick="moveDraft(${i},1)" aria-label="Descendre">↓</button>
+        <button type="button" class="mini-btn ${d.linkPrev?'on':''}" ${canLink?'':'disabled'} title="Enchaîner avec l'exercice du dessus (superset)" onclick="toggleLink(${i})" aria-label="Enchaîner avec l'exercice du dessus (superset)">🔗</button>
+        <button type="button" class="mini-btn" title="Variante : utilise l'exercice sélectionné dans la grille" onclick="setVariant(${i})" aria-label="Variante : utilise l'exercice sélectionné dans la grille">↔</button>
+        <button type="button" class="rm" onclick="removeDraft(${i})" aria-label="Retirer">✕</button>
       </div>
     </div>`;
   }).join('') + `<p class="subtitle" style="margin-top:10px;font-size:12px;">🔗 enchaîne avec l'exercice du dessus (superset) · ↔ ajoute comme variante l'exercice sélectionné dans la grille</p>` : '<div class="empty" style="padding:14px 0;">Aucun exercice dans cette séance pour l\'instant.</div>';
@@ -1976,11 +1976,11 @@ if('serviceWorker' in navigator){
     if (isSafari) {
       showBanner(`
         <p>Installe cette app sur ton écran d'accueil : appuie sur <strong>Partager</strong> puis <strong>« Sur l'écran d'accueil »</strong>.</p>
-        <div class="btn-row"><button class="installClose" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer;">✕</button></div>
+        <div class="btn-row"><button class="installClose" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer;" aria-label="Fermer">✕</button></div>
       `);    } else {
       showBanner(`
         <p>Pour installer l'app sur iPhone, ouvre ce site dans <strong>Safari</strong>, puis <strong>Partager</strong> › <strong>« Sur l'écran d'accueil »</strong>.</p>
-        <div class="btn-row"><button class="installClose" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer;">✕</button></div>
+        <div class="btn-row"><button class="installClose" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer;" aria-label="Fermer">✕</button></div>
       `);
     }
   } else {
@@ -1992,7 +1992,7 @@ if('serviceWorker' in navigator){
         <p>Installe HS Coaching sur ton appareil pour un accès rapide depuis ton écran d'accueil.</p>
         <div class="btn-row">
           <button class="installGo" style="background:var(--accent);color:var(--accent-ink);border:none;border-radius:999px;padding:8px 16px;font-weight:700;font-size:13px;cursor:pointer;">Installer</button>
-          <button class="installClose" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer;">✕</button>
+          <button class="installClose" style="background:none;border:none;color:var(--ink-muted);font-size:18px;cursor:pointer;" aria-label="Fermer">✕</button>
         </div>
       `, async ()=>{
         if (!deferredPrompt) return;

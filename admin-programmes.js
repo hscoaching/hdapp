@@ -324,7 +324,7 @@ function renderDraftList(){
     const vex = it.variant_id ? exercisesById[it.variant_id] : null;
     return `<div class="ex-mini ${tags[idx]?'in-ss':''}">
       <span>${tags[idx]?`<span class="ss-chip">SUPERSET ${tags[idx]}</span> `:''}<b>${escapeHtml(it.label || (ex?ex.name:'Exercice'))}</b>${it.label?` <span style="opacity:.6;font-size:12px;">· fiche : ${escapeHtml(ex?ex.name:'')}</span>`:''}
-        ${vex?`<div class="draft-var">↔ Variante : ${escapeHtml(vex.name)} <button type="button" class="rm-var" title="Retirer la variante" onclick="clearVariant(${i})">✕</button></div>`:''}
+        ${vex?`<div class="draft-var">↔ Variante : ${escapeHtml(vex.name)} <button type="button" class="rm-var" title="Retirer la variante" onclick="clearVariant(${i})" aria-label="Retirer la variante">✕</button></div>`:''}
         <div class="ex-edit">
           <label class="ex-edit-name">Nom affiché dans ce programme (facultatif)<input type="text" maxlength="80" value="${escapeHtml(it.label||'')}" placeholder="${escapeHtml(ex?ex.name:'')}" onchange="editDraft(${i},'label',this)"></label>
           <label>Séries<input type="number" inputmode="numeric" min="1" value="${it.sets||3}" onchange="editDraft(${i},'sets',this)"></label>
@@ -332,12 +332,12 @@ function renderDraftList(){
           ${(tags[idx] && (idx+1 < rows.length) && rows[idx+1].it.linkPrev) ? `<label title="Dans un superset, le repos se prend une seule fois, à la fin du tour (voir le dernier exercice)">Repos<input type="text" disabled value="" placeholder="fin du tour"></label>` : `<label>${tags[idx] ? 'Repos après le tour (min)' : 'Repos (min)'}<input type="text" inputmode="decimal" value="${restInputVal(it.rest_seconds)}" onchange="editDraft(${i},'rest',this)"></label>`}
         </div></span>
       <span style="display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
-        <button onclick="openExerciseModal('${it.exercise_id}')" title="Modifier la fiche">✏️</button>
-        <button onclick="moveDraft(${i},-1)" title="Monter">↑</button>
-        <button onclick="moveDraft(${i},1)" title="Descendre">↓</button>
+        <button onclick="openExerciseModal('${it.exercise_id}')" title="Modifier la fiche" aria-label="Modifier la fiche">✏️</button>
+        <button onclick="moveDraft(${i},-1)" title="Monter" aria-label="Monter">↑</button>
+        <button onclick="moveDraft(${i},1)" title="Descendre" aria-label="Descendre">↓</button>
         <button class="${it.linkPrev?'on':''}" ${idx>0?'':'disabled'} onclick="toggleLink(${i})" title="Enchaîner avec l'exercice du dessus (superset)">🔗</button>
-        <button onclick="setVariant(${i})" title="Variante : utilise l'exercice sélectionné dans la grille">↔</button>
-        <button onclick="removeDraftEx(${i})" title="Retirer">✕</button>
+        <button onclick="setVariant(${i})" title="Variante : utilise l'exercice sélectionné dans la grille" aria-label="Variante : utilise l'exercice sélectionné dans la grille">↔</button>
+        <button onclick="removeDraftEx(${i})" title="Retirer" aria-label="Retirer">✕</button>
       </span>
     </div>`;
   }).join('') + `<p class="empty" style="padding:8px 0 0;text-align:left;">🔗 enchaîne avec l'exercice du dessus (superset) · ↔ ajoute comme variante l'exercice sélectionné dans la grille</p>` : '<div class="empty">Aucun exercice pour l\'instant — ajoute-en un ci-dessous.</div>';
