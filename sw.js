@@ -4,7 +4,7 @@
 // et met en cache les réponses Supabase (exercices, images) en "stale-while-revalidate"
 // pour que la bibliothèque reste consultable même avec un wifi de salle capricieux.
 
-const CACHE_NAME = 'hs-coaching-v198';
+const CACHE_NAME = 'hs-coaching-v199';
 const APP_SHELL = [
   'index.html',
   'programmes.html',
@@ -66,15 +66,21 @@ function networkFirst(request) {
   // cache:'no-cache' = on revalide toujours auprès du serveur (304 si inchangé) au lieu de
   // réutiliser une copie du cache HTTP (GitHub Pages en garde ~10 min), sinon un fichier
   // fraîchement mis en ligne peut rester périmé et se retrouver figé dans le cache de l'app.
-  return fetch(request, { cache: 'no-cache' })
+  // Réseau lent : au-delà de 3 s on sert la copie du cache si on en a une (la requête continue
+  // en arrière-plan et met le cache à jour pour la prochaine ouverture).
+  const net = fetch(request, { cache: 'no-cache' })
     .then((res) => {
       if (res && res.ok) {
         const copy = res.clone();
         caches.open(CACHE_NAME).then((cache) => cache.put(request, copy));
       }
       return res;
-    })
-    .catch(() => caches.match(request).then((c) => c || caches.match('index.html')));
+    });
+  const fallback = () => caches.match(request).then((c) => c || caches.match('index.html'));
+  const timeout = new Promise((resolve) => {
+    setTimeout(() => caches.match(request).then((c) => resolve(c || null)), 3000);
+  });
+  return Promise.race([net.catch(() => null), timeout]).then((res) => res || net.catch(fallback));
 }
 
 function staleWhileRevalidate(request) {
