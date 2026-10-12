@@ -118,6 +118,7 @@
     if(l.duration_seconds) parts.push(durFmt(l.duration_seconds));
     if(l.distance_km){ parts.push(String(l.distance_km).replace('.', ',') + ' km'); if(l.duration_seconds){ const p = Math.round(l.duration_seconds / l.distance_km); parts.push(Math.floor(p/60) + ':' + String(p%60).padStart(2, '0') + ' /km'); } }
     if(l.reps != null) parts.push(l.reps + ' reps');
+    if(l.hold_seconds) parts.push('tenue ' + l.hold_seconds + ' s');
     if(l.charge != null) parts.push(l.charge + ' kg');
     return parts.join(' · ') || '–';
   }

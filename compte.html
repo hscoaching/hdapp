@@ -166,6 +166,7 @@
 <script src="challenges.js"></script>
 <script src="export.js"></script>
 <script src="account.js"></script>
+<script src="muscles.js"></script>
 <script src="history.js"></script>
 <script src="session-report.js"></script>
 <script src="import.js"></script>
@@ -742,8 +743,9 @@ async function finishEditSession(id){
 }
 async function saveLogEdit(inp){
   const row = inp.closest('.edit-row');
-  const repsEl = row.querySelector('.e-reps'), minEl = row.querySelector('.e-min'), charge = row.querySelector('.e-charge').value;
+  const repsEl = row.querySelector('.e-reps'), minEl = row.querySelector('.e-min'), holdEl = row.querySelector('.e-hold'), charge = row.querySelector('.e-charge').value;
   const body = { charge: charge === '' ? null : parseFloat(charge) };
+  if(holdEl) body.hold_seconds = holdEl.value === '' ? null : Math.min(600, Math.max(0, parseInt(holdEl.value) || 0));
   if(repsEl) body.reps = repsEl.value === '' ? null : parseInt(repsEl.value);
   if(minEl){ const sec = (parseInt(minEl.value) || 0) * 60 + (parseInt(row.querySelector('.e-sec').value) || 0); body.duration_seconds = sec > 0 ? Math.min(sec, 86400) : null; row.dataset.dur = body.duration_seconds ?? ''; }
   try{
@@ -754,6 +756,14 @@ async function saveLogEdit(inp){
 function reloadSessionLogs(btn, sid){
   const card = btn.closest('.card'); if(!card) return;
   const box = card.querySelector('.logs'); box.style.display = 'none'; toggleSessionLogs(card, sid);
+}
+async function moveLogExercise(btn, sid, exId, dir){
+  let order; try{ order = JSON.parse(btn.dataset.order); }catch(e){ return; }
+  btn.disabled = true;
+  try{
+    await HSHistory.moveExercise(histReq, sid, order, exId, dir);
+    reloadSessionLogs(btn, sid);
+  }catch(e){ console.error(e); HSHistory.toast('Déplacement impossible. Réessaie.'); btn.disabled = false; }
 }
 async function addLogExercise(btn, sid){
   const ex = await HSHistory.pickExercise(histReq);
@@ -771,11 +781,13 @@ async function addLogSet(btn){
   if(!rows.length) return;
   const last = rows.reduce((m, r) => (+r.dataset.set > +m.dataset.set ? r : m), rows[0]);
   const num = v => v === '' || v == null ? null : Number(v);
-  const rv = last.querySelector('.e-reps'), cv = last.querySelector('.e-charge'), mv = last.querySelector('.e-min');
+  const rv = last.querySelector('.e-reps'), cv = last.querySelector('.e-charge'), mv = last.querySelector('.e-min'), hv = last.querySelector('.e-hold');
+  let sch = null; try{ sch = JSON.parse(btn.dataset.scheme || 'null'); }catch(e){}
+  const nxt = sch && sch[+last.dataset.set]; // série suivante prévue par la pyramide du programme
   const durNow = mv ? ((parseInt(mv.value) || 0) * 60 + (parseInt(last.querySelector('.e-sec').value) || 0)) : num(last.dataset.dur);
   btn.disabled = true;
   try{
-    await histReq('/rest/v1/session_logs', { method:'POST', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ session_id: sid, exercise_id: ex, set_number: +last.dataset.set + 1, reps: rv ? num(rv.value) : num(last.dataset.reps), charge: cv ? num(cv.value) : num(last.dataset.charge), duration_seconds: durNow || null }) });
+    await histReq('/rest/v1/session_logs', { method:'POST', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ session_id: sid, exercise_id: ex, set_number: +last.dataset.set + 1, reps: nxt ? nxt.reps : (rv ? num(rv.value) : num(last.dataset.reps)), charge: cv ? num(cv.value) : num(last.dataset.charge), duration_seconds: durNow || null, ...((nxt && nxt.hold) ? { hold_seconds: nxt.hold } : (hv && hv.value !== '' ? { hold_seconds: num(hv.value) } : {})) }) });
     HSHistory.toast('Série ajoutée : corrige les valeurs si besoin');
     reloadSessionLogs(btn, sid);
   }catch(e){ console.error(e); HSHistory.toast('Ajout impossible. Réessaie.'); btn.disabled = false; }
@@ -806,7 +818,7 @@ async function toggleSessionLogs(card, sessionId){
   box.innerHTML = '<div class="empty" style="padding:6px 0;">Chargement…</div>';
   let logs;
   try{
-    try{ logs = await histReq(`/rest/v1/session_logs?select=id,session_id,exercise_id,set_number,reps,charge,duration_seconds,distance_km,completed_at,exercises(name,category)&session_id=eq.${sessionId}&order=set_number`); }
+    try{ logs = await histReq(`/rest/v1/session_logs?select=id,session_id,exercise_id,set_number,reps,charge,duration_seconds,distance_km,hold_seconds,exercise_order,completed_at,exercises(name,category)&session_id=eq.${sessionId}&order=set_number`); }
     catch(e0){ logs = await histReq(`/rest/v1/session_logs?select=id,session_id,exercise_id,set_number,reps,charge,duration_seconds,completed_at,exercises(name,category)&session_id=eq.${sessionId}&order=set_number`); }
   }catch(e){ console.error(e); box.innerHTML = '<div class="empty">Impossible de charger le détail.</div>'; return; }
   logs = await HSHistory.orderLogs(logs, sessionId, histReq);
@@ -826,13 +838,14 @@ async function toggleSessionLogs(card, sessionId){
     if(!l.duration_seconds && l.reps && l.charge) totalVolume += l.reps * l.charge;
   });
   const editing = isEditing(s);
-  const rows = Object.entries(byExercise).map(([key, sets])=>{
+  const orderIds = [...new Set(logs.map(l => l.exercise_id))];
+  const rows = Object.entries(byExercise).map(([key, sets], bi)=>{
     const name = key.slice(key.indexOf('|') + 1);
     let body;
     if(editing){
       body = `<div class="set-rows">${sets.map(x =>
-        `<div class="set-row edit-row" data-id="${x.id}" data-ex="${x.exercise_id}" data-set="${x.set_number}" data-sid="${x.session_id}" data-reps="${x.reps ?? ''}" data-charge="${x.charge ?? ''}" data-dur="${x.duration_seconds ?? ''}"><span class="set-row-num">Série ${x.set_number}</span><span class="set-row-val">${(x.duration_seconds || x.timed) ? `<input class="e-min" type="number" inputmode="numeric" min="0" value="${x.duration_seconds ? Math.floor(x.duration_seconds/60) : ''}" placeholder="min" style="width:56px;" onchange="saveLogEdit(this)"> min <input class="e-sec" type="number" inputmode="numeric" min="0" max="59" value="${x.duration_seconds ? x.duration_seconds%60 : ''}" placeholder="s" style="width:56px;" onchange="saveLogEdit(this)"> s` : `<input class="e-reps" type="number" inputmode="numeric" value="${x.reps ?? ''}" placeholder="reps" style="width:64px;" onchange="saveLogEdit(this)">`} × <input class="e-charge" type="number" inputmode="decimal" step="0.5" value="${x.charge ?? ''}" placeholder="kg" style="width:72px;" onchange="saveLogEdit(this)"> kg <button type="button" class="btn btn-ghost btn-sm" aria-label="Retirer cette série" style="margin-left:6px;" onclick="removeLogSet(this)">🗑</button></span></div>`
-      ).join('')}</div><button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" data-ex="${sets[0].exercise_id}" data-sid="${sets[0].session_id}" onclick="addLogSet(this)">+ Ajouter une série</button>`;
+        `<div class="set-row edit-row" style="flex-wrap:wrap;gap:6px;" data-id="${x.id}" data-ex="${x.exercise_id}" data-set="${x.set_number}" data-sid="${x.session_id}" data-reps="${x.reps ?? ''}" data-charge="${x.charge ?? ''}" data-dur="${x.duration_seconds ?? ''}"><span class="set-row-num">Série ${x.set_number}${x.tgt ? `<br><small style="font-weight:500;opacity:.65;">objectif ${x.tgt.reps} rep${x.tgt.reps>1?'s':''}${x.tgt.hold ? ' · tenir ' + x.tgt.hold + ' s' : ''}</small>` : ''}</span><span class="set-row-val">${(x.duration_seconds || x.timed) ? `<input class="e-min" type="number" inputmode="numeric" min="0" value="${x.duration_seconds ? Math.floor(x.duration_seconds/60) : ''}" placeholder="min" style="width:56px;" onchange="saveLogEdit(this)"> min <input class="e-sec" type="number" inputmode="numeric" min="0" max="59" value="${x.duration_seconds ? x.duration_seconds%60 : ''}" placeholder="s" style="width:56px;" onchange="saveLogEdit(this)"> s` : `<input class="e-reps" type="number" inputmode="numeric" value="${x.reps ?? ''}" placeholder="${x.tgt ? x.tgt.reps : 'reps'}" style="width:64px;" onchange="saveLogEdit(this)">`} × <input class="e-charge" type="number" inputmode="decimal" step="0.5" value="${x.charge ?? ''}" placeholder="kg" style="width:72px;" onchange="saveLogEdit(this)"> kg ${(x.tgt || x.hold_seconds != null) ? `<input class="e-hold" type="number" inputmode="numeric" min="0" value="${x.hold_seconds ?? ''}" placeholder="${x.tgt && x.tgt.hold ? x.tgt.hold : 's'}" aria-label="Tenue en secondes" style="width:56px;" onchange="saveLogEdit(this)"> s tenue` : ''}<button type="button" class="btn btn-ghost btn-sm" aria-label="Retirer cette série" style="margin-left:6px;" onclick="removeLogSet(this)">🗑</button></span></div>`
+      ).join('')}</div><button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" data-ex="${sets[0].exercise_id}" data-sid="${sets[0].session_id}" data-scheme='${sets[0].tgt_all ? JSON.stringify(sets[0].tgt_all) : ''}' onclick="addLogSet(this)">+ Ajouter une série</button>`;
     } else {
       const filled = sets.filter(x => x.reps!=null || x.charge!=null || x.duration_seconds);
       body = !filled.length ? `<div class="set-rows-empty">Rien noté pour cet exercice.</div>` :
@@ -842,7 +855,8 @@ async function toggleSessionLogs(card, sessionId){
     }
     const tm = name.match(/^\u0002([^\u0002]*)\u0002/), tag = tm ? tm[1] : '';
     const [shown, fiche] = name.replace(/^\u0002[^\u0002]*\u0002/, '').split('\u0001');
-    return `<div style="margin-bottom:16px;"><div style="font-weight:700;font-size:15px;margin-bottom:6px;">${tag ? `<span style="display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:999px;border:1px solid currentColor;vertical-align:middle;margin-right:6px;">SUPERSET ${escapeHtml(tag)}</span>` : ''}${escapeHtml(shown)}${fiche ? ` <span style="font-weight:500;font-size:12px;opacity:.6;">· fiche : ${escapeHtml(fiche)}</span>` : ''}</div>${body}</div>`;
+    const mv = editing ? `<span style="margin-left:auto;display:inline-flex;gap:6px;flex:none;"><button type="button" class="btn btn-ghost btn-sm" ${bi === 0 ? 'disabled' : ''} aria-label="Monter cet exercice" title="Monter" onclick="moveLogExercise(this,'${sets[0].session_id}','${sets[0].exercise_id}',-1)" data-order='${JSON.stringify(orderIds)}'>↑</button><button type="button" class="btn btn-ghost btn-sm" ${bi === orderIds.length - 1 ? 'disabled' : ''} aria-label="Descendre cet exercice" title="Descendre" onclick="moveLogExercise(this,'${sets[0].session_id}','${sets[0].exercise_id}',1)" data-order='${JSON.stringify(orderIds)}'>↓</button></span>` : '';
+    return `<div style="margin-bottom:16px;"><div style="font-weight:700;font-size:15px;margin-bottom:6px;display:flex;align-items:center;gap:6px;"><span style="min-width:0;">${tag ? `<span style="display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:999px;border:1px solid currentColor;vertical-align:middle;margin-right:6px;">SUPERSET ${escapeHtml(tag)}</span>` : ''}${escapeHtml(shown)}${fiche ? ` <span style="font-weight:500;font-size:12px;opacity:.6;">· fiche : ${escapeHtml(fiche)}</span>` : ''}</span>${mv}</div>${body}</div>`;
   }).join('');
   const addExBtn = editing ? `<button type="button" class="btn btn-ghost" style="width:100%;justify-content:center;margin:4px 0 14px;" onclick="addLogExercise(this,'${s.id}')">➕ Ajouter un exercice</button>` : '';
   const volumeLine = totalVolume ? `<div class="log-line" style="border-top:1px solid var(--line);padding-top:12px;margin-top:4px;font-size:14px;"><span>Poids total soulevé pendant la séance</span><b>${Math.round(totalVolume).toLocaleString('fr-FR')} kg</b></div>` : '';

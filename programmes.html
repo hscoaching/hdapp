@@ -99,6 +99,12 @@
   .ex-meta.ss-head{font-weight:700; margin:16px 4px 6px; letter-spacing:.01em;}
   .var-link{display:inline-block; cursor:pointer; padding:6px 0; color:var(--ink);}
   .set-grid{margin-top:12px; display:flex; flex-direction:column; gap:10px;}
+  .sch-pills{display:flex; flex-wrap:wrap; gap:6px; margin-top:6px; align-items:stretch;}
+  .sch-pill{display:inline-flex; flex-direction:column; align-items:center; justify-content:center; min-width:58px; padding:6px 10px; border:1px solid var(--line); background:var(--surface-2,rgba(255,255,255,.04)); line-height:1.15; text-align:center;}
+  .sch-pill b{font-size:20px; font-weight:700;}
+  .sch-pill small{font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; color:var(--ink-muted);}
+  .sch-pill em{font-style:normal; font-size:11.5px; color:var(--accent); margin-top:2px;}
+  .sch-note{display:inline-flex; align-items:center; padding:6px 10px; border:1px solid var(--accent); font-weight:700; font-size:14px;}
   .set-target{font-size:12px; color:var(--ink-muted); margin:6px 0 -4px 30px; font-weight:600;}
   .set-line{display:flex; align-items:center; gap:6px; font-size:13px;}
   .set-line .setnum{width:24px; color:var(--ink-muted); flex:none; font-weight:700;}
@@ -414,10 +420,11 @@ async function lastLogsFor(programId, dayLabel){
   }
   return rpc('guest_last_session_logs_day', { p_token: TOKEN, p_program_id: programId, p_day_label: dayLabel||null });
 }
-async function logSetFor(sessionId, exId, setNum, reps, charge, durationSec, distanceKm){
+async function logSetFor(sessionId, exId, setNum, reps, charge, durationSec, distanceKm, holdSec){
   if(isLoggedIn()){
     const body = { session_id: sessionId, exercise_id: exId, set_number: setNum, reps, charge, duration_seconds: durationSec || null };
     if(distanceKm) body.distance_km = distanceKm;
+    if(holdSec) body.hold_seconds = holdSec; // séries variables (tempo) : tenue en secondes
     const res = await authedFetch('/rest/v1/session_logs', { method:'POST', body: JSON.stringify(body) });
     if(!res.ok) throw new Error('log_failed');
     return res;
@@ -535,6 +542,10 @@ function schemeText(sc){
   return `${sc.sets.length} séries : ` + sc.sets.map(x=> `${x.reps} rep${x.reps>1?'s':''}` + (x.hold ? ` (${x.hold} s)` : '')).join(' · ') + (sc.note ? ' · ' + sc.note : '');
 }
 // « 5 séries × 10 » ou, pour des séries variables, le détail série par série
+// Séries variables : une pastille par série (reps + tenue), la note (ex : 45°) en tête — bien plus lisible qu'une longue phrase
+function schemePills(sc){
+  return `<div class="sch-pills">${sc.note ? `<span class="sch-note">${escHtml(sc.note)}</span>` : ''}${sc.sets.map(x=>`<span class="sch-pill"><b>${x.reps}</b><small>${x.reps>1?'reps':'rep'}</small>${x.hold ? `<em>tenir ${x.hold} s</em>` : ''}</span>`).join('')}</div>`;
+}
 function setsRepsText(sets, reps){ const sc = parseScheme(reps); return sc ? schemeText(sc) : `${sets||'-'} séries × ${reps||'-'}`; }
 function showRestAt(list, i){ const it = list[i]; if(!it || it.superset_group == null) return true; const n = list[i+1]; return !(n && n.superset_group === it.superset_group); }
 // Un superset = un bloc : séries, reps et repos sont annoncés une seule fois, dans un en-tête de bloc
@@ -964,7 +975,7 @@ async function renderProgramDetail(programId){
     return `<div class="ex-row ${tag?'in-ss':''}" style="cursor:pointer" onclick="openExFiche('${ex.id}')">
       <div class="ex-row-top">
         <div><div class="ex-name">${tag?`<span class="ss-chip">SUPERSET ${tag}</span> `:''}${escHtml(it.custom_name || ex.name)}</div>
-        ${meta?`<div class="ex-meta">${escHtml(meta)}</div>`:''}
+        ${parseScheme(it.reps) ? schemePills(parseScheme(it.reps)) + ((!tag && withRest && restLabel(it.rest_seconds)) ? `<div class="ex-meta">repos ${escHtml(restLabel(it.rest_seconds))}</div>` : '') : (meta?`<div class="ex-meta">${escHtml(meta)}</div>`:'')}
         ${vex?`<div class="ex-meta var-link" onclick="event.stopPropagation(); openExFiche('${vex.id}')">↔ Variante : <u>${escHtml(vex.name)}</u> · voir la fiche ›</div>`:''}</div>
       </div>
     </div>`;
@@ -1204,6 +1215,7 @@ async function renderSession(programId, dayIdx, manual){
         <span class="unit">reps</span>
         <input type="number" inputmode="decimal" placeholder="${phc||'kg'}" class="charge-input">
         <span class="unit">kg</span>
+        ${(tg && tg.hold) ? `<input type="number" inputmode="numeric" min="0" placeholder="${tg.hold}" class="hold-input" aria-label="Tenue en secondes"><span class="unit">s</span>` : ''}
         ${manual ? '' : '<button class="valid" onclick="validateSet(this)" aria-label="Valider la série">✓</button>'}
       </div>`;
   };
@@ -1291,6 +1303,7 @@ async function renderSession(programId, dayIdx, manual){
       if(!line) return;
       if(v.reps!=null) line.querySelector('.reps-input').value = v.reps;
       if(v.charge!=null) line.querySelector('.charge-input').value = v.charge;
+      if(v.hold && line.querySelector('.hold-input')) line.querySelector('.hold-input').value = v.hold;
       if(v.sec && line.querySelector('.min-input')){ line.querySelector('.min-input').value = Math.floor(v.sec/60); line.querySelector('.sec-input').value = v.sec%60; }
       if(v.dist && line.querySelector('.dist-input')){ line.querySelector('.dist-input').value = v.dist; updPace(line.querySelector('.dist-input')); }
       line.querySelector('.valid').classList.add('done');
@@ -1301,7 +1314,7 @@ async function renderSession(programId, dayIdx, manual){
       const [k,setNum] = key.split('|');
       const line = document.querySelector(`.set-line[data-slot="${k}"][data-set="${setNum}"]`);
       if(!line || line.querySelector('.valid').classList.contains('done')) return;
-      ['reps','charge','min','sec','dist'].forEach(c=>{ const inp = line.querySelector('.'+c+'-input'); if(inp && v[c] !== '' && v[c] != null) inp.value = v[c]; });
+      ['reps','charge','min','sec','dist','hold'].forEach(c=>{ const inp = line.querySelector('.'+c+'-input'); if(inp && v[c] !== '' && v[c] != null) inp.value = v[c]; });
     });
     // filet de sécurité : séries déjà enregistrées côté serveur mais absentes de la copie locale
     if(isLoggedIn()){
@@ -1330,7 +1343,7 @@ async function renderSession(programId, dayIdx, manual){
     if(!line || !activeMeta) return;
     const g = c => { const i = line.querySelector('.'+c+'-input'); return i ? i.value : ''; };
     activeMeta.draft = activeMeta.draft || {};
-    activeMeta.draft[`${line.dataset.slot}|${line.dataset.set}`] = { reps:g('reps'), charge:g('charge'), min:g('min'), sec:g('sec'), dist:g('dist') };
+    activeMeta.draft[`${line.dataset.slot}|${line.dataset.set}`] = { reps:g('reps'), charge:g('charge'), min:g('min'), sec:g('sec'), dist:g('dist'), hold:g('hold') };
     saveActive();
   };
   sessTick = setInterval(sessTickFn, 250);
@@ -1369,19 +1382,17 @@ function openAddExercise(){
   const m = document.createElement('div');
   m.id = 'addExModal';
   m.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.75);display:flex;align-items:flex-end;justify-content:center;';
-  m.innerHTML = `<div style="background:var(--bg,#0b0b0d);border:1px solid var(--line);width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;padding:16px;">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h2 style="font-size:20px;margin:0;">Ajouter un exercice</h2><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('addExModal').remove()" aria-label="Fermer">✕</button></div>
-    <input id="addExSearch" type="text" placeholder="Chercher : nom, muscle…" style="width:100%;background:var(--surface);border:1px solid var(--line);color:var(--ink);padding:12px;font-family:inherit;margin-bottom:8px;">
-    <div id="addExList" style="overflow:auto;flex:1;"></div></div>`;
+  // mêmes filtres par muscle et mêmes images que dans l'éditeur de programme
+  m.innerHTML = `<div style="background:var(--bg,#0b0b0d);border:1px solid var(--line);width:100%;max-width:600px;max-height:92vh;display:flex;flex-direction:column;padding:14px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h2 style="font-size:20px;margin:0;">Ajouter un exercice</h2><button type="button" class="btn btn-ghost btn-sm" onclick="closeAddExercise()" aria-label="Fermer">✕</button></div>
+    <div id="pChips" class="fchips" style="margin-bottom:8px;"></div><div id="pSubchips" class="fchips" style="margin-bottom:8px;display:none;"></div>
+    <input id="pSearch" type="text" placeholder="Nom, catégorie, muscle…" oninput="filterPickEx()" style="width:100%;background:var(--surface);border:1px solid var(--line);color:var(--ink);padding:12px;font-family:inherit;">
+    <div id="pickExGrid" class="pick-ex-grid" style="max-height:none;flex:1;align-content:start;"></div></div>`;
   document.body.appendChild(m);
-  const norm = t => String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
-  const draw = ()=>{
-    const q = norm(document.getElementById('addExSearch').value);
-    const list = exercises.filter(e=> !q || norm(e.name + ' ' + (e.category||'') + ' ' + (e.primary_muscles||[]).join(' ')).includes(q)).slice(0, 40);
-    document.getElementById('addExList').innerHTML = list.length ? list.map(e=>`<button type="button" class="btn btn-ghost" style="width:100%;justify-content:flex-start;text-align:left;margin-bottom:6px;" onclick="addExerciseToSession('${e.id}')">${escHtml(e.name)}<span style="opacity:.6;font-size:12px;margin-left:8px;">${escHtml(e.category||'')}</span></button>`).join('') : '<div class="empty">Aucun exercice trouvé.</div>';
-  };
-  document.getElementById('addExSearch').oninput = draw; draw();
+  pickMode = 'session'; pickGroup = 'Tous'; pickMuscle = null; selectedPickExId = null;
+  renderPickChips(); renderPickExGrid(exercises);
 }
+function closeAddExercise(){ pickMode = 'editor'; const m = document.getElementById('addExModal'); if(m) m.remove(); }
 async function addExerciseToSession(exId){
   if(!activeMeta || !exercisesById[exId]) return;
   const r = prompt('Combien de séries ?', '3');
@@ -1390,7 +1401,7 @@ async function addExerciseToSession(exId){
   if(!(n > 0 && n <= 20)){ toast('Nombre de séries illisible (1 à 20)'); return; }
   activeMeta.extraEx = (activeMeta.extraEx || []).concat([{ exercise_id: exId, sets: n }]);
   activeMeta.touched = true; saveActive();
-  const m = document.getElementById('addExModal'); if(m) m.remove();
+  closeAddExercise();
   await reloadSession();
   setTimeout(()=>window.scrollTo(0, document.body.scrollHeight), 100);
   toast('Exercice ajouté à la séance');
@@ -1443,6 +1454,7 @@ async function validateSetInner(btn){
   const timed = line.dataset.timed === '1';
   let reps = repsOf(line);
   let charge = parseFloat(line.querySelector('.charge-input').value) || null;
+  const hi = line.querySelector('.hold-input'); let hold = hi ? (parseInt(hi.value) || parseInt(hi.placeholder) || null) : null; // tenue tapée, sinon l'objectif
   let sec = null;
   if(timed){
     reps = null; if(line.querySelector('.charge-input').style.display === 'none') charge = null;
@@ -1459,12 +1471,12 @@ async function validateSetInner(btn){
   const di = line.querySelector('.dist-input'); let dist = di ? (parseFloat(di.value) || null) : null; if(dist != null) dist = Math.min(Math.round(dist * 100) / 100, 500);
   try{
     btn.classList.remove('err');
-    try{ await logSetFor(activeSession, exId, setNum, reps, charge, sec, dist); }
-    catch(e1){ if(e1 instanceof TypeError){ await new Promise(r=>setTimeout(r,900)); await logSetFor(activeSession, exId, setNum, reps, charge, sec, dist); } else throw e1; }
+    try{ await logSetFor(activeSession, exId, setNum, reps, charge, sec, dist, hold); }
+    catch(e1){ if(e1 instanceof TypeError){ await new Promise(r=>setTimeout(r,900)); await logSetFor(activeSession, exId, setNum, reps, charge, sec, dist, hold); } else throw e1; }
     btn.classList.add('done');
     suggestRest(line.dataset.slot);
     sessDone[`${exId}_${setNum}`] = (reps && charge) ? reps*charge : 0;
-    if(activeMeta){ activeMeta.done = activeMeta.done || {}; activeMeta.done[`${line.dataset.slot}|${setNum}`] = { reps, charge, sec, dist }; saveActive(); }
+    if(activeMeta){ activeMeta.done = activeMeta.done || {}; activeMeta.done[`${line.dataset.slot}|${setNum}`] = { reps, charge, sec, dist, hold }; saveActive(); }
   }catch(e){ console.error(e); btn.classList.add('err'); toast('⚠ Série NON enregistrée (connexion ?). Appuie de nouveau sur ✓'); }
 }
 
@@ -1730,6 +1742,7 @@ async function saveManualSession(programId){
     reps: (parseInt(l.querySelector('.reps-input').value) || (parseFloat(l.querySelector('.charge-input').value) ? repsOf(l) : null)) || null,
     charge: parseFloat(l.querySelector('.charge-input').value) || null,
     sec: l.dataset.timed === '1' ? Math.min(86400, (parseInt(l.querySelector('.min-input').value) || 0) * 60 + (parseInt(l.querySelector('.sec-input').value) || 0)) || null : null,
+    hold: (l.querySelector('.hold-input') && (parseInt(l.querySelector('.hold-input').value) || (l.querySelector('.charge-input').value || l.querySelector('.reps-input').value ? parseInt(l.querySelector('.hold-input').placeholder) : 0))) || null,
     dist: (l.querySelector('.dist-input') && parseFloat(l.querySelector('.dist-input').value)) ? Math.min(500, Math.round(parseFloat(l.querySelector('.dist-input').value) * 100) / 100) : null
   })).filter(e=> e.reps || e.charge || e.sec);
   if(!entries.length){ toast('Renseigne au moins une série'); return; }
@@ -1746,7 +1759,7 @@ async function saveManualSession(programId){
   let sid;
   try{
     sid = await addPastSessionFor(programId, activeDayLabel, startDt.toISOString(), durSec);
-    const results = await Promise.all(entries.map(e=> logSetFor(sid, e.exId, e.setNum, e.reps, e.charge, e.sec, e.dist)));
+    const results = await Promise.all(entries.map(e=> logSetFor(sid, e.exId, e.setNum, e.reps, e.charge, e.sec, e.dist, e.hold)));
     if(results.some(r=> r && r.ok === false)) throw new Error('log_failed');
     await completeSessionFor(sid, durSec);
   }catch(e){ console.error(e); toast('Erreur, réessaie'); btn.disabled = false; return; }
@@ -1771,7 +1784,9 @@ function pickExGridHtml(list){
 function renderPickExGrid(list){
   document.getElementById('pickExGrid').innerHTML = pickExGridHtml(list);
 }
+let pickMode = 'editor';
 function selectPickEx(exId){
+  if(pickMode === 'session'){ addExerciseToSession(exId); return; }
   selectedPickExId = exId;
   [...document.querySelectorAll('.pick-ex-card')].forEach(c=> c.classList.toggle('selected', c.dataset.id===exId));
 }

@@ -193,9 +193,26 @@
 
   // Remet les exercices d'une séance dans l'ordre du programme (puis, pour les exercices ajoutés ou hors programme, dans l'ordre où ils ont été faits).
   // Sans cela, l'affichage dépendait de l'ordre interne de la base et mélangeait les exercices.
+  // « ~5/5,4/4,3/3,2/2,1|45° » -> séries variables (même format que programmes.html)
+  function parseScheme(r){
+    if(typeof r !== 'string' || r.charAt(0) !== '~') return null;
+    const [list, note] = r.slice(1).split('|');
+    const sets = (list || '').split(',').map(t => { const [a, b] = t.trim().split('/'); const reps = parseInt(a), hold = parseInt(b); return reps > 0 ? { reps, hold: hold > 0 ? hold : 0 } : null; }).filter(Boolean);
+    return sets.length ? { sets, note: (note || '').trim() } : null;
+  }
+  // Déplace un exercice (-1 = monter, +1 = descendre) et enregistre le nouvel ordre de toute la séance. Renvoie la nouvelle liste d'ids.
+  async function moveExercise(req, sessionId, orderedIds, exId, dir){
+    const ids = orderedIds.slice(), i = ids.indexOf(exId), j = i + dir;
+    if(i < 0 || j < 0 || j >= ids.length) return ids;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    for(let k = 0; k < ids.length; k++){
+      await req(`/rest/v1/session_logs?session_id=eq.${sessionId}&exercise_id=eq.${ids[k]}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ exercise_order: k + 1 }) });
+    }
+    return ids;
+  }
   async function orderLogs(logs, sessionId, req){
     const list = Array.isArray(logs) ? logs.slice() : [];
-    const rank = {}, custom = {}, timed = {}, sst = {};
+    const rank = {}, custom = {}, timed = {}, sst = {}, scheme = {};
     try{
       const ss = await req(`/rest/v1/sessions?select=program_id,day_label&id=eq.${sessionId}`);
       const s = ss && ss[0];
@@ -214,50 +231,85 @@
           if(x.variant_exercise_id && sst[x.variant_exercise_id] == null) sst[x.variant_exercise_id] = String.fromCharCode(65 + letter) + pos;
         });
         dayPe.forEach((x, i) => {
-          if(rank[x.exercise_id] == null){ rank[x.exercise_id] = i; if(x.custom_name) custom[x.exercise_id] = x.custom_name; if(x.reps && x.reps.charAt(0) !== '~' && /\d\s*(min|sec|s\b|m\b|'|")/i.test(x.reps)) timed[x.exercise_id] = true; }
+          if(rank[x.exercise_id] == null){ rank[x.exercise_id] = i; if(x.reps && x.reps.charAt(0) === '~'){ const sc = parseScheme(x.reps); if(sc) scheme[x.exercise_id] = sc; } if(x.custom_name) custom[x.exercise_id] = x.custom_name; if(x.reps && x.reps.charAt(0) !== '~' && /\d\s*(min|sec|s\b|m\b|'|")/i.test(x.reps)) timed[x.exercise_id] = true; }
           if(x.variant_exercise_id && rank[x.variant_exercise_id] == null) rank[x.variant_exercise_id] = i + 0.5;
         });
       }
     }catch(e){ console.error(e); }
-    list.forEach(l => { if(sst[l.exercise_id]) l.ss_tag = sst[l.exercise_id]; if(custom[l.exercise_id]) l.custom_name = custom[l.exercise_id]; if(timed[l.exercise_id] || (l.exercises && String(l.exercises.category||'').toLowerCase() === 'cardio')) l.timed = true; });
+    list.forEach(l => { const sc = scheme[l.exercise_id]; if(sc && sc.sets[l.set_number - 1]){ l.tgt = sc.sets[l.set_number - 1]; l.tgt_note = sc.note; l.tgt_all = sc.sets; } if(sst[l.exercise_id]) l.ss_tag = sst[l.exercise_id]; if(custom[l.exercise_id]) l.custom_name = custom[l.exercise_id]; if(timed[l.exercise_id] || (l.exercises && String(l.exercises.category||'').toLowerCase() === 'cardio')) l.timed = true; });
     const first = {};
     list.forEach(l => { const t = l.completed_at ? Date.parse(l.completed_at) : 0; if(first[l.exercise_id] == null || t < first[l.exercise_id]) first[l.exercise_id] = t; });
-    const R = l => rank[l.exercise_id] == null ? 1e6 : rank[l.exercise_id];
+    // ordre choisi à la main (exercise_order) d'abord ; sinon ordre du programme ; puis exercices hors programme
+    const ord = {}; list.forEach(l => { if(l.exercise_order != null) ord[l.exercise_id] = l.exercise_order; });
+    const R = l => ord[l.exercise_id] != null ? ord[l.exercise_id] : 1000 + (rank[l.exercise_id] == null ? 1e6 : rank[l.exercise_id]);
     return list.sort((a, b) => (R(a) - R(b)) || (first[a.exercise_id] - first[b.exercise_id]) || String(a.exercise_id).localeCompare(String(b.exercise_id)) || (a.set_number - b.set_number) || (Date.parse(a.completed_at || 0) - Date.parse(b.completed_at || 0)));
   }
 
-  // Fenêtre de recherche d'un exercice (ajout d'un exercice à une séance passée). Renvoie l'id choisi, ou null si annulé.
+  // Fenêtre de choix d'un exercice (ajout à une séance passée) : filtres par muscle + images, comme dans l'éditeur de programme.
+  // Renvoie l'id choisi, ou null si annulé. Les filtres utilisent muscles.js / admin-programmes.js lorsqu'ils sont chargés.
   let EXLIST = null;
   async function pickExercise(req){
     if(!EXLIST){
-      try{ EXLIST = await req('/rest/v1/exercises?select=id,name,category,primary_muscles&order=name&limit=2000') || []; }
+      try{ EXLIST = await req('/rest/v1/exercises?select=id,name,category,primary_muscles,secondary_muscles,image_url,image_start_url,image_peak_url&order=name&limit=2000') || []; }
       catch(e){ console.error(e); toast("Liste des exercices indisponible. Réessaie."); return null; }
     }
-    const norm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const norm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+    const hasF = typeof pickMatchesGroup === 'function' && typeof pickMuscleLabels === 'function' && typeof GROUPS !== 'undefined';
+    if(!document.getElementById('hsPickCss')){
+      const st = document.createElement('style'); st.id = 'hsPickCss';
+      st.textContent = `
+        .hsp-chips{display:flex; gap:6px; flex-wrap:wrap; margin-bottom:8px;}
+        .hsp-chip{background:var(--surface-2,#1f2024); border:1px solid var(--line,#2c2c30); color:var(--ink-muted,#9a9a9e); border-radius:99px; padding:6px 12px; font-size:12.5px; font-weight:600; cursor:pointer; font-family:inherit;}
+        .hsp-chip.on{background:var(--accent,#fff); border-color:var(--accent,#fff); color:var(--accent-ink,#0b0b0c);}
+        .hsp-grid{align-content:start; display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:8px; overflow-y:auto; flex:1; padding:2px;}
+        .hsp-card{display:flex; flex-direction:column; align-items:center; gap:5px; background:var(--surface-2,#1f2024); border:1.5px solid var(--line,#2c2c30); border-radius:10px; padding:6px; cursor:pointer; text-align:center; font-family:inherit; font-size:10.5px; color:var(--ink,#f5f5f5);}
+        .hsp-card:hover,.hsp-card:focus{border-color:var(--accent,#fff);}
+        .hsp-card img{width:100%; aspect-ratio:1/1; object-fit:cover; border-radius:6px; background:var(--surface,#16171a);}
+        .hsp-card i{width:100%; aspect-ratio:1/1; border-radius:6px; background:var(--surface,#16171a); display:flex; align-items:center; justify-content:center; color:var(--ink-muted,#9a9a9e); font-size:9px; font-style:normal; text-transform:uppercase; letter-spacing:.05em; padding:4px; box-sizing:border-box;}
+        .hsp-card span{display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden; line-height:1.2;}`;
+      document.head.appendChild(st);
+    }
     return new Promise(resolve => {
+      let g = 'Tous', mu = null;
       const m = document.createElement('div');
-      m.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:16px;';
-      m.innerHTML = `<div style="background:var(--surface,#16171a);color:var(--ink,#f5f5f5);border:1px solid var(--line,#2c2c30);width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column;padding:16px;">
+      m.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:12px;';
+      m.innerHTML = `<div style="background:var(--surface,#16171a);color:var(--ink,#f5f5f5);border:1px solid var(--line,#2c2c30);width:100%;max-width:560px;height:88vh;display:flex;flex-direction:column;padding:14px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><b style="font-size:17px;">Ajouter un exercice</b><button type="button" data-x aria-label="Fermer" style="background:none;border:1px solid var(--line,#2c2c30);color:inherit;padding:4px 10px;cursor:pointer;">✕</button></div>
         <input type="text" placeholder="Chercher : nom, muscle…" style="width:100%;box-sizing:border-box;background:var(--surface-2,#1f2024);border:1px solid var(--line,#2c2c30);color:inherit;padding:12px;font:inherit;margin-bottom:8px;">
-        <div data-list style="overflow:auto;flex:1;"></div></div>`;
+        <div data-chips class="hsp-chips"></div><div data-sub class="hsp-chips" style="display:none;"></div>
+        <div data-list class="hsp-grid"></div></div>`;
       document.body.appendChild(m);
       const done = id => { m.remove(); resolve(id); };
-      const list = m.querySelector('[data-list]'), inp = m.querySelector('input');
+      const grid = m.querySelector('[data-list]'), inp = m.querySelector('input'), chips = m.querySelector('[data-chips]'), sub = m.querySelector('[data-sub]');
+      const drawChips = () => {
+        if(!hasF){ chips.style.display = 'none'; return; }
+        chips.innerHTML = ['Tous', ...GROUPS].map(x => `<button type="button" class="hsp-chip${x === g ? ' on' : ''}" data-g="${esc(x)}">${esc(x)}</button>`).join('');
+        if(g === 'Tous'){ sub.style.display = 'none'; sub.innerHTML = ''; return; }
+        const c = {};
+        EXLIST.filter(e => pickMatchesGroup(e, g)).forEach(e => pickMuscleLabels(e, g).forEach(l => c[l] = (c[l] || 0) + 1));
+        let ms = Object.keys(c).sort((a, b) => c[b] - c[a]);
+        if(g === 'Pectoraux' && typeof PEC_ORDER !== 'undefined') ms = PEC_ORDER.filter(x => c[x]);
+        if(!ms.length){ sub.style.display = 'none'; sub.innerHTML = ''; return; }
+        sub.style.display = 'flex';
+        sub.innerHTML = ['Tous', ...ms].map(x => `<button type="button" class="hsp-chip${(x === 'Tous' ? mu === null : mu === x) ? ' on' : ''}" data-m="${x === 'Tous' ? '' : esc(x)}">${esc(x)}</button>`).join('');
+      };
       const draw = () => {
         const q = norm(inp.value);
-        const r = EXLIST.filter(e => !q || norm(e.name + ' ' + (e.category || '') + ' ' + (e.primary_muscles || []).join(' ')).includes(q)).slice(0, 40);
-        list.innerHTML = r.length ? r.map(e => `<button type="button" data-id="${esc(e.id)}" style="display:block;width:100%;text-align:left;background:none;border:1px solid var(--line,#2c2c30);color:inherit;padding:10px 12px;margin-bottom:6px;font:inherit;cursor:pointer;">${esc(e.name)} <span style="opacity:.6;font-size:12px;">${esc(e.category || '')}</span></button>`).join('') : '<div style="opacity:.7;padding:10px;">Aucun exercice trouvé.</div>';
+        let base = EXLIST;
+        if(hasF){ base = base.filter(e => pickMatchesGroup(e, g)); if(g !== 'Tous' && mu) base = base.filter(e => pickMuscleLabels(e, g).includes(mu)); }
+        const r = (!q ? base : base.filter(e => norm(e.name).includes(q) || norm(e.category).includes(q) || (e.primary_muscles || []).some(x => norm(x).includes(q)) || (e.secondary_muscles || []).some(x => norm(x).includes(q)))).slice(0, 120);
+        grid.innerHTML = r.length ? r.map(e => { const im = e.image_start_url || e.image_url || e.image_peak_url; return `<button type="button" class="hsp-card" data-id="${esc(e.id)}">${im ? `<img src="${esc(im)}" alt="" loading="lazy" onerror="this.outerHTML='<i>${esc(e.category || '')}</i>'">` : `<i>${esc(e.category || '')}</i>`}<span>${esc(e.name)}</span></button>`; }).join('') : '<div style="opacity:.7;padding:10px;grid-column:1/-1;">Aucun exercice trouvé.</div>';
       };
-      inp.oninput = draw; draw();
-      list.onclick = ev => { const b = ev.target.closest('[data-id]'); if(b) done(b.dataset.id); };
+      chips.onclick = ev => { const b = ev.target.closest('[data-g]'); if(!b) return; g = b.dataset.g; mu = null; drawChips(); draw(); };
+      sub.onclick = ev => { const b = ev.target.closest('[data-m]'); if(!b) return; mu = b.dataset.m || null; drawChips(); draw(); };
+      inp.oninput = draw; drawChips(); draw();
+      grid.onclick = ev => { const b = ev.target.closest('[data-id]'); if(b) done(b.dataset.id); };
       m.querySelector('[data-x]').onclick = () => done(null);
       m.onclick = ev => { if(ev.target === m) done(null); };
-      setTimeout(() => inp.focus(), 50);
     });
   }
 
-  window.HSHistory = { confirmDelete, exportPdf, requestEdit, toast, orderLogs, pickExercise };
+  window.HSHistory = { confirmDelete, exportPdf, requestEdit, toast, orderLogs, pickExercise, moveExercise, parseScheme };
 })();
 
 ;try{window.__hs_his='HSC-HST-2026-10-C9B4';}catch(e){}

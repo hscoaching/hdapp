@@ -346,7 +346,7 @@ function renderClientLogs(box, logs){
       const m = x.duration_seconds ? Math.floor(x.duration_seconds/60) : '', sc = x.duration_seconds ? x.duration_seconds%60 : '';
       return `<div class="set-row cs-edit" data-id="${x.id}" style="flex-wrap:wrap;gap:6px;"><span class="set-row-num">Série ${x.set_number}</span><span class="set-row-val" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;">${inp('c-reps',x.reps,'reps',58)}<span>reps</span>${inp('c-kg',x.charge,'kg',66,'0.5')}<span>kg</span>${inp('c-min',m,'min',54)}<span>min</span>${inp('c-sec',sc,'s',50)}<span>s</span><button type="button" class="btn btn-accent btn-sm" onclick="saveClientLog(this)">Enregistrer</button><button type="button" class="btn btn-ghost btn-sm" aria-label="Retirer cette série" onclick="removeClientSet(this)">🗑</button></span></div>`;
     }).join('')}</div>`;
-    return `<div style="margin-bottom:14px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;"><div style="font-weight:700;font-size:14px;">${escapeHtml(n)}</div><button type="button" class="btn btn-ghost btn-sm" data-ex="${sets[0].exercise_id}" onclick="changeClientExercise(this)">🔄 Changer d'exercice</button></div>${body}<button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px" data-ex="${sets[0].exercise_id}" onclick="addClientSet(this)">+ Ajouter une série</button></div>`;
+    return `<div style="margin-bottom:14px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;"><div style="font-weight:700;font-size:14px;">${escapeHtml(n)}</div><span style="display:inline-flex;gap:6px;flex:none;"><button type="button" class="btn btn-ghost btn-sm" aria-label="Monter cet exercice" title="Monter" data-ex="${sets[0].exercise_id}" onclick="moveClientExercise(this,-1)">↑</button><button type="button" class="btn btn-ghost btn-sm" aria-label="Descendre cet exercice" title="Descendre" data-ex="${sets[0].exercise_id}" onclick="moveClientExercise(this,1)">↓</button><button type="button" class="btn btn-ghost btn-sm" data-ex="${sets[0].exercise_id}" onclick="changeClientExercise(this)">🔄 Changer d'exercice</button></span></div>${body}<button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px" data-ex="${sets[0].exercise_id}" onclick="addClientSet(this)">+ Ajouter une série</button></div>`;
   }).join('') + `<button type="button" class="btn btn-ghost" style="width:100%;justify-content:center;margin:2px 0 12px;" onclick="addClientExercise(this)">➕ Ajouter un exercice</button><div class="cs-total" style="border-top:1px solid var(--line);padding-top:10px;font-size:13.5px;display:${vol?'flex':'none'};justify-content:space-between;"><span>Poids total soulevé</span><b>${Math.round(vol).toLocaleString('fr-FR')} kg</b></div>`;
 }
 async function changeClientExercise(btn){
@@ -427,6 +427,18 @@ async function addClientSet(btn){
     renderClientLogs(box, box._logs); toast('Série ajoutée (copie de la précédente, corrige puis Enregistrer)');
   }catch(e){ console.error(e); toast('Ajout impossible, réessaie'); btn.disabled = false; }
 }
+async function moveClientExercise(btn, dir){
+  const box = btn.closest('.cs-logs'); const logs = box._logs || []; if(!logs.length) return;
+  const order = [...new Set(logs.map(l => l.exercise_id))];
+  if(order.indexOf(btn.dataset.ex) + dir < 0 || order.indexOf(btn.dataset.ex) + dir >= order.length) return;
+  btn.disabled = true;
+  try{
+    const ids = await HSHistory.moveExercise(api, logs[0].session_id, order, btn.dataset.ex, dir);
+    logs.forEach(l => { l.exercise_order = ids.indexOf(l.exercise_id) + 1; });
+    logs.sort((a, b) => (a.exercise_order - b.exercise_order) || (a.set_number - b.set_number));
+    renderClientLogs(box, logs);
+  }catch(e){ console.error(e); toast('Déplacement impossible, réessaie'); btn.disabled = false; }
+}
 async function addClientExercise(btn){
   const box = btn.closest('.cs-logs'); const first = (box._logs || [])[0]; if(!first) return;
   const ex = await HSHistory.pickExercise(api);
@@ -478,7 +490,7 @@ async function toggleClientSession(card, sessionId){
   if(box.dataset.loaded) return;
   box.innerHTML = '<div class="empty" style="padding:6px 0;">Chargement…</div>';
   try{
-    let logs = await api(`/rest/v1/session_logs?select=id,session_id,exercise_id,set_number,reps,charge,duration_seconds,completed_at,exercises(name,category)&session_id=eq.${sessionId}&order=set_number,id`);
+    let logs = await api(`/rest/v1/session_logs?select=id,session_id,exercise_id,set_number,reps,charge,duration_seconds,hold_seconds,exercise_order,completed_at,exercises(name,category)&session_id=eq.${sessionId}&order=set_number,id`);
     logs = await HSHistory.orderLogs(logs, sessionId, api);
     if(!logs.length){ box.innerHTML = '<div class="empty" style="padding:6px 0;">Aucune série enregistrée pour cette séance.</div>'; box.dataset.loaded = '1'; return; }
     box.onclick = ev => ev.stopPropagation();

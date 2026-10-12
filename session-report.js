@@ -6,7 +6,7 @@
   const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
   const nf = n => Math.round(n).toLocaleString('fr-FR');
   const fmtDur = sec => { sec = Math.round(sec || 0); const h = Math.floor(sec/3600), m = Math.floor((sec%3600)/60), s = sec%60; return h ? `${h} h ${String(m).padStart(2,'0')}` : (m ? (s && m < 10 ? `${m} min ${s}s` : `${m} min`) : `${s}s`); };
-  const SEL = 'id,session_id,exercise_id,set_number,reps,charge,duration_seconds,completed_at,exercises(name,category,primary_muscles)';
+  const SEL = 'id,session_id,exercise_id,set_number,reps,charge,duration_seconds,hold_seconds,exercise_order,completed_at,exercises(name,category,primary_muscles)';
 
   function ensureCss(){
     if(document.getElementById('hsRepCss')) return;
