@@ -972,7 +972,7 @@ async function renderProgramDetail(programId){
       meta = setsRepsText(it.sets, it.reps) + ((withRest && restLabel(it.rest_seconds)) ? ` · repos ${restLabel(it.rest_seconds)}` : '');
     }
     const vex = it.variant_exercise_id ? exercisesById[it.variant_exercise_id] : null;
-    return `<div class="ex-row ${tag?'in-ss':''}" style="cursor:pointer" onclick="openExFiche('${ex.id}')">
+    return `<div class="ex-row ${tag?'in-ss':''}" data-ex="${ex.id}" data-planned="${it.sets ?? ''}" data-day="${escHtml(it.day_label || '')}" style="cursor:pointer" onclick="openExFiche('${ex.id}')">
       <div class="ex-row-top">
         <div><div class="ex-name">${tag?`<span class="ss-chip">SUPERSET ${tag}</span> `:''}${escHtml(it.custom_name || ex.name)}</div>
         ${parseScheme(it.reps) ? schemePills(parseScheme(it.reps)) + ((!tag && withRest && restLabel(it.rest_seconds)) ? `<div class="ex-meta">repos ${escHtml(restLabel(it.rest_seconds))}</div>` : '') : (meta?`<div class="ex-meta">${escHtml(meta)}</div>`:'')}
@@ -1007,6 +1007,34 @@ async function renderProgramDetail(programId){
     </div>
     ${(!multi && items.length) ? `<div class="session-bar"><button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}/seance'">Démarrer la séance</button></div>` : ''}
   `;
+  fillLastSession(programId, groups, multi);
+}
+async function fillLastSession(programId, groups, multi){
+  const u = getUserSession(); if(!(u && u.user && u.user.id)) return;
+  const fmt = x => {
+    if(x.duration_seconds){ const m = Math.floor(x.duration_seconds/60), sec = x.duration_seconds%60; return (m ? m + ' min ' : '') + (sec ? sec + ' s' : '') + (x.charge ? ' · ' + x.charge + ' kg' : ''); }
+    return (x.reps != null ? x.reps : '?') + (x.charge != null ? '×' + x.charge + ' kg' : ' reps') + (x.hold_seconds ? ' (' + x.hold_seconds + ' s)' : '');
+  };
+  for(const g of groups){
+    try{
+      const dayFilter = (multi && g.label) ? `&day_label=eq.${encodeURIComponent(g.label)}` : '';
+      const ss = await (await authedFetch(`/rest/v1/sessions?select=id,started_at&program_id=eq.${programId}&user_id=eq.${u.user.id}${dayFilter}&order=started_at.desc&limit=1`)).json();
+      if(!ss || !ss[0]) continue;
+      const logs = await (await authedFetch(`/rest/v1/session_logs?select=exercise_id,set_number,reps,charge,duration_seconds,hold_seconds&session_id=eq.${ss[0].id}&order=set_number`)).json();
+      if(!Array.isArray(logs)) continue;
+      const d = new Date(ss[0].started_at).toLocaleDateString('fr-FR', { day:'numeric', month:'numeric' });
+      const by = {}; logs.filter(x => x.reps != null || x.charge != null || x.duration_seconds).forEach(x => (by[x.exercise_id] = by[x.exercise_id] || []).push(x));
+      document.querySelectorAll('#progExList .ex-row').forEach(row => {
+        if(multi && row.dataset.day !== (g.label || '') ) return;
+        const sets = by[row.dataset.ex]; if(!sets || !sets.length || row.querySelector('.last-sess')) return;
+        const planned = parseInt(row.dataset.planned) || 0;
+        const extra = planned && sets.length > planned ? ` · ${sets.length - planned} en plus du prévu` : (planned && sets.length < planned ? ` · ${planned - sets.length} en moins que prévu` : '');
+        const el = document.createElement('div'); el.className = 'ex-meta last-sess'; el.style.cssText = 'margin-top:4px;opacity:.85;';
+        el.innerHTML = `<b>Dernière séance (${d})</b> : ${sets.length} série${sets.length>1?'s':''}${extra}<br>${sets.map(fmt).map(escHtml).join(' · ')}`;
+        row.querySelector('.ex-row-top > div').appendChild(el);
+      });
+    }catch(e){ console.error(e); }
+  }
 }
 async function duplicateProgram(programId){
   const cur = currentProgramDetail;

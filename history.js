@@ -237,6 +237,8 @@
       }
     }catch(e){ console.error(e); }
     list.forEach(l => { const sc = scheme[l.exercise_id]; if(sc && sc.sets[l.set_number - 1]){ l.tgt = sc.sets[l.set_number - 1]; l.tgt_note = sc.note; l.tgt_all = sc.sets; } if(sst[l.exercise_id]) l.ss_tag = sst[l.exercise_id]; if(custom[l.exercise_id]) l.custom_name = custom[l.exercise_id]; if(timed[l.exercise_id] || (l.exercises && String(l.exercises.category||'').toLowerCase() === 'cardio')) l.timed = true; });
+    const lab = {}; list.forEach(l => { if(l.exercise_label) lab[l.exercise_id] = l.exercise_label; });
+    list.forEach(l => { if(lab[l.exercise_id]) l.custom_name = lab[l.exercise_id]; });
     const first = {};
     list.forEach(l => { const t = l.completed_at ? Date.parse(l.completed_at) : 0; if(first[l.exercise_id] == null || t < first[l.exercise_id]) first[l.exercise_id] = t; });
     // ordre choisi à la main (exercise_order) d'abord ; sinon ordre du programme ; puis exercices hors programme
