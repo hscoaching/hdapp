@@ -73,10 +73,10 @@
     try{
       if(o.sessionId){
         sessions = sessions.filter(s => s.id === o.sessionId);
-        logs = await req_(o, `/rest/v1/session_logs?select=session_id,set_number,reps,charge,duration_seconds,completed_at,exercises(name)&session_id=eq.${encodeURIComponent(o.sessionId)}&order=completed_at,id`);
+        logs = await req_(o, `/rest/v1/session_logs?select=session_id,set_number,step,hold_seconds,reps,charge,duration_seconds,completed_at,exercises(name)&session_id=eq.${encodeURIComponent(o.sessionId)}&order=completed_at,id`);
       } else {
         const qq = sel => `/rest/v1/session_logs?select=${sel}&sessions.user_id=eq.${encodeURIComponent(o.userId)}&order=id`;
-        const sel0 = 'id,session_id,set_number,reps,charge,duration_seconds,completed_at,exercise_id,exercises(name),sessions!inner(user_id,started_at,date_unknown)';
+        const sel0 = 'id,session_id,set_number,step,hold_seconds,reps,charge,duration_seconds,completed_at,exercise_id,exercises(name),sessions!inner(user_id,started_at,date_unknown)';
         try{ logs = await pageAll(o.req, qq(sel0.replace('duration_seconds,', 'duration_seconds,distance_km,'))); }
         catch(e0){ logs = await pageAll(o.req, qq(sel0)); }
       }
@@ -106,8 +106,8 @@
         if(!l.duration_seconds && l.reps && l.charge) vol += l.reps * l.charge;
       });
       const body = order.map(n => {
-        const rows = byEx[n].filter(l => l.reps != null || l.charge != null).sort((a, b) => a.set_number - b.set_number);
-        return `<div class="pe">${esc(n)}</div>` + (rows.length ? rows.map(l => `<div class="pr"><span>Série ${l.set_number}</span><span>${l.reps != null ? l.reps + ' reps' : '–'}${l.charge != null ? ' · ' + l.charge + ' kg' : ''}</span></div>`).join('') : '<div class="pr"><span>Rien noté</span></div>');
+        const rows = byEx[n].filter(l => l.reps != null || l.charge != null).sort((a, b) => (a.set_number - b.set_number) || ((a.step || 0) - (b.step || 0)));
+        return `<div class="pe">${esc(n)}</div>` + (rows.length ? rows.map(l => `<div class="pr"><span>Série ${l.set_number}${l.step ? '.' + l.step : ''}</span><span>${l.reps != null ? l.reps + ' reps' : '–'}${l.hold_seconds ? ' (' + l.hold_seconds + ' s)' : ''}${l.charge != null ? ' · ' + l.charge + ' kg' : ''}</span></div>`).join('') : '<div class="pr"><span>Rien noté</span></div>');
       }).join('') || '<div class="pr"><span>Aucune série enregistrée</span></div>';
       const meta = [fmtDur(s) ? 'Durée : ' + fmtDur(s) : '', vol ? 'Poids total soulevé : ' + Math.round(vol).toLocaleString('fr-FR') + ' kg' : ''].filter(Boolean).join(' · ');
       return `<div class="ps"><h2>${esc(d.toLocaleDateString('fr-FR', {weekday:'long', day:'numeric', month:'long', year:'numeric'}))} — ${esc(title)}</h2><div class="pd">${esc(meta)}</div>${body}</div>`;
@@ -236,7 +236,7 @@
         });
       }
     }catch(e){ console.error(e); }
-    list.forEach(l => { const sc = scheme[l.exercise_id]; if(sc && sc.sets[l.set_number - 1]){ l.tgt = sc.sets[l.set_number - 1]; l.tgt_note = sc.note; l.tgt_all = sc.sets; } if(sst[l.exercise_id]) l.ss_tag = sst[l.exercise_id]; if(custom[l.exercise_id]) l.custom_name = custom[l.exercise_id]; if(timed[l.exercise_id] || (l.exercises && String(l.exercises.category||'').toLowerCase() === 'cardio')) l.timed = true; });
+    list.forEach(l => { const sc = scheme[l.exercise_id]; const ti = (l.step || l.set_number) - 1; if(sc && sc.sets[ti]){ l.tgt = sc.sets[ti]; l.tgt_note = sc.note; l.tgt_all = sc.sets; } if(sst[l.exercise_id]) l.ss_tag = sst[l.exercise_id]; if(custom[l.exercise_id]) l.custom_name = custom[l.exercise_id]; if(timed[l.exercise_id] || (l.exercises && String(l.exercises.category||'').toLowerCase() === 'cardio')) l.timed = true; });
     const lab = {}; list.forEach(l => { if(l.exercise_label) lab[l.exercise_id] = l.exercise_label; });
     list.forEach(l => { if(lab[l.exercise_id]) l.custom_name = lab[l.exercise_id]; });
     const first = {};
@@ -244,7 +244,7 @@
     // ordre choisi à la main (exercise_order) d'abord ; sinon ordre du programme ; puis exercices hors programme
     const ord = {}; list.forEach(l => { if(l.exercise_order != null) ord[l.exercise_id] = l.exercise_order; });
     const R = l => ord[l.exercise_id] != null ? ord[l.exercise_id] : 1000 + (rank[l.exercise_id] == null ? 1e6 : rank[l.exercise_id]);
-    return list.sort((a, b) => (R(a) - R(b)) || (first[a.exercise_id] - first[b.exercise_id]) || String(a.exercise_id).localeCompare(String(b.exercise_id)) || (a.set_number - b.set_number) || (Date.parse(a.completed_at || 0) - Date.parse(b.completed_at || 0)));
+    return list.sort((a, b) => (R(a) - R(b)) || (first[a.exercise_id] - first[b.exercise_id]) || String(a.exercise_id).localeCompare(String(b.exercise_id)) || (a.set_number - b.set_number) || ((a.step || 0) - (b.step || 0)) || (Date.parse(a.completed_at || 0) - Date.parse(b.completed_at || 0)));
   }
 
   // Fenêtre de choix d'un exercice (ajout à une séance passée) : filtres par muscle + images, comme dans l'éditeur de programme.

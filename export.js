@@ -143,7 +143,7 @@
     list.forEach(s => {
       const st = stat(s);
       const exs = []; const byEx = {};
-      st.ls.slice().sort((a, b) => new Date(a.completed_at) - new Date(b.completed_at) || a.set_number - b.set_number).forEach(l => {
+      st.ls.slice().sort((a, b) => new Date(a.completed_at) - new Date(b.completed_at) || a.set_number - b.set_number || (a.step || 0) - (b.step || 0)).forEach(l => {
         const n = (l.exercises && l.exercises.name) || 'Exercice';
         if(!byEx[n]){ byEx[n] = []; exs.push(n); }
         byEx[n].push(l);
@@ -152,7 +152,7 @@
       blocks.push({ type: 'h', small: true, text: fd(s, true) + ' - ' + ((s.programs && s.programs.name) || 'Séance libre') + (s.day_label ? ' - ' + s.day_label : '') });
       if(meta) blocks.push({ type: 'p', text: meta });
       const body = [];
-      exs.forEach(n => byEx[n].sort((a, b) => a.set_number - b.set_number).forEach((l, i) => body.push([i === 0 ? n : '', String(l.set_number), l.reps != null ? String(l.reps) : '', l.duration_seconds ? durFmt(l.duration_seconds) : '', l.charge != null ? num(l.charge, 1) : '', vol1(l) ? num(vol1(l)) : ''])));
+      exs.forEach(n => byEx[n].sort((a, b) => (a.set_number - b.set_number) || ((a.step || 0) - (b.step || 0))).forEach((l, i) => body.push([i === 0 ? n : '', String(l.set_number) + (l.step ? '.' + l.step : ''), l.reps != null ? String(l.reps) : '', l.duration_seconds ? durFmt(l.duration_seconds) : '', l.charge != null ? num(l.charge, 1) : '', vol1(l) ? num(vol1(l)) : ''])));
       if(body.length) blocks.push({ type: 'table', head: ['Exercice', 'Série', 'Reps', 'Durée', 'Charge (kg)', 'Volume (kg)'], body, align: [null, 'right', 'right', 'right', 'right', 'right'], widths: [190] });
       else blocks.push({ type: 'p', text: 'Aucune série enregistrée pour cette séance.' });
     });

@@ -218,6 +218,7 @@
   .draft-row.in-ss, .ex-row.in-ss{border-left:3px solid var(--accent);}
   .ss-chip{display:inline-block; font-size:10px; font-weight:800; letter-spacing:.06em; padding:2px 7px; border-radius:999px; border:1px solid var(--accent); color:var(--accent); vertical-align:middle;}
   .ss-block{border-left:3px solid var(--accent);}
+  .serie-head{font-weight:800;font-size:13px;letter-spacing:.04em;text-transform:uppercase;margin:12px 0 4px;color:var(--ink);}
   .ss-tag{font-size:12.5px; color:var(--ink-muted); margin-bottom:6px;}
   .ss-round{font-size:11px; font-weight:700; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-muted); margin-top:8px;}
   .ss-cap{display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:14px; font-weight:700; margin-top:2px;}
@@ -416,15 +417,16 @@ async function lastLogsFor(programId, dayLabel){
     const dayFilter = dayLabel ? `&day_label=eq.${encodeURIComponent(dayLabel)}` : '&day_label=is.null';
     const sessions = await (await authedFetch(`/rest/v1/sessions?select=id&program_id=eq.${programId}&user_id=eq.${s.user.id}${dayFilter}&order=started_at.desc&limit=1`)).json();
     if(!sessions.length) return [];
-    return (await authedFetch(`/rest/v1/session_logs?select=exercise_id,set_number,reps,charge,duration_seconds&session_id=eq.${sessions[0].id}`)).json();
+    return (await authedFetch(`/rest/v1/session_logs?select=exercise_id,set_number,step,reps,charge,duration_seconds&session_id=eq.${sessions[0].id}`)).json();
   }
   return rpc('guest_last_session_logs_day', { p_token: TOKEN, p_program_id: programId, p_day_label: dayLabel||null });
 }
-async function logSetFor(sessionId, exId, setNum, reps, charge, durationSec, distanceKm, holdSec){
+async function logSetFor(sessionId, exId, setNum, reps, charge, durationSec, distanceKm, holdSec, step){
   if(isLoggedIn()){
     const body = { session_id: sessionId, exercise_id: exId, set_number: setNum, reps, charge, duration_seconds: durationSec || null };
     if(distanceKm) body.distance_km = distanceKm;
     if(holdSec) body.hold_seconds = holdSec; // séries variables (tempo) : tenue en secondes
+    if(step) body.step = step; // palier dans la série (séquence 5-4-3-2-1)
     const res = await authedFetch('/rest/v1/session_logs', { method:'POST', body: JSON.stringify(body) });
     if(!res.ok) throw new Error('log_failed');
     return res;
@@ -538,15 +540,17 @@ function encodeScheme(rows, note){
   const n = String(note||'').replace(/[|<>~]/g,'').trim().slice(0,40);
   return '~' + list + (n ? '|' + n : '');
 }
-function schemeText(sc){
-  return `${sc.sets.length} séries : ` + sc.sets.map(x=> `${x.reps} rep${x.reps>1?'s':''}` + (x.hold ? ` (${x.hold} s)` : '')).join(' · ') + (sc.note ? ' · ' + sc.note : '');
+function schemeText(sc, rounds){
+  const n = Math.max(1, parseInt(rounds) || 1);
+  return `${n} série${n>1?'s':''} : ` + sc.sets.map(x=> `${x.reps} rep${x.reps>1?'s':''}` + (x.hold ? ` (${x.hold} s)` : '')).join(' → ') + (sc.note ? ' · ' + sc.note : '');
 }
 // « 5 séries × 10 » ou, pour des séries variables, le détail série par série
 // Séries variables : une pastille par série (reps + tenue), la note (ex : 45°) en tête — bien plus lisible qu'une longue phrase
-function schemePills(sc){
-  return `<div class="sch-pills">${sc.note ? `<span class="sch-note">${escHtml(sc.note)}</span>` : ''}${sc.sets.map(x=>`<span class="sch-pill"><b>${x.reps}</b><small>${x.reps>1?'reps':'rep'}</small>${x.hold ? `<em>tenir ${x.hold} s</em>` : ''}</span>`).join('')}</div>`;
+function schemePills(sc, rounds){
+  const n = Math.max(1, parseInt(rounds) || 1);
+  return `<div class="sch-pills"><span class="sch-note">${n} série${n>1?'s':''} :</span>${sc.note ? `<span class="sch-note">${escHtml(sc.note)}</span>` : ''}${sc.sets.map(x=>`<span class="sch-pill"><b>${x.reps}</b><small>${x.reps>1?'reps':'rep'}</small>${x.hold ? `<em>tenir ${x.hold} s</em>` : ''}</span>`).join('')}</div>`;
 }
-function setsRepsText(sets, reps){ const sc = parseScheme(reps); return sc ? schemeText(sc) : `${sets||'-'} séries × ${reps||'-'}`; }
+function setsRepsText(sets, reps){ const sc = parseScheme(reps); return sc ? schemeText(sc, sets) : `${sets||'-'} séries × ${reps||'-'}`; }
 function showRestAt(list, i){ const it = list[i]; if(!it || it.superset_group == null) return true; const n = list[i+1]; return !(n && n.superset_group === it.superset_group); }
 // Un superset = un bloc : séries, reps et repos sont annoncés une seule fois, dans un en-tête de bloc
 function ssBlockOf(list, i){ const g = list[i].superset_group; let a = i, b = i; while(a > 0 && list[a-1].superset_group === g) a--; while(b < list.length-1 && list[b+1].superset_group === g) b++; return list.slice(a, b+1); }
@@ -557,7 +561,7 @@ function ssBlockInfo(list, i){
 }
 function ssHeadText(info, tag){
   const bits = [];
-  if(info.sameSets) bits.push(parseScheme(info.reps) && info.sameReps ? schemeText(parseScheme(info.reps)) : `${info.sets||'-'} séries` + (info.sameReps ? ` × ${info.reps||'-'}` : ''));
+  if(info.sameSets) bits.push(parseScheme(info.reps) && info.sameReps ? schemeText(parseScheme(info.reps), info.sets) : `${info.sets||'-'} séries` + (info.sameReps ? ` × ${info.reps||'-'}` : ''));
   if(restLabel(info.rest)) bits.push(`repos ${restLabel(info.rest)} après chaque tour`);
   return `Superset ${String(tag||'A').charAt(0)}` + (bits.length ? ' · ' + bits.join(' · ') : '');
 }
@@ -975,7 +979,7 @@ async function renderProgramDetail(programId){
     return `<div class="ex-row ${tag?'in-ss':''}" data-ex="${ex.id}" data-planned="${it.sets ?? ''}" data-day="${escHtml(it.day_label || '')}" style="cursor:pointer" onclick="openExFiche('${ex.id}')">
       <div class="ex-row-top">
         <div><div class="ex-name">${tag?`<span class="ss-chip">SUPERSET ${tag}</span> `:''}${escHtml(it.custom_name || ex.name)}</div>
-        ${parseScheme(it.reps) ? schemePills(parseScheme(it.reps)) + ((!tag && withRest && restLabel(it.rest_seconds)) ? `<div class="ex-meta">repos ${escHtml(restLabel(it.rest_seconds))}</div>` : '') : (meta?`<div class="ex-meta">${escHtml(meta)}</div>`:'')}
+        ${parseScheme(it.reps) ? schemePills(parseScheme(it.reps), it.sets) + ((!tag && withRest && restLabel(it.rest_seconds)) ? `<div class="ex-meta">repos ${escHtml(restLabel(it.rest_seconds))}</div>` : '') : (meta?`<div class="ex-meta">${escHtml(meta)}</div>`:'')}
         ${vex?`<div class="ex-meta var-link" onclick="event.stopPropagation(); openExFiche('${vex.id}')">↔ Variante : <u>${escHtml(vex.name)}</u> · voir la fiche ›</div>`:''}</div>
       </div>
     </div>`;
@@ -1098,7 +1102,7 @@ async function printProgram(){
           body: g.items.map((it,i) => {
             const ex = exercisesById[it.exercise_id]; if(!ex) return null;
             const vex = it.variant_exercise_id ? exercisesById[it.variant_exercise_id] : null;
-            return [it.custom_name || ex.name, String(it.sets ?? ''), (parseScheme(it.reps) ? schemeText(parseScheme(it.reps)) : String(it.reps ?? '')), showRestAt(g.items, i) ? String(it.rest_seconds ?? '') : '-', [ts[i] ? 'Superset ' + ts[i] + (showRestAt(g.items, i) ? ' (repos après le tour)' : '') : '', vex ? 'Variante : ' + vex.name : ''].filter(Boolean).join(' - ')];
+            return [it.custom_name || ex.name, String(it.sets ?? ''), (parseScheme(it.reps) ? schemeText(parseScheme(it.reps), it.sets) : String(it.reps ?? '')), showRestAt(g.items, i) ? String(it.rest_seconds ?? '') : '-', [ts[i] ? 'Superset ' + ts[i] + (showRestAt(g.items, i) ? ' (repos après le tour)' : '') : '', vex ? 'Variante : ' + vex.name : ''].filter(Boolean).join(' - ')];
           }).filter(Boolean), align:[null,'right','right','right',null], widths:[170] });
       });
       const ok = await HSExport.pdf({ title: name, subtitle: "HS Coaching - Programme d'entraînement", filename: HSExport.fileName('programme', name), blocks });
@@ -1188,7 +1192,7 @@ async function renderSession(programId, dayIdx, manual){
     }
   }
   const lastByKey = {};
-  (lastLogs||[]).forEach(l=>{ lastByKey[`${l.exercise_id}_${l.set_number}`] = l; });
+  (lastLogs||[]).forEach(l=>{ lastByKey[`${l.exercise_id}_${l.set_number}${l.step ? '_' + l.step : ''}`] = l; });
 
   sessLastByKey = lastByKey;
   slotState = {};
@@ -1201,7 +1205,7 @@ async function renderSession(programId, dayIdx, manual){
     if(!ex) return;
     const k = units.length;
     const already = setCounterByEx[ex.id] || 0;
-    const nSets = (parseScheme(it.reps) ? parseScheme(it.reps).sets.length : (it.sets || 3)) + (sessExtraSets[units.length] || 0);
+    const nSets = parseScheme(it.reps) ? ((parseInt(it.sets) || 1) + (sessExtraSets[units.length] || 0)) * parseScheme(it.reps).sets.length : (it.sets || 3) + (sessExtraSets[units.length] || 0);
     setCounterByEx[ex.id] = already + nSets;
     slotState[k] = { orig: ex.id, variant: it.variant_exercise_id && exercisesById[it.variant_exercise_id] ? it.variant_exercise_id : null, cur: ex.id, tag: tagsAll[i], reps: parseScheme(it.reps) ? '' : (it.reps || ''), label: it.custom_name || '' };
     units.push({ k, it, ex, already, nSets, group: it.superset_group });
@@ -1217,7 +1221,9 @@ async function renderSession(programId, dayIdx, manual){
   const TIME_RE = /\d\s*(min|sec|s\b|m\b|'|")/i;
   const isTimed = u => !parseScheme(u.it.reps) && ((u.ex.category || '').toLowerCase() === 'cardio' || TIME_RE.test(u.it.reps || ''));
   const lineHtml = (u, s) => {
-    const prev = lastByKey[`${u.ex.id}_${s}`];
+    const schX = parseScheme(u.it.reps), nstX = schX ? schX.sets.length : 0;
+    const serieX = schX ? Math.floor((s - u.already - 1) / nstX) + 1 : s, stepX = schX ? (s - u.already - 1) % nstX + 1 : 0;
+    const prev = lastByKey[schX ? `${u.ex.id}_${serieX}_${stepX}` : `${u.ex.id}_${s}`];
     if(isTimed(u)){
       const pd = prev && prev.duration_seconds ? prev.duration_seconds : 0;
       const phm = pd ? Math.floor(pd/60) : 'min', phs = pd ? (pd%60) : 'sec';
@@ -1233,12 +1239,13 @@ async function renderSession(programId, dayIdx, manual){
         ${(isLoggedIn() && (u.ex.category || '').toLowerCase() === 'cardio') ? '<div class="dist-wrap"><input type="number" inputmode="decimal" step="0.01" min="0" placeholder="km" class="dist-input" oninput="updPace(this)"><span class="unit">km (facultatif)</span><span class="pace"></span></div>' : ''}
       </div>`;
     }
-    const sch = parseScheme(u.it.reps), tg = sch ? sch.sets[s - u.already - 1] : null;
+    const sch = schX, tg = sch ? sch.sets[stepX - 1] : null;
     const ph = prev ? `${prev.reps||''}` : (sch ? (tg ? String(tg.reps) : '') : (u.it.reps||''));
     const phc = prev ? `${prev.charge||''}` : '';
-    const hint = tg ? `<div class="set-target">Objectif : ${tg.reps} rep${tg.reps>1?'s':''}${tg.hold ? ' · tenir ' + tg.hold + ' s' : ''}${sch.note ? ' · ' + escHtml(sch.note) : ''}</div>` : '';
-    return `${hint}<div class="set-line" data-slot="${u.k}" data-ex="${u.ex.id}" data-set="${s}">
-        <div class="setnum">S${s}</div>
+    const hint = tg ? `<div class="set-target">Palier ${stepX}/${nstX} : ${tg.reps} rep${tg.reps>1?'s':''}${tg.hold ? ' · tenir ' + tg.hold + ' s' : ''}</div>` : '';
+    const serieHead = (sch && stepX === 1) ? `<div class="serie-head">Série ${serieX}${sch.note ? ' · ' + escHtml(sch.note) : ''}</div>` : '';
+    return `${serieHead}${hint}<div class="set-line" data-slot="${u.k}" data-ex="${u.ex.id}" data-set="${s}"${sch ? ` data-serie="${serieX}" data-step="${stepX}"` : ''}>
+        <div class="setnum">${sch ? serieX + '.' + stepX : 'S' + s}</div>
         <input type="number" inputmode="numeric" placeholder="${ph}" class="reps-input">
         <span class="unit">reps</span>
         <input type="number" inputmode="decimal" placeholder="${phc||'kg'}" class="charge-input">
@@ -1347,17 +1354,18 @@ async function renderSession(programId, dayIdx, manual){
     // filet de sécurité : séries déjà enregistrées côté serveur mais absentes de la copie locale
     if(isLoggedIn()){
       try{
-        const r = await authedFetch(`/rest/v1/session_logs?select=exercise_id,set_number,reps,charge,duration_seconds,distance_km&session_id=eq.${sessionId}`);
+        const r = await authedFetch(`/rest/v1/session_logs?select=exercise_id,set_number,step,hold_seconds,reps,charge,duration_seconds,distance_km&session_id=eq.${sessionId}`);
         const logs = r.ok ? await r.json() : [];
         (Array.isArray(logs) ? logs : []).forEach(l=>{
-          const line = document.querySelector(`.set-line[data-ex="${l.exercise_id}"][data-set="${l.set_number}"]`);
+          const line = l.step ? document.querySelector(`.set-line[data-ex="${l.exercise_id}"][data-serie="${l.set_number}"][data-step="${l.step}"]`) : document.querySelector(`.set-line[data-ex="${l.exercise_id}"][data-set="${l.set_number}"]`);
           if(!line || line.querySelector('.valid').classList.contains('done')) return;
           if(l.reps!=null) line.querySelector('.reps-input').value = l.reps;
           if(l.charge!=null) line.querySelector('.charge-input').value = l.charge;
+          if(l.hold_seconds && line.querySelector('.hold-input')) line.querySelector('.hold-input').value = l.hold_seconds;
           if(l.duration_seconds && line.querySelector('.min-input')){ line.querySelector('.min-input').value = Math.floor(l.duration_seconds/60); line.querySelector('.sec-input').value = l.duration_seconds%60; }
           if(l.distance_km && line.querySelector('.dist-input')){ line.querySelector('.dist-input').value = l.distance_km; }
           line.querySelector('.valid').classList.add('done');
-          sessDone[`${l.exercise_id}_${l.set_number}`] = (l.reps && l.charge) ? l.reps*l.charge : 0;
+          sessDone[`${l.exercise_id}_${line.dataset.set}`] = (l.reps && l.charge) ? l.reps*l.charge : 0;
           if(activeMeta){ activeMeta.done = activeMeta.done || {}; activeMeta.done[`${line.dataset.slot}|${l.set_number}`] = { reps:l.reps, charge:l.charge, sec:l.duration_seconds||null, dist:l.distance_km||null }; }
         });
         saveActive();
@@ -1482,6 +1490,7 @@ async function validateSetInner(btn){
   const timed = line.dataset.timed === '1';
   let reps = repsOf(line);
   let charge = parseFloat(line.querySelector('.charge-input').value) || null;
+  const stepV = isLoggedIn() ? (parseInt(line.dataset.step) || 0) : 0, dbSet = stepV ? (parseInt(line.dataset.serie) || setNum) : setNum;
   const hi = line.querySelector('.hold-input'); let hold = hi ? (parseInt(hi.value) || parseInt(hi.placeholder) || null) : null; // tenue tapée, sinon l'objectif
   let sec = null;
   if(timed){
@@ -1499,9 +1508,10 @@ async function validateSetInner(btn){
   const di = line.querySelector('.dist-input'); let dist = di ? (parseFloat(di.value) || null) : null; if(dist != null) dist = Math.min(Math.round(dist * 100) / 100, 500);
   try{
     btn.classList.remove('err');
-    try{ await logSetFor(activeSession, exId, setNum, reps, charge, sec, dist, hold); }
-    catch(e1){ if(e1 instanceof TypeError){ await new Promise(r=>setTimeout(r,900)); await logSetFor(activeSession, exId, setNum, reps, charge, sec, dist, hold); } else throw e1; }
+    try{ await logSetFor(activeSession, exId, dbSet, reps, charge, sec, dist, hold, stepV); }
+    catch(e1){ if(e1 instanceof TypeError){ await new Promise(r=>setTimeout(r,900)); await logSetFor(activeSession, exId, dbSet, reps, charge, sec, dist, hold, stepV); } else throw e1; }
     btn.classList.add('done');
+    if(stepV && charge){ const nx = document.querySelector(`.set-line[data-slot="${line.dataset.slot}"][data-set="${setNum + 1}"]`); const ci = nx && nx.querySelector('.charge-input'); if(ci && !ci.value && !nx.querySelector('.valid.done')) ci.value = charge; } // le poids se reporte sur le palier suivant (modifiable : drop ou montée)
     suggestRest(line.dataset.slot);
     sessDone[`${exId}_${setNum}`] = (reps && charge) ? reps*charge : 0;
     if(activeMeta){ activeMeta.done = activeMeta.done || {}; activeMeta.done[`${line.dataset.slot}|${setNum}`] = { reps, charge, sec, dist, hold }; saveActive(); }
@@ -1766,7 +1776,7 @@ async function showNewBadges(sessionId){
 async function saveManualSession(programId){
   const btn = document.getElementById('manSaveBtn');
   const entries = [...document.querySelectorAll('#sessBody .set-line')].map(l=>({
-    exId: l.dataset.ex, setNum: parseInt(l.dataset.set),
+    exId: l.dataset.ex, setNum: parseInt(l.dataset.set), serie: parseInt(l.dataset.serie) || 0, step: parseInt(l.dataset.step) || 0,
     reps: (parseInt(l.querySelector('.reps-input').value) || (parseFloat(l.querySelector('.charge-input').value) ? repsOf(l) : null)) || null,
     charge: parseFloat(l.querySelector('.charge-input').value) || null,
     sec: l.dataset.timed === '1' ? Math.min(86400, (parseInt(l.querySelector('.min-input').value) || 0) * 60 + (parseInt(l.querySelector('.sec-input').value) || 0)) || null : null,
@@ -1787,7 +1797,7 @@ async function saveManualSession(programId){
   let sid;
   try{
     sid = await addPastSessionFor(programId, activeDayLabel, startDt.toISOString(), durSec);
-    const results = await Promise.all(entries.map(e=> logSetFor(sid, e.exId, e.setNum, e.reps, e.charge, e.sec, e.dist, e.hold)));
+    const results = await Promise.all(entries.map(e=> logSetFor(sid, e.exId, (isLoggedIn() && e.step) ? e.serie : e.setNum, e.reps, e.charge, e.sec, e.dist, e.hold, isLoggedIn() ? e.step : 0)));
     if(results.some(r=> r && r.ok === false)) throw new Error('log_failed');
     await completeSessionFor(sid, durSec);
   }catch(e){ console.error(e); toast('Erreur, réessaie'); btn.disabled = false; return; }
@@ -1903,10 +1913,10 @@ function programFormHtml({ backHash, eyebrow, title, name, desc, saveLabel }){
         <span id="pRepsBox" style="display:inline-flex; align-items:center; gap:6px;"><input id="pReps" type="number" min="0" inputmode="numeric" placeholder="Reps" style="width:70px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"><span style="color:var(--ink-muted);font-size:12px;">à</span><input id="pRepsMax" type="number" min="0" inputmode="numeric" placeholder="Max (option)" style="width:84px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"></span>
         <span id="pTimeBox" style="display:none; align-items:center; gap:6px;"><input id="pMin" type="number" min="0" inputmode="numeric" placeholder="Min" style="width:64px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"><input id="pSec" type="number" min="0" max="59" inputmode="numeric" placeholder="Sec" style="width:64px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"><span style="color:var(--ink-muted);font-size:12px;">à</span><input id="pMin2" type="number" min="0" inputmode="numeric" placeholder="Min max" style="width:72px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"><input id="pSec2" type="number" min="0" max="59" inputmode="numeric" placeholder="Sec max" style="width:72px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"></span>
         <div id="pSchemeBox" style="display:none; width:100%;">
-          <p class="subtitle" style="margin:0 0 6px;font-size:12px;">Une ligne par série : répétitions, et durée de tenue en secondes si besoin (ex : 5 reps tenues 5 s).</p>
+          <p class="subtitle" style="margin:0 0 6px;font-size:12px;">Une série = une séquence que tu enchaînes. Une ligne par palier : répétitions, et tenue en secondes si besoin (ex : 5 reps tenues 5 s). Indique le nombre de séries dans « Séries ».</p>
           <div id="schemeRows"></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
-            <button type="button" class="btn btn-ghost btn-sm" onclick="schemeAddRow()">＋ Série</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="schemeAddRow()">＋ Palier</button>
             <button type="button" class="btn btn-ghost btn-sm" onclick="schemePyramid()">Pyramide 5→1 (tenue = reps)</button>
           </div>
           <input id="pSchemeNote" type="text" maxlength="40" placeholder="Note (ex : 45°, tempo 3-1-1)" aria-label="Note pour toutes les séries" style="width:100%;margin-top:8px;background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
@@ -1953,7 +1963,7 @@ let pickScheme = [{ reps:'', hold:'' }];
 function renderScheme(){
   const box = document.getElementById('schemeRows'); if(!box) return;
   const st = 'width:90px;background:var(--surface);border:1px solid var(--line);border-radius:10px;color:var(--ink);padding:10px;font-family:inherit;';
-  box.innerHTML = pickScheme.map((r,i)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="width:28px;font-weight:700;color:var(--ink-muted);">S${i+1}</span><input type="number" min="1" inputmode="numeric" placeholder="Reps" value="${r.reps}" style="${st}" aria-label="Répétitions série ${i+1}" oninput="pickScheme[${i}].reps=this.value"><span style="font-size:12px;color:var(--ink-muted);">reps</span><input type="number" min="0" inputmode="numeric" placeholder="Tenue" value="${r.hold}" style="${st}" aria-label="Tenue en secondes série ${i+1}" oninput="pickScheme[${i}].hold=this.value"><span style="font-size:12px;color:var(--ink-muted);">s</span>${pickScheme.length>1?`<button type="button" class="rm" onclick="schemeRemoveRow(${i})" aria-label="Retirer la série ${i+1}">✕</button>`:''}</div>`).join('');
+  box.innerHTML = pickScheme.map((r,i)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="width:28px;font-weight:700;color:var(--ink-muted);">${i+1}.</span><input type="number" min="1" inputmode="numeric" placeholder="Reps" value="${r.reps}" style="${st}" aria-label="Répétitions série ${i+1}" oninput="pickScheme[${i}].reps=this.value"><span style="font-size:12px;color:var(--ink-muted);">reps</span><input type="number" min="0" inputmode="numeric" placeholder="Tenue" value="${r.hold}" style="${st}" aria-label="Tenue en secondes série ${i+1}" oninput="pickScheme[${i}].hold=this.value"><span style="font-size:12px;color:var(--ink-muted);">s</span>${pickScheme.length>1?`<button type="button" class="rm" onclick="schemeRemoveRow(${i})" aria-label="Retirer la série ${i+1}">✕</button>`:''}</div>`).join('');
 }
 function schemeAddRow(){ const l = pickScheme[pickScheme.length-1] || {}; pickScheme.push({ reps: l.reps || '', hold: l.hold || '' }); renderScheme(); }
 function schemeRemoveRow(i){ pickScheme.splice(i,1); if(!pickScheme.length) pickScheme = [{ reps:'', hold:'' }]; renderScheme(); }
@@ -1961,7 +1971,7 @@ function schemePyramid(){ pickScheme = [5,4,3,2,1].map(n=>({ reps:String(n), hol
 function setRepsMode(mode){
   pickRepsMode = mode;
   const sb = document.getElementById('pSchemeBox'); if(sb) sb.style.display = mode==='scheme' ? 'block' : 'none';
-  const ps = document.getElementById('pSets'); if(ps) ps.style.display = mode==='scheme' ? 'none' : '';
+  const ps = document.getElementById('pSets'); if(ps) ps.style.display = '';
   if(mode==='scheme'){ renderScheme(); }
   [...document.querySelectorAll('.reps-mode-btn')].forEach(b=> b.classList.toggle('active', b.dataset.mode===mode));
   const repsInput = document.getElementById('pReps');
@@ -2010,7 +2020,7 @@ function addDraftExercise(){
   if(pickRepsMode==='scheme'){
     const rows = pickScheme.map(r=>({ reps: parseInt(r.reps), hold: Math.min(600, Math.max(0, parseInt(r.hold) || 0)) })).filter(r=>r.reps > 0);
     if(!rows.length){ toast('Indique les répétitions d\'au moins une série'); return; }
-    reps = encodeScheme(rows, document.getElementById('pSchemeNote').value); sets = rows.length;
+    reps = encodeScheme(rows, document.getElementById('pSchemeNote').value); sets = Math.min(20, Math.max(1, parseInt(document.getElementById('pSets').value) || 1));
   } else reps = pickRepsMode==='time' ? fmtTimeReps(v('pMin'), v('pSec'), v('pMin2'), v('pSec2')) : fmtRepsRange(v('pReps'), v('pRepsMax'));
   const rest = parseRestInput(document.getElementById('pRest').value);
   if(rest == null){ toast('Repos illisible : essaie 1:30, 90 ou 45s'); return; }
@@ -2075,7 +2085,7 @@ function renderDraftList(){
     const canLink = idx > 0;
     return `<div class="draft-row ${tags[idx]?'in-ss':''}">
       <div class="draft-main">
-        ${tags[idx]?`<span class="ss-chip">SUPERSET ${tags[idx]}</span> `:''}${escHtml(d.custom_name || d.name)} — ${parseScheme(d.reps) ? escHtml(schemeText(parseScheme(d.reps))) : d.sets + '×' + escHtml(d.reps)}${d.custom_name?` <span style="opacity:.6;font-size:12px;">· fiche : ${escHtml(d.name)}</span>`:''}
+        ${tags[idx]?`<span class="ss-chip">SUPERSET ${tags[idx]}</span> `:''}${escHtml(d.custom_name || d.name)} — ${parseScheme(d.reps) ? escHtml(schemeText(parseScheme(d.reps), d.sets)) : d.sets + '×' + escHtml(d.reps)}${d.custom_name?` <span style="opacity:.6;font-size:12px;">· fiche : ${escHtml(d.name)}</span>`:''}
         <div style="opacity:.75;font-size:12px;">⏱ Repos ${restLabel(d.rest || 90)}</div>
         ${dEdit && dEdit.i === i ? draftEditPanel() : `<div style="display:flex;gap:14px;flex-wrap:wrap;"><button type="button" class="rm-var" style="font-size:13px;padding:4px 0;font-weight:700;" onclick="openDraftEdit(${i})" aria-label="Modifier cet exercice : nom, séries, répétitions, repos">✏️ Modifier (nom, séries, reps, repos)</button></div>`}
         ${vex?`<div class="draft-var">↔ Variante : ${escHtml(vex.name)} <button type="button" class="rm-var" title="Retirer la variante" onclick="clearVariant(${i})" aria-label="Retirer la variante">✕</button></div>`:''}
@@ -2113,9 +2123,9 @@ function draftEditPanel(){
   const modeBtn = (m, t) => `<button type="button" class="btn btn-ghost btn-sm reps-mode-btn ${e.mode===m?'active':''}" onclick="setDraftEditMode('${m}')">${t}</button>`;
   let body;
   if(e.mode === 'scheme'){
-    body = `<div style="${lab}margin:8px 0 4px;">Une ligne par série : répétitions et tenue en secondes (facultatif)</div>` +
-      e.rows.map((r,k)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="width:28px;font-weight:700;color:var(--ink-muted);">S${k+1}</span><input type="number" min="1" inputmode="numeric" placeholder="Reps" value="${escHtml(r.reps)}" style="width:80px;${inp}" aria-label="Répétitions série ${k+1}" oninput="dEdit.rows[${k}].reps=this.value"><span style="${lab}">reps</span><input type="number" min="0" inputmode="numeric" placeholder="Tenue" value="${escHtml(r.hold)}" style="width:80px;${inp}" aria-label="Tenue en secondes série ${k+1}" oninput="dEdit.rows[${k}].hold=this.value"><span style="${lab}">s</span>${e.rows.length>1?`<button type="button" class="rm" onclick="dEditRemoveRow(${k})" aria-label="Retirer la série ${k+1}">✕</button>`:''}</div>`).join('') +
-      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0;"><button type="button" class="btn btn-ghost btn-sm" onclick="dEditAddRow()">＋ Série</button><button type="button" class="btn btn-ghost btn-sm" onclick="dEditPyramid()">Pyramide 5→1</button></div>` +
+    body = `<label style="${lab}display:block;margin-top:8px;">Nombre de séries (tu enchaînes toute la séquence à chaque série)<br><input type="number" min="1" max="20" inputmode="numeric" value="${escHtml(e.sets)}" style="width:80px;${inp}" oninput="dEdit.sets=this.value"></label><div style="${lab}margin:8px 0 4px;">Une ligne par palier : répétitions et tenue en secondes (facultatif)</div>` +
+      e.rows.map((r,k)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="width:28px;font-weight:700;color:var(--ink-muted);">${k+1}.</span><input type="number" min="1" inputmode="numeric" placeholder="Reps" value="${escHtml(r.reps)}" style="width:80px;${inp}" aria-label="Répétitions série ${k+1}" oninput="dEdit.rows[${k}].reps=this.value"><span style="${lab}">reps</span><input type="number" min="0" inputmode="numeric" placeholder="Tenue" value="${escHtml(r.hold)}" style="width:80px;${inp}" aria-label="Tenue en secondes série ${k+1}" oninput="dEdit.rows[${k}].hold=this.value"><span style="${lab}">s</span>${e.rows.length>1?`<button type="button" class="rm" onclick="dEditRemoveRow(${k})" aria-label="Retirer la série ${k+1}">✕</button>`:''}</div>`).join('') +
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0;"><button type="button" class="btn btn-ghost btn-sm" onclick="dEditAddRow()">＋ Palier</button><button type="button" class="btn btn-ghost btn-sm" onclick="dEditPyramid()">Pyramide 5→1</button></div>` +
       `<div style="${lab}margin-bottom:4px;">Note (ex : 45°, tempo 3-1-1)</div><input type="text" maxlength="40" value="${escHtml(e.note)}" style="width:100%;${inp}" oninput="dEdit.note=this.value">`;
   } else if(e.mode === 'time'){
     body = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;"><label style="${lab}">Séries<br><input type="number" min="1" max="20" inputmode="numeric" value="${escHtml(e.sets)}" style="width:80px;${inp}" oninput="dEdit.sets=this.value"></label><label style="${lab}">Durée (ex : 45s, 1 min 30s, 20-25 min)<br><input type="text" value="${escHtml(e.text)}" style="width:210px;${inp}" oninput="dEdit.text=this.value"></label></div>`;
@@ -2138,7 +2148,7 @@ function saveDraftEdit(){
   if(e.mode === 'scheme'){
     const rows = e.rows.map(r=>({ reps: parseInt(r.reps), hold: Math.min(600, Math.max(0, parseInt(r.hold) || 0)) })).filter(r=>r.reps > 0);
     if(!rows.length){ toast('Indique les répétitions d\'au moins une série'); return; }
-    reps = encodeScheme(rows, e.note); sets = rows.length;
+    reps = encodeScheme(rows, e.note); sets = Math.min(20, Math.max(1, parseInt(e.sets) || 1));
   } else {
     const n = parseInt(e.sets);
     if(!(n > 0 && n <= 20)){ toast('Nombre de séries illisible (1 à 20)'); return; }
@@ -2176,7 +2186,7 @@ function editDraftSets(i){
     const [a, note] = val.split('|');
     const rows = a.split(',').map(t=>{ const [x,y] = t.trim().split('/'); const reps = parseInt(x); return reps > 0 ? { reps, hold: Math.min(600, Math.max(0, parseInt(y) || 0)) } : null; }).filter(Boolean);
     if(!rows.length){ toast('Séries illisibles : essaie 5/5, 4/4, 3/3'); return; }
-    d.reps = encodeScheme(rows, note); d.sets = rows.length; renderDraftList(); return;
+    d.reps = encodeScheme(rows, note); renderDraftList(); return;
   }
   const s1 = prompt('Nombre de séries :', d.sets || 3);
   if(s1 === null) return;
