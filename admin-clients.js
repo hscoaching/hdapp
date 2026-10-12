@@ -335,7 +335,7 @@ function renderClientLogs(box, logs){
   box._logs = logs;
   const byEx = {}; let vol = 0;
   logs.forEach(l=>{
-    const n = l.custom_name || (l.exercises && l.exercises.name) || 'Exercice';
+    const n = (l.ss_tag ? 'Superset ' + l.ss_tag + ' · ' : '') + (l.custom_name || (l.exercises && l.exercises.name) || 'Exercice');
     (byEx[n] = byEx[n] || []).push(l);
     if(!l.duration_seconds && l.reps && l.charge) vol += l.reps * l.charge;
   });
@@ -347,7 +347,7 @@ function renderClientLogs(box, logs){
       return `<div class="set-row cs-edit" data-id="${x.id}" style="flex-wrap:wrap;gap:6px;"><span class="set-row-num">Série ${x.set_number}</span><span class="set-row-val" style="display:flex;flex-wrap:wrap;gap:6px;align-items:center;justify-content:flex-end;">${inp('c-reps',x.reps,'reps',58)}<span>reps</span>${inp('c-kg',x.charge,'kg',66,'0.5')}<span>kg</span>${inp('c-min',m,'min',54)}<span>min</span>${inp('c-sec',sc,'s',50)}<span>s</span><button type="button" class="btn btn-accent btn-sm" onclick="saveClientLog(this)">Enregistrer</button><button type="button" class="btn btn-ghost btn-sm" aria-label="Retirer cette série" onclick="removeClientSet(this)">🗑</button></span></div>`;
     }).join('')}</div>`;
     return `<div style="margin-bottom:14px;"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:6px;"><div style="font-weight:700;font-size:14px;">${escapeHtml(n)}</div><button type="button" class="btn btn-ghost btn-sm" data-ex="${sets[0].exercise_id}" onclick="changeClientExercise(this)">🔄 Changer d'exercice</button></div>${body}<button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px" data-ex="${sets[0].exercise_id}" onclick="addClientSet(this)">+ Ajouter une série</button></div>`;
-  }).join('') + `<div class="cs-total" style="border-top:1px solid var(--line);padding-top:10px;font-size:13.5px;display:${vol?'flex':'none'};justify-content:space-between;"><span>Poids total soulevé</span><b>${Math.round(vol).toLocaleString('fr-FR')} kg</b></div>`;
+  }).join('') + `<button type="button" class="btn btn-ghost" style="width:100%;justify-content:center;margin:2px 0 12px;" onclick="addClientExercise(this)">➕ Ajouter un exercice</button><div class="cs-total" style="border-top:1px solid var(--line);padding-top:10px;font-size:13.5px;display:${vol?'flex':'none'};justify-content:space-between;"><span>Poids total soulevé</span><b>${Math.round(vol).toLocaleString('fr-FR')} kg</b></div>`;
 }
 async function changeClientExercise(btn){
   const box = btn.closest('.cs-logs'), oldId = btn.dataset.ex;
@@ -418,12 +418,24 @@ async function addClientSet(btn){
   const mine = (box._logs || []).filter(l => l.exercise_id === exId);
   if(!mine.length) return;
   const last = mine.reduce((m, l) => l.set_number > m.set_number ? l : m, mine[0]);
+  const lastIdx = box._logs.indexOf(last);
   const body = { session_id: last.session_id, exercise_id: exId, set_number: last.set_number + 1, reps: last.reps, charge: last.charge, duration_seconds: last.duration_seconds };
   btn.disabled = true;
   try{
     const r = await api('/rest/v1/session_logs?select=id,session_id,exercise_id,set_number,reps,charge,duration_seconds,exercises(name)', { method:'POST', headers:{ Prefer:'return=representation' }, body: JSON.stringify(body) });
-    box._logs.push(r[0]); box._logs.sort((x, y) => x.set_number - y.set_number);
+    box._logs.splice(lastIdx + 1, 0, r[0]); // juste après les séries du même exercice : l'ordre du programme est conservé
     renderClientLogs(box, box._logs); toast('Série ajoutée (copie de la précédente, corrige puis Enregistrer)');
+  }catch(e){ console.error(e); toast('Ajout impossible, réessaie'); btn.disabled = false; }
+}
+async function addClientExercise(btn){
+  const box = btn.closest('.cs-logs'); const first = (box._logs || [])[0]; if(!first) return;
+  const ex = await HSHistory.pickExercise(api);
+  if(!ex) return;
+  btn.disabled = true;
+  try{
+    const r = await api('/rest/v1/session_logs?select=id,session_id,exercise_id,set_number,reps,charge,duration_seconds,exercises(name,category)', { method:'POST', headers:{ Prefer:'return=representation' }, body: JSON.stringify({ session_id: first.session_id, exercise_id: ex, set_number: 1, reps: null, charge: null, duration_seconds: null }) });
+    box._logs.push(r[0]);
+    renderClientLogs(box, box._logs); toast('Exercice ajouté : renseigne ses séries puis Enregistrer');
   }catch(e){ console.error(e); toast('Ajout impossible, réessaie'); btn.disabled = false; }
 }
 async function removeClientSet(btn){

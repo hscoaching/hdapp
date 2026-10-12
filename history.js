@@ -195,28 +195,69 @@
   // Sans cela, l'affichage dépendait de l'ordre interne de la base et mélangeait les exercices.
   async function orderLogs(logs, sessionId, req){
     const list = Array.isArray(logs) ? logs.slice() : [];
-    const rank = {}, custom = {}, timed = {};
+    const rank = {}, custom = {}, timed = {}, sst = {};
     try{
       const ss = await req(`/rest/v1/sessions?select=program_id,day_label&id=eq.${sessionId}`);
       const s = ss && ss[0];
       if(s && s.program_id){
         let pe;
-        try{ pe = await req(`/rest/v1/program_exercises?select=exercise_id,variant_exercise_id,order_index,day_label,custom_name,reps&program_id=eq.${s.program_id}&order=order_index`); }
+        try{ pe = await req(`/rest/v1/program_exercises?select=exercise_id,variant_exercise_id,order_index,day_label,custom_name,reps,superset_group&program_id=eq.${s.program_id}&order=order_index`); }
         catch(e1){ pe = await req(`/rest/v1/program_exercises?select=exercise_id,variant_exercise_id,order_index,day_label&program_id=eq.${s.program_id}&order=order_index`); }
-        (pe || []).filter(x => !s.day_label || !x.day_label || x.day_label === s.day_label).forEach((x, i) => {
+        const dayPe = (pe || []).filter(x => !s.day_label || !x.day_label || x.day_label === s.day_label);
+        // étiquettes de superset : A1, A2, B1… (une lettre par superset, un numéro par exercice), comme dans le programme
+        let letter = -1, pos = 0, prevG = null;
+        dayPe.forEach(x => {
+          const g = x.superset_group;
+          if(g == null){ prevG = null; return; }
+          if(g === prevG) pos++; else { letter++; pos = 1; prevG = g; }
+          if(sst[x.exercise_id] == null) sst[x.exercise_id] = String.fromCharCode(65 + letter) + pos;
+          if(x.variant_exercise_id && sst[x.variant_exercise_id] == null) sst[x.variant_exercise_id] = String.fromCharCode(65 + letter) + pos;
+        });
+        dayPe.forEach((x, i) => {
           if(rank[x.exercise_id] == null){ rank[x.exercise_id] = i; if(x.custom_name) custom[x.exercise_id] = x.custom_name; if(x.reps && x.reps.charAt(0) !== '~' && /\d\s*(min|sec|s\b|m\b|'|")/i.test(x.reps)) timed[x.exercise_id] = true; }
           if(x.variant_exercise_id && rank[x.variant_exercise_id] == null) rank[x.variant_exercise_id] = i + 0.5;
         });
       }
     }catch(e){ console.error(e); }
-    list.forEach(l => { if(custom[l.exercise_id]) l.custom_name = custom[l.exercise_id]; if(timed[l.exercise_id] || (l.exercises && String(l.exercises.category||'').toLowerCase() === 'cardio')) l.timed = true; });
+    list.forEach(l => { if(sst[l.exercise_id]) l.ss_tag = sst[l.exercise_id]; if(custom[l.exercise_id]) l.custom_name = custom[l.exercise_id]; if(timed[l.exercise_id] || (l.exercises && String(l.exercises.category||'').toLowerCase() === 'cardio')) l.timed = true; });
     const first = {};
     list.forEach(l => { const t = l.completed_at ? Date.parse(l.completed_at) : 0; if(first[l.exercise_id] == null || t < first[l.exercise_id]) first[l.exercise_id] = t; });
     const R = l => rank[l.exercise_id] == null ? 1e6 : rank[l.exercise_id];
     return list.sort((a, b) => (R(a) - R(b)) || (first[a.exercise_id] - first[b.exercise_id]) || String(a.exercise_id).localeCompare(String(b.exercise_id)) || (a.set_number - b.set_number) || (Date.parse(a.completed_at || 0) - Date.parse(b.completed_at || 0)));
   }
 
-  window.HSHistory = { confirmDelete, exportPdf, requestEdit, toast, orderLogs };
+  // Fenêtre de recherche d'un exercice (ajout d'un exercice à une séance passée). Renvoie l'id choisi, ou null si annulé.
+  let EXLIST = null;
+  async function pickExercise(req){
+    if(!EXLIST){
+      try{ EXLIST = await req('/rest/v1/exercises?select=id,name,category,primary_muscles&order=name&limit=2000') || []; }
+      catch(e){ console.error(e); toast("Liste des exercices indisponible. Réessaie."); return null; }
+    }
+    const norm = t => String(t || '').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    return new Promise(resolve => {
+      const m = document.createElement('div');
+      m.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.78);display:flex;align-items:center;justify-content:center;padding:16px;';
+      m.innerHTML = `<div style="background:var(--surface,#16171a);color:var(--ink,#f5f5f5);border:1px solid var(--line,#2c2c30);width:100%;max-width:480px;max-height:85vh;display:flex;flex-direction:column;padding:16px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><b style="font-size:17px;">Ajouter un exercice</b><button type="button" data-x aria-label="Fermer" style="background:none;border:1px solid var(--line,#2c2c30);color:inherit;padding:4px 10px;cursor:pointer;">✕</button></div>
+        <input type="text" placeholder="Chercher : nom, muscle…" style="width:100%;box-sizing:border-box;background:var(--surface-2,#1f2024);border:1px solid var(--line,#2c2c30);color:inherit;padding:12px;font:inherit;margin-bottom:8px;">
+        <div data-list style="overflow:auto;flex:1;"></div></div>`;
+      document.body.appendChild(m);
+      const done = id => { m.remove(); resolve(id); };
+      const list = m.querySelector('[data-list]'), inp = m.querySelector('input');
+      const draw = () => {
+        const q = norm(inp.value);
+        const r = EXLIST.filter(e => !q || norm(e.name + ' ' + (e.category || '') + ' ' + (e.primary_muscles || []).join(' ')).includes(q)).slice(0, 40);
+        list.innerHTML = r.length ? r.map(e => `<button type="button" data-id="${esc(e.id)}" style="display:block;width:100%;text-align:left;background:none;border:1px solid var(--line,#2c2c30);color:inherit;padding:10px 12px;margin-bottom:6px;font:inherit;cursor:pointer;">${esc(e.name)} <span style="opacity:.6;font-size:12px;">${esc(e.category || '')}</span></button>`).join('') : '<div style="opacity:.7;padding:10px;">Aucun exercice trouvé.</div>';
+      };
+      inp.oninput = draw; draw();
+      list.onclick = ev => { const b = ev.target.closest('[data-id]'); if(b) done(b.dataset.id); };
+      m.querySelector('[data-x]').onclick = () => done(null);
+      m.onclick = ev => { if(ev.target === m) done(null); };
+      setTimeout(() => inp.focus(), 50);
+    });
+  }
+
+  window.HSHistory = { confirmDelete, exportPdf, requestEdit, toast, orderLogs, pickExercise };
 })();
 
 ;try{window.__hs_his='HSC-HST-2026-10-C9B4';}catch(e){}

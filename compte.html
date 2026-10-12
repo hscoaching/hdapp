@@ -167,6 +167,7 @@
 <script src="export.js"></script>
 <script src="account.js"></script>
 <script src="history.js"></script>
+<script src="session-report.js"></script>
 <script src="import.js"></script>
 <script>
 const SUPABASE_URL = "https://rvftqdbdibfylauartii.supabase.co";
@@ -754,6 +755,16 @@ function reloadSessionLogs(btn, sid){
   const card = btn.closest('.card'); if(!card) return;
   const box = card.querySelector('.logs'); box.style.display = 'none'; toggleSessionLogs(card, sid);
 }
+async function addLogExercise(btn, sid){
+  const ex = await HSHistory.pickExercise(histReq);
+  if(!ex) return;
+  btn.disabled = true;
+  try{
+    await histReq('/rest/v1/session_logs', { method:'POST', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ session_id: sid, exercise_id: ex, set_number: 1, reps: null, charge: null, duration_seconds: null }) });
+    HSHistory.toast('Exercice ajouté : renseigne ses séries');
+    reloadSessionLogs(btn, sid);
+  }catch(e){ console.error(e); HSHistory.toast('Ajout impossible. Réessaie.'); btn.disabled = false; }
+}
 async function addLogSet(btn){
   const ex = btn.dataset.ex, sid = btn.dataset.sid;
   const rows = [...btn.parentElement.querySelectorAll('.edit-row')].filter(r => r.dataset.ex === ex);
@@ -783,6 +794,10 @@ async function removeLogSet(btn){
     reloadSessionLogs(btn, sid);
   }catch(e){ console.error(e); HSHistory.toast('Suppression impossible. Réessaie.'); btn.disabled = false; }
 }
+function openSessionReport(id){
+  const s = HIST.find(x => x.id === id); if(!s) return;
+  HSReport.open({ session: s, req: histReq, userId: getSession().user.id, durationSec: histDurSec(s) });
+}
 async function toggleSessionLogs(card, sessionId){
   const box = card.querySelector('.logs');
   if(box.style.display==='block'){ box.style.display='none'; return; }
@@ -804,7 +819,7 @@ async function toggleSessionLogs(card, sessionId){
   const byExercise = {};
   let totalVolume = 0;
   logs.forEach(l=>{
-    const name = (l.custom_name || l.exercises?.name || 'Exercice') + (l.custom_name && l.exercises?.name && l.custom_name !== l.exercises.name ? '\u0001' + l.exercises.name : '');
+    const name = (l.ss_tag ? '\u0002' + l.ss_tag + '\u0002' : '') + (l.custom_name || l.exercises?.name || 'Exercice') + (l.custom_name && l.exercises?.name && l.custom_name !== l.exercises.name ? '\u0001' + l.exercises.name : '');
     const key = l.exercise_id + '|' + name;
     if(!byExercise[key]) byExercise[key] = [];
     byExercise[key].push(l);
@@ -825,11 +840,14 @@ async function toggleSessionLogs(card, sessionId){
           `<div class="set-row"><span class="set-row-num">Série ${x.set_number}</span><span class="set-row-val">${HSExport.setTxt(x)}</span></div>`
         ).join('')}</div>`;
     }
-    const [shown, fiche] = name.split('\u0001');
-    return `<div style="margin-bottom:16px;"><div style="font-weight:700;font-size:15px;margin-bottom:6px;">${escapeHtml(shown)}${fiche ? ` <span style="font-weight:500;font-size:12px;opacity:.6;">· fiche : ${escapeHtml(fiche)}</span>` : ''}</div>${body}</div>`;
+    const tm = name.match(/^\u0002([^\u0002]*)\u0002/), tag = tm ? tm[1] : '';
+    const [shown, fiche] = name.replace(/^\u0002[^\u0002]*\u0002/, '').split('\u0001');
+    return `<div style="margin-bottom:16px;"><div style="font-weight:700;font-size:15px;margin-bottom:6px;">${tag ? `<span style="display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:999px;border:1px solid currentColor;vertical-align:middle;margin-right:6px;">SUPERSET ${escapeHtml(tag)}</span>` : ''}${escapeHtml(shown)}${fiche ? ` <span style="font-weight:500;font-size:12px;opacity:.6;">· fiche : ${escapeHtml(fiche)}</span>` : ''}</div>${body}</div>`;
   }).join('');
+  const addExBtn = editing ? `<button type="button" class="btn btn-ghost" style="width:100%;justify-content:center;margin:4px 0 14px;" onclick="addLogExercise(this,'${s.id}')">➕ Ajouter un exercice</button>` : '';
   const volumeLine = totalVolume ? `<div class="log-line" style="border-top:1px solid var(--line);padding-top:12px;margin-top:4px;font-size:14px;"><span>Poids total soulevé pendant la séance</span><b>${Math.round(totalVolume).toLocaleString('fr-FR')} kg</b></div>` : '';
-  box.innerHTML = (window.__isCoach ? forBlockHtml(s) : '') + (editing && window.__isAdmin ? adminMetaHtml(s) : '') + rows + volumeLine + editBlock;
+  const reportBtn = `<button type="button" class="btn btn-accent btn-sm" style="margin-bottom:14px;" onclick="openSessionReport('${s.id}')">📊 Compte rendu de la séance</button>`;
+  box.innerHTML = reportBtn + (window.__isCoach ? forBlockHtml(s) : '') + (editing && window.__isAdmin ? adminMetaHtml(s) : '') + rows + addExBtn + volumeLine + editBlock;
 }
 function forBlockHtml(s){
   const names = [...new Set(HIST.map(histWho).filter(Boolean))];
