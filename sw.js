@@ -4,7 +4,7 @@
 // et met en cache les réponses Supabase (exercices, images) en "stale-while-revalidate"
 // pour que la bibliothèque reste consultable même avec un wifi de salle capricieux.
 
-const CACHE_NAME = 'hs-coaching-v201';
+const CACHE_NAME = 'hs-coaching-v203';
 const APP_SHELL = [
   'index.html',
   'programmes.html',
@@ -12,6 +12,7 @@ const APP_SHELL = [
   'confidentialite.html',
   'cgu.html',
   'mentions-legales.html',
+  'muscles.js',
   'admin.html',
   'admin-challenges.js',
   'admin-clients.js',

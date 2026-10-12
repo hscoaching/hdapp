@@ -297,7 +297,7 @@
 
 <script src="monitor.js"></script><script src="alerts.js"></script>
 <script src="rang.js"></script><script src="badges.js"></script><script>(function(){var H=window.HSBadges=window.HSBadges||{};['renderEnd','animateEnd','showNewBadges','renderNew','renderFull','showLevel','showTier','chip','coachPill','coachHero','asPreview','summaryLine'].forEach(function(k){if(typeof H[k]!=='function')H[k]=function(){return ''};});['checkSecrets','shareEnd','shareLevel','shareCard','levelUpSeen','openCheckin'].forEach(function(k){if(typeof H[k]!=='function')H[k]=function(){};});})();</script>
-<script src="coaches.js"></script><script src="tips.js"></script>
+<script src="coaches.js"></script><script src="tips.js"></script><script src="muscles.js"></script>
 <script src="export.js"></script>
 <script>
 String.prototype.fold = function(){ return this.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase(); }; // recherche sans accents
@@ -1605,6 +1605,7 @@ function renderCreate(){
     backHash: '#', eyebrow: 'NOUVEAU PROGRAMME', title: 'Crée ton programme',
     name: '', desc: '', saveLabel: 'Enregistrer le programme'
   });
+  pickGroup = 'Tous'; pickMuscle = null; renderPickChips();
   renderPickExGrid(exercises);
   renderDraftList();
 }
@@ -1642,6 +1643,7 @@ async function renderEditProgram(programId){
     backHash: `#programme/${programId}`, eyebrow: 'MODIFIER LE PROGRAMME', title: prog.name,
     name: prog.name || '', desc: prog.description || '', saveLabel: 'Enregistrer les modifications'
   });
+  pickGroup = 'Tous'; pickMuscle = null; renderPickChips();
   renderPickExGrid(exercises);
   renderDraftList();
 }
@@ -1664,7 +1666,7 @@ function programFormHtml({ backHash, eyebrow, title, name, desc, saveLabel }){
         <button type="button" class="btn btn-ghost btn-sm" onclick="deleteDay()">🗑 Supprimer cette séance</button>
       </div>
       <h2 id="dayExTitle" style="font-size:22px;">Exercices</h2>
-      <div class="field"><label>Chercher un exercice</label><input id="pSearch" type="text" placeholder="Nom, catégorie, muscle…" oninput="filterPickEx()"></div>
+      <div class="field"><label>Chercher un exercice</label><div id="pChips" class="fchips" style="margin-bottom:8px;"></div><div id="pSubchips" class="fchips" style="margin-bottom:8px;display:none;"></div><input id="pSearch" type="text" placeholder="Nom, catégorie, muscle…" oninput="filterPickEx()"></div>
       <div id="pickExGrid" class="pick-ex-grid"></div>
       <div class="picker" style="margin-top:10px; flex-wrap:wrap;">
         <input id="pSets" type="number" placeholder="Séries" style="width:80px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
@@ -1674,6 +1676,7 @@ function programFormHtml({ backHash, eyebrow, title, name, desc, saveLabel }){
         </div>
         <span id="pRepsBox" style="display:inline-flex; align-items:center; gap:6px;"><input id="pReps" type="number" min="0" inputmode="numeric" placeholder="Reps" style="width:70px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"><span style="color:var(--ink-muted);font-size:12px;">à</span><input id="pRepsMax" type="number" min="0" inputmode="numeric" placeholder="Max (option)" style="width:84px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"></span>
         <span id="pTimeBox" style="display:none; align-items:center; gap:6px;"><input id="pMin" type="number" min="0" inputmode="numeric" placeholder="Min" style="width:64px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"><input id="pSec" type="number" min="0" max="59" inputmode="numeric" placeholder="Sec" style="width:64px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"><span style="color:var(--ink-muted);font-size:12px;">à</span><input id="pMin2" type="number" min="0" inputmode="numeric" placeholder="Min max" style="width:72px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"><input id="pSec2" type="number" min="0" max="59" inputmode="numeric" placeholder="Sec max" style="width:72px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"></span>
+        <input id="pRest" type="text" inputmode="text" placeholder="Repos : 1:30" aria-label="Temps de repos (par défaut 1 min 30)" style="width:120px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
         <button class="btn btn-ghost btn-sm" onclick="addDraftExercise()">Ajouter à cette séance</button>
       </div>
       <div id="draftList"></div>
@@ -1682,9 +1685,27 @@ function programFormHtml({ backHash, eyebrow, title, name, desc, saveLabel }){
     <div class="actions-row"><button class="btn btn-accent" id="saveProgramBtn" onclick="saveProgram()">${saveLabel}</button></div>
   `;
 }
+let pickGroup = 'Tous', pickMuscle = null;
+function setPickGroup(g){ pickGroup = g; pickMuscle = null; renderPickChips(); filterPickEx(); }
+function setPickMuscle(m){ pickMuscle = (m === '' ? null : m); renderPickChips(); filterPickEx(); }
+function renderPickChips(){
+  const box = document.getElementById('pChips'), sub = document.getElementById('pSubchips');
+  if(!box || !sub) return;
+  box.innerHTML = ['Tous', ...GROUPS].map(g => `<button type="button" class="fchip ${g===pickGroup?'active':''}" data-g="${g}" onclick="setPickGroup(this.dataset.g)">${g}</button>`).join('');
+  if(pickGroup === 'Tous'){ sub.innerHTML = ''; sub.style.display = 'none'; return; }
+  const counts = {};
+  exercises.filter(ex => pickMatchesGroup(ex, pickGroup)).forEach(ex => pickMuscleLabels(ex, pickGroup).forEach(l => counts[l] = (counts[l]||0) + 1));
+  let ms = Object.keys(counts).sort((a,b)=> counts[b]-counts[a]);
+  if(pickGroup === 'Pectoraux') ms = PEC_ORDER.filter(m => counts[m]);
+  if(!ms.length){ sub.innerHTML = ''; sub.style.display = 'none'; return; }
+  sub.style.display = '';
+  sub.innerHTML = ['Tous', ...ms].map(m => `<button type="button" class="fchip ${(m==='Tous' ? pickMuscle===null : pickMuscle===m)?'active':''}" data-m="${m==='Tous'?'':m}" onclick="setPickMuscle(this.dataset.m)">${m}</button>`).join('');
+}
 function filterPickEx(){
   const q = document.getElementById('pSearch').value.trim().fold();
-  const matches = !q ? exercises : exercises.filter(e=>
+  let base = exercises.filter(e => pickMatchesGroup(e, pickGroup));
+  if(pickGroup !== 'Tous' && pickMuscle) base = base.filter(e => pickMuscleLabels(e, pickGroup).includes(pickMuscle));
+  const matches = !q ? base : base.filter(e=>
     e.name.fold().includes(q)
     || (e.category||'').fold().includes(q)
     || (e.primary_muscles||[]).some(m=>(m||'').fold().includes(q))
@@ -1724,14 +1745,25 @@ function fmtRepsRange(a, b){
   if(!(x > 0)) return String(y);
   return y > x ? `${x}-${y}` : String(x);
 }
+// Repos saisi : « 1:30 », « 90 », « 45s », « 2 » (minutes) ... vide = 1 min 30 par défaut
+function parseRestInput(str){
+  const t = String(str == null ? '' : str).trim().toLowerCase().replace(',', '.');
+  if(!t) return 90;
+  let m = t.match(/^(\d+):(\d{1,2})$/); if(m) return Math.min(3600, parseInt(m[1]) * 60 + parseInt(m[2]));
+  m = t.match(/^(\d+(?:\.\d+)?)\s*(?:s|sec)$/); if(m) return Math.min(3600, Math.round(parseFloat(m[1])));
+  m = t.match(/^(\d+(?:\.\d+)?)\s*(?:min|m)?$/); if(m){ const v = parseFloat(m[1]); return Math.min(3600, Math.round(/[a-z]/.test(t) || v < 15 ? v * 60 : v)); }
+  return null;
+}
 function addDraftExercise(){
   const exId = selectedPickExId;
   if(!exId){ toast('Choisis un exercice dans la liste'); return; }
   const sets = document.getElementById('pSets').value || 3;
   const v = i => document.getElementById(i).value;
   const reps = pickRepsMode==='time' ? fmtTimeReps(v('pMin'), v('pSec'), v('pMin2'), v('pSec2')) : fmtRepsRange(v('pReps'), v('pRepsMax'));
+  const rest = parseRestInput(document.getElementById('pRest').value);
+  if(rest == null){ toast('Repos illisible : essaie 1:30, 90 ou 45s'); return; }
   const ex = exercisesById[exId];
-  draftExercises.push({ exercise_id: exId, sets: parseInt(sets), reps, name: ex.name, day: draftDays[activeDayIdx], linkPrev: false, variant_id: null });
+  draftExercises.push({ exercise_id: exId, sets: parseInt(sets), reps, rest, name: ex.name, day: draftDays[activeDayIdx], linkPrev: false, variant_id: null });
   renderDraftList();
 }
 function renderDayTabs(){
@@ -1791,7 +1823,9 @@ function renderDraftList(){
     const canLink = idx > 0;
     return `<div class="draft-row ${tags[idx]?'in-ss':''}">
       <div class="draft-main">
-        ${tags[idx]?`<span class="ss-chip">SUPERSET ${tags[idx]}</span> `:''}${escHtml(d.name)} — ${d.sets}×${escHtml(d.reps)}
+        ${tags[idx]?`<span class="ss-chip">SUPERSET ${tags[idx]}</span> `:''}${escHtml(d.custom_name || d.name)} — ${d.sets}×${escHtml(d.reps)}${d.custom_name?` <span style="opacity:.6;font-size:12px;">· fiche : ${escHtml(d.name)}</span>`:''}
+        <div style="opacity:.75;font-size:12px;">⏱ Repos ${restLabel(d.rest || 90)}</div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;"><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="renameDraft(${i})" aria-label="Renommer dans ce programme">✏️ Renommer</button><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="editDraftRest(${i})" aria-label="Changer le temps de repos">⏱ Changer le repos</button></div>
         ${vex?`<div class="draft-var">↔ Variante : ${escHtml(vex.name)} <button type="button" class="rm-var" title="Retirer la variante" onclick="clearVariant(${i})" aria-label="Retirer la variante">✕</button></div>`:''}
       </div>
       <div class="draft-actions">
@@ -1803,6 +1837,23 @@ function renderDraftList(){
       </div>
     </div>`;
   }).join('') + `<p class="subtitle" style="margin-top:10px;font-size:12px;">🔗 enchaîne avec l'exercice du dessus (superset) · ↔ ajoute comme variante l'exercice sélectionné dans la grille</p>` : '<div class="empty" style="padding:14px 0;">Aucun exercice dans cette séance pour l\'instant.</div>';
+}
+function editDraftRest(i){
+  const d = draftExercises[i]; if(!d) return;
+  const cur = d.rest || 90;
+  const val = prompt('Temps de repos (ex : 1:30, 90, 45s). Laisse vide pour 1 min 30 :', cur % 60 ? Math.floor(cur/60) + ':' + String(cur%60).padStart(2,'0') : String(cur/60));
+  if(val === null) return;
+  const r = parseRestInput(val);
+  if(r == null){ toast('Repos illisible : essaie 1:30, 90 ou 45s'); return; }
+  d.rest = r; renderDraftList();
+}
+function renameDraft(i){
+  const d = draftExercises[i]; if(!d) return;
+  const val = prompt('Nom affiché dans ce programme (laisse vide pour reprendre « ' + d.name + ' ») :', d.custom_name || '');
+  if(val === null) return;
+  const v = val.replace(/[<>]/g, '').trim().slice(0, 80);
+  d.custom_name = (v && v !== d.name) ? v : null;
+  renderDraftList();
 }
 function removeDraft(i){
   // Si on retire la tête d'un superset, l'exercice suivant du superset devient la nouvelle tête
