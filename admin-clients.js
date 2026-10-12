@@ -335,7 +335,7 @@ function renderClientLogs(box, logs){
   box._logs = logs;
   const byEx = {}; let vol = 0;
   logs.forEach(l=>{
-    const n = (l.exercises && l.exercises.name) || 'Exercice';
+    const n = l.custom_name || (l.exercises && l.exercises.name) || 'Exercice';
     (byEx[n] = byEx[n] || []).push(l);
     if(!l.duration_seconds && l.reps && l.charge) vol += l.reps * l.charge;
   });
@@ -466,7 +466,8 @@ async function toggleClientSession(card, sessionId){
   if(box.dataset.loaded) return;
   box.innerHTML = '<div class="empty" style="padding:6px 0;">Chargement…</div>';
   try{
-    const logs = await api(`/rest/v1/session_logs?select=id,session_id,exercise_id,set_number,reps,charge,duration_seconds,exercises(name)&session_id=eq.${sessionId}&order=set_number,id`);
+    let logs = await api(`/rest/v1/session_logs?select=id,session_id,exercise_id,set_number,reps,charge,duration_seconds,completed_at,exercises(name,category)&session_id=eq.${sessionId}&order=set_number,id`);
+    logs = await HSHistory.orderLogs(logs, sessionId, api);
     if(!logs.length){ box.innerHTML = '<div class="empty" style="padding:6px 0;">Aucune série enregistrée pour cette séance.</div>'; box.dataset.loaded = '1'; return; }
     box.onclick = ev => ev.stopPropagation();
     renderClientLogs(box, logs);

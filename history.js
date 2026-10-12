@@ -191,7 +191,32 @@
     };
   }
 
-  window.HSHistory = { confirmDelete, exportPdf, requestEdit, toast };
+  // Remet les exercices d'une séance dans l'ordre du programme (puis, pour les exercices ajoutés ou hors programme, dans l'ordre où ils ont été faits).
+  // Sans cela, l'affichage dépendait de l'ordre interne de la base et mélangeait les exercices.
+  async function orderLogs(logs, sessionId, req){
+    const list = Array.isArray(logs) ? logs.slice() : [];
+    const rank = {}, custom = {}, timed = {};
+    try{
+      const ss = await req(`/rest/v1/sessions?select=program_id,day_label&id=eq.${sessionId}`);
+      const s = ss && ss[0];
+      if(s && s.program_id){
+        let pe;
+        try{ pe = await req(`/rest/v1/program_exercises?select=exercise_id,variant_exercise_id,order_index,day_label,custom_name,reps&program_id=eq.${s.program_id}&order=order_index`); }
+        catch(e1){ pe = await req(`/rest/v1/program_exercises?select=exercise_id,variant_exercise_id,order_index,day_label&program_id=eq.${s.program_id}&order=order_index`); }
+        (pe || []).filter(x => !s.day_label || !x.day_label || x.day_label === s.day_label).forEach((x, i) => {
+          if(rank[x.exercise_id] == null){ rank[x.exercise_id] = i; if(x.custom_name) custom[x.exercise_id] = x.custom_name; if(x.reps && x.reps.charAt(0) !== '~' && /\d\s*(min|sec|s\b|m\b|'|")/i.test(x.reps)) timed[x.exercise_id] = true; }
+          if(x.variant_exercise_id && rank[x.variant_exercise_id] == null) rank[x.variant_exercise_id] = i + 0.5;
+        });
+      }
+    }catch(e){ console.error(e); }
+    list.forEach(l => { if(custom[l.exercise_id]) l.custom_name = custom[l.exercise_id]; if(timed[l.exercise_id] || (l.exercises && String(l.exercises.category||'').toLowerCase() === 'cardio')) l.timed = true; });
+    const first = {};
+    list.forEach(l => { const t = l.completed_at ? Date.parse(l.completed_at) : 0; if(first[l.exercise_id] == null || t < first[l.exercise_id]) first[l.exercise_id] = t; });
+    const R = l => rank[l.exercise_id] == null ? 1e6 : rank[l.exercise_id];
+    return list.sort((a, b) => (R(a) - R(b)) || (first[a.exercise_id] - first[b.exercise_id]) || String(a.exercise_id).localeCompare(String(b.exercise_id)) || (a.set_number - b.set_number) || (Date.parse(a.completed_at || 0) - Date.parse(b.completed_at || 0)));
+  }
+
+  window.HSHistory = { confirmDelete, exportPdf, requestEdit, toast, orderLogs };
 })();
 
 ;try{window.__hs_his='HSC-HST-2026-10-C9B4';}catch(e){}

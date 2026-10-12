@@ -1185,7 +1185,7 @@ async function renderSession(programId, dayIdx, manual){
       const tg = parseTargetSec(u.it.reps);
       return `<div class="set-line" data-slot="${u.k}" data-ex="${u.ex.id}" data-set="${s}" data-timed="1"${tg ? ` data-lo="${tg.lo}" data-hi="${tg.hi}"` : ''}>
         <div class="setnum">S${s}</div>
-        <input type="number" class="reps-input" style="display:none"><input type="number" class="charge-input" style="display:none">
+        <input type="number" class="reps-input" style="display:none">${(u.ex.category || '').toLowerCase() === 'cardio' ? '<input type="number" class="charge-input" style="display:none">' : `<input type="number" inputmode="decimal" placeholder="${prev && prev.charge ? prev.charge : 'kg'}" class="charge-input" aria-label="Charge en kg (facultatif)"><span class="unit">kg</span>`}
         <input type="number" inputmode="numeric" min="0" placeholder="${phm}" class="min-input">
         <span class="unit">min</span>
         <input type="number" inputmode="numeric" min="0" max="59" placeholder="${phs}" class="sec-input">
@@ -1430,18 +1430,31 @@ function updPace(el){
   if(!out) return;
   if(sec > 0 && km > 0){ const p = Math.round(sec / km); out.textContent = `allure ${Math.floor(p/60)}:${String(p%60).padStart(2,'0')} /km · ${(km / (sec/3600)).toFixed(1).replace('.', ',')} km/h`; } else out.textContent = '';
 }
+// Reps tapées, sinon l'objectif affiché en gris s'il est un nombre précis (ex : 6) ; une fourchette (« 10-12 ») doit être précisée
+function repsOf(line){
+  const inp = line.querySelector('.reps-input');
+  const typed = parseInt(inp.value);
+  if(typed > 0) return typed;
+  return /^\d+$/.test(inp.placeholder || '') ? parseInt(inp.placeholder) : null;
+}
 async function validateSetInner(btn){
   const line = btn.closest('.set-line');
   const exId = line.dataset.ex; const setNum = parseInt(line.dataset.set);
   const timed = line.dataset.timed === '1';
-  let reps = parseInt(line.querySelector('.reps-input').value) || null;
+  let reps = repsOf(line);
   let charge = parseFloat(line.querySelector('.charge-input').value) || null;
   let sec = null;
   if(timed){
-    reps = null; charge = null;
+    reps = null; if(line.querySelector('.charge-input').style.display === 'none') charge = null;
     sec = (parseInt(line.querySelector('.min-input').value) || 0) * 60 + (parseInt(line.querySelector('.sec-input').value) || 0);
     if(sec <= 0){ toast('Indique la durée (minutes / secondes)'); return; }
     sec = Math.min(sec, 86400);
+  } else if(!reps){
+    toast('Indique les répétitions faites avant de valider');
+    const ri = line.querySelector('.reps-input'); if(ri) ri.focus();
+    return;
+  } else {
+    const ri = line.querySelector('.reps-input'); if(ri && !ri.value) ri.value = reps; // le chiffre retenu devient visible
   }
   const di = line.querySelector('.dist-input'); let dist = di ? (parseFloat(di.value) || null) : null; if(dist != null) dist = Math.min(Math.round(dist * 100) / 100, 500);
   try{
@@ -1714,7 +1727,7 @@ async function saveManualSession(programId){
   const btn = document.getElementById('manSaveBtn');
   const entries = [...document.querySelectorAll('#sessBody .set-line')].map(l=>({
     exId: l.dataset.ex, setNum: parseInt(l.dataset.set),
-    reps: parseInt(l.querySelector('.reps-input').value) || null,
+    reps: (parseInt(l.querySelector('.reps-input').value) || (parseFloat(l.querySelector('.charge-input').value) ? repsOf(l) : null)) || null,
     charge: parseFloat(l.querySelector('.charge-input').value) || null,
     sec: l.dataset.timed === '1' ? Math.min(86400, (parseInt(l.querySelector('.min-input').value) || 0) * 60 + (parseInt(l.querySelector('.sec-input').value) || 0)) || null : null,
     dist: (l.querySelector('.dist-input') && parseFloat(l.querySelector('.dist-input').value)) ? Math.min(500, Math.round(parseFloat(l.querySelector('.dist-input').value) * 100) / 100) : null
@@ -1763,6 +1776,7 @@ function selectPickEx(exId){
   [...document.querySelectorAll('.pick-ex-card')].forEach(c=> c.classList.toggle('selected', c.dataset.id===exId));
 }
 function renderCreate(){
+  dEdit = null;
   draftExercises = [];
   draftDays = ['Séance 1']; activeDayIdx = 0;
   selectedPickExId = null;
@@ -1789,6 +1803,7 @@ async function renderEditProgram(programId){
     location.hash = programId ? `#programme/${programId}` : '#';
     return;
   }
+  dEdit = null;
   editingProgramId = programId;
   selectedPickExId = null;
   pickRepsMode = 'reps';
@@ -2019,7 +2034,7 @@ function renderDraftList(){
       <div class="draft-main">
         ${tags[idx]?`<span class="ss-chip">SUPERSET ${tags[idx]}</span> `:''}${escHtml(d.custom_name || d.name)} — ${parseScheme(d.reps) ? escHtml(schemeText(parseScheme(d.reps))) : d.sets + '×' + escHtml(d.reps)}${d.custom_name?` <span style="opacity:.6;font-size:12px;">· fiche : ${escHtml(d.name)}</span>`:''}
         <div style="opacity:.75;font-size:12px;">⏱ Repos ${restLabel(d.rest || 90)}</div>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;"><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="editDraftSets(${i})" aria-label="Changer les séries et les répétitions">🔢 Séries / reps</button><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="renameDraft(${i})" aria-label="Renommer dans ce programme">✏️ Renommer</button><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="editDraftRest(${i})" aria-label="Changer le temps de repos">⏱ Changer le repos</button></div>
+        ${dEdit && dEdit.i === i ? draftEditPanel() : `<div style="display:flex;gap:14px;flex-wrap:wrap;"><button type="button" class="rm-var" style="font-size:13px;padding:4px 0;font-weight:700;" onclick="openDraftEdit(${i})" aria-label="Modifier cet exercice : nom, séries, répétitions, repos">✏️ Modifier (nom, séries, reps, repos)</button></div>`}
         ${vex?`<div class="draft-var">↔ Variante : ${escHtml(vex.name)} <button type="button" class="rm-var" title="Retirer la variante" onclick="clearVariant(${i})" aria-label="Retirer la variante">✕</button></div>`:''}
       </div>
       <div class="draft-actions">
@@ -2031,6 +2046,73 @@ function renderDraftList(){
       </div>
     </div>`;
   }).join('') + `<p class="subtitle" style="margin-top:10px;font-size:12px;">🔗 enchaîne avec l'exercice du dessus (superset) · ↔ ajoute comme variante l'exercice sélectionné dans la grille</p>` : '<div class="empty" style="padding:14px 0;">Aucun exercice dans cette séance pour l\'instant.</div>';
+}
+let dEdit = null;
+function openDraftEdit(i){
+  const d = draftExercises[i]; if(!d) return;
+  const sch = parseScheme(d.reps);
+  let mode = 'reps', r1 = '', r2 = '', text = '', rows = [{ reps:'', hold:'' }], note = '';
+  if(sch){ mode = 'scheme'; rows = sch.sets.map(x=>({ reps:String(x.reps), hold: x.hold ? String(x.hold) : '' })); note = sch.note; }
+  else { const m = String(d.reps||'').match(/^(\d+)(?:\s*-\s*(\d+))?$/); if(m){ r1 = m[1]; r2 = m[2] || ''; } else { mode = 'time'; text = String(d.reps||''); } }
+  const cur = d.rest || 90;
+  dEdit = { i, mode, name: d.custom_name || '', sets: String(d.sets || 3), r1, r2, text, rows, note, rest: cur % 60 ? Math.floor(cur/60) + ':' + String(cur%60).padStart(2,'0') : String(cur/60) + ' min' };
+  renderDraftList();
+}
+function closeDraftEdit(){ dEdit = null; renderDraftList(); }
+function setDraftEditMode(m){ if(!dEdit) return; dEdit.mode = m; if(m==='scheme' && !dEdit.rows.some(r=>r.reps)) dEdit.rows = [{ reps:'', hold:'' }]; renderDraftList(); }
+function dEditAddRow(){ const l = dEdit.rows[dEdit.rows.length-1] || {}; dEdit.rows.push({ reps: l.reps || '', hold: l.hold || '' }); renderDraftList(); }
+function dEditRemoveRow(k){ dEdit.rows.splice(k,1); if(!dEdit.rows.length) dEdit.rows = [{ reps:'', hold:'' }]; renderDraftList(); }
+function dEditPyramid(){ dEdit.rows = [5,4,3,2,1].map(n=>({ reps:String(n), hold:String(n) })); dEdit.rows[4].hold = ''; renderDraftList(); }
+function draftEditPanel(){
+  const e = dEdit, d = draftExercises[e.i];
+  const inp = 'background:var(--surface);border:1px solid var(--line);border-radius:10px;color:var(--ink);padding:10px;font-family:inherit;';
+  const lab = 'font-size:12px;color:var(--ink-muted);';
+  const modeBtn = (m, t) => `<button type="button" class="btn btn-ghost btn-sm reps-mode-btn ${e.mode===m?'active':''}" onclick="setDraftEditMode('${m}')">${t}</button>`;
+  let body;
+  if(e.mode === 'scheme'){
+    body = `<div style="${lab}margin:8px 0 4px;">Une ligne par série : répétitions et tenue en secondes (facultatif)</div>` +
+      e.rows.map((r,k)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="width:28px;font-weight:700;color:var(--ink-muted);">S${k+1}</span><input type="number" min="1" inputmode="numeric" placeholder="Reps" value="${escHtml(r.reps)}" style="width:80px;${inp}" aria-label="Répétitions série ${k+1}" oninput="dEdit.rows[${k}].reps=this.value"><span style="${lab}">reps</span><input type="number" min="0" inputmode="numeric" placeholder="Tenue" value="${escHtml(r.hold)}" style="width:80px;${inp}" aria-label="Tenue en secondes série ${k+1}" oninput="dEdit.rows[${k}].hold=this.value"><span style="${lab}">s</span>${e.rows.length>1?`<button type="button" class="rm" onclick="dEditRemoveRow(${k})" aria-label="Retirer la série ${k+1}">✕</button>`:''}</div>`).join('') +
+      `<div style="display:flex;gap:8px;flex-wrap:wrap;margin:6px 0;"><button type="button" class="btn btn-ghost btn-sm" onclick="dEditAddRow()">＋ Série</button><button type="button" class="btn btn-ghost btn-sm" onclick="dEditPyramid()">Pyramide 5→1</button></div>` +
+      `<div style="${lab}margin-bottom:4px;">Note (ex : 45°, tempo 3-1-1)</div><input type="text" maxlength="40" value="${escHtml(e.note)}" style="width:100%;${inp}" oninput="dEdit.note=this.value">`;
+  } else if(e.mode === 'time'){
+    body = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;"><label style="${lab}">Séries<br><input type="number" min="1" max="20" inputmode="numeric" value="${escHtml(e.sets)}" style="width:80px;${inp}" oninput="dEdit.sets=this.value"></label><label style="${lab}">Durée (ex : 45s, 1 min 30s, 20-25 min)<br><input type="text" value="${escHtml(e.text)}" style="width:210px;${inp}" oninput="dEdit.text=this.value"></label></div>`;
+  } else {
+    body = `<div style="display:flex;gap:10px;flex-wrap:wrap;margin-top:8px;"><label style="${lab}">Séries<br><input type="number" min="1" max="20" inputmode="numeric" value="${escHtml(e.sets)}" style="width:80px;${inp}" oninput="dEdit.sets=this.value"></label><label style="${lab}">Reps<br><input type="number" min="1" inputmode="numeric" value="${escHtml(e.r1)}" style="width:80px;${inp}" oninput="dEdit.r1=this.value"></label><label style="${lab}">à (facultatif)<br><input type="number" min="1" inputmode="numeric" value="${escHtml(e.r2)}" style="width:80px;${inp}" oninput="dEdit.r2=this.value"></label></div>`;
+  }
+  return `<div class="draft-edit" style="margin-top:8px;padding:12px;border:1px solid var(--line);background:var(--surface);">
+    <label style="${lab}">Nom affiché dans ce programme (vide = « ${escHtml(d.name)} »)<br><input type="text" maxlength="80" value="${escHtml(e.name)}" style="width:100%;${inp}" oninput="dEdit.name=this.value"></label>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">${modeBtn('reps','Répétitions')}${modeBtn('time','Temps')}${modeBtn('scheme','Séries variables')}</div>
+    ${body}
+    <label style="${lab}display:block;margin-top:10px;">Repos (ex : 1:30, 90, 45s — vide = 1 min 30)<br><input type="text" value="${escHtml(e.rest)}" style="width:140px;${inp}" oninput="dEdit.rest=this.value"></label>
+    <div style="display:flex;gap:8px;margin-top:12px;"><button type="button" class="btn btn-accent btn-sm" onclick="saveDraftEdit()">Valider</button><button type="button" class="btn btn-ghost btn-sm" onclick="closeDraftEdit()">Annuler</button></div>
+  </div>`;
+}
+function saveDraftEdit(){
+  const e = dEdit; if(!e) return; const d = draftExercises[e.i]; if(!d){ dEdit = null; return; }
+  const rest = parseRestInput(e.rest);
+  if(rest == null){ toast('Repos illisible : essaie 1:30, 90 ou 45s'); return; }
+  let sets = d.sets, reps = d.reps;
+  if(e.mode === 'scheme'){
+    const rows = e.rows.map(r=>({ reps: parseInt(r.reps), hold: Math.min(600, Math.max(0, parseInt(r.hold) || 0)) })).filter(r=>r.reps > 0);
+    if(!rows.length){ toast('Indique les répétitions d\'au moins une série'); return; }
+    reps = encodeScheme(rows, e.note); sets = rows.length;
+  } else {
+    const n = parseInt(e.sets);
+    if(!(n > 0 && n <= 20)){ toast('Nombre de séries illisible (1 à 20)'); return; }
+    sets = n;
+    if(e.mode === 'time'){
+      const t = String(e.text||'').replace(/[<>~|]/g,'').trim().slice(0,24);
+      if(!t){ toast('Indique la durée (ex : 45s)'); return; }
+      reps = t;
+    } else {
+      if(!(parseInt(e.r1) > 0)){ toast('Indique le nombre de répétitions'); return; }
+      reps = fmtRepsRange(e.r1, e.r2);
+    }
+  }
+  const nm = String(e.name||'').replace(/[<>]/g,'').trim().slice(0,80);
+  d.custom_name = (nm && nm !== d.name) ? nm : null;
+  d.sets = sets; d.reps = reps; d.rest = rest;
+  dEdit = null; renderDraftList();
 }
 function editDraftRest(i){
   const d = draftExercises[i]; if(!d) return;
@@ -2072,6 +2154,7 @@ function renameDraft(i){
   renderDraftList();
 }
 function removeDraft(i){
+  dEdit = null;
   // Si on retire la tête d'un superset, l'exercice suivant du superset devient la nouvelle tête
   // (sinon il se retrouverait enchaîné à l'exercice qui précède le superset).
   const j = sameDayNeighbor(i, 1);
@@ -2084,6 +2167,7 @@ function sameDayNeighbor(i, dir){
   return (j < 0 || j >= draftExercises.length) ? -1 : j;
 }
 function moveDraft(i, dir){
+  dEdit = null;
   const j = sameDayNeighbor(i, dir);
   if(j < 0) return;
   const tmp = draftExercises[i]; draftExercises[i] = draftExercises[j]; draftExercises[j] = tmp;
