@@ -852,7 +852,7 @@ async function removeLogSet(btn){
 }
 function openSessionReport(id){
   const s = HIST.find(x => x.id === id); if(!s) return;
-  HSReport.open({ session: s, req: histReq, userId: getSession().user.id, durationSec: histDurSec(s) });
+  HSReport.open({ session: s, req: histReq, userId: s.user_id || getSession().user.id, durationSec: histDurSec(s) });
 }
 async function toggleSessionLogs(card, sessionId){
   const box = card.querySelector('.logs');
