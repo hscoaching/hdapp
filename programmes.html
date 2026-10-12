@@ -99,6 +99,7 @@
   .ex-meta.ss-head{font-weight:700; margin:16px 4px 6px; letter-spacing:.01em;}
   .var-link{display:inline-block; cursor:pointer; padding:6px 0; color:var(--ink);}
   .set-grid{margin-top:12px; display:flex; flex-direction:column; gap:10px;}
+  .set-target{font-size:12px; color:var(--ink-muted); margin:6px 0 -4px 30px; font-weight:600;}
   .set-line{display:flex; align-items:center; gap:6px; font-size:13px;}
   .set-line .setnum{width:24px; color:var(--ink-muted); flex:none; font-weight:700;}
   .set-line input{
@@ -518,6 +519,23 @@ function supersetTags(items){
 }
 function restLabel(sec){ sec = parseInt(sec) || 0; if(sec <= 0) return ''; if(sec < 60) return sec + 's'; const m = Math.floor(sec/60), s = sec % 60; return s ? `${m} min ${s}s` : `${m} min`; }
 // Dans un superset, le repos ne s'affiche qu'une fois : sur le dernier exercice du bloc (repos après le tour)
+// Séries variables : reps = « ~5/5,4/4,3/3,2/2,1|45° » -> une série par jeton « reps/tenue en secondes », note facultative après |
+function parseScheme(r){
+  if(typeof r !== 'string' || r.charAt(0) !== '~') return null;
+  const [list, note] = r.slice(1).split('|');
+  const sets = (list||'').split(',').map(t=>{ const [a,b] = t.trim().split('/'); const reps = parseInt(a); const hold = parseInt(b); return reps > 0 ? { reps, hold: hold > 0 ? hold : 0 } : null; }).filter(Boolean);
+  return sets.length ? { sets, note: (note||'').trim() } : null;
+}
+function encodeScheme(rows, note){
+  const list = rows.map(x=> x.hold ? `${x.reps}/${x.hold}` : String(x.reps)).join(',');
+  const n = String(note||'').replace(/[|<>~]/g,'').trim().slice(0,40);
+  return '~' + list + (n ? '|' + n : '');
+}
+function schemeText(sc){
+  return `${sc.sets.length} séries : ` + sc.sets.map(x=> `${x.reps} rep${x.reps>1?'s':''}` + (x.hold ? ` (${x.hold} s)` : '')).join(' · ') + (sc.note ? ' · ' + sc.note : '');
+}
+// « 5 séries × 10 » ou, pour des séries variables, le détail série par série
+function setsRepsText(sets, reps){ const sc = parseScheme(reps); return sc ? schemeText(sc) : `${sets||'-'} séries × ${reps||'-'}`; }
 function showRestAt(list, i){ const it = list[i]; if(!it || it.superset_group == null) return true; const n = list[i+1]; return !(n && n.superset_group === it.superset_group); }
 // Un superset = un bloc : séries, reps et repos sont annoncés une seule fois, dans un en-tête de bloc
 function ssBlockOf(list, i){ const g = list[i].superset_group; let a = i, b = i; while(a > 0 && list[a-1].superset_group === g) a--; while(b < list.length-1 && list[b+1].superset_group === g) b++; return list.slice(a, b+1); }
@@ -528,7 +546,7 @@ function ssBlockInfo(list, i){
 }
 function ssHeadText(info, tag){
   const bits = [];
-  if(info.sameSets) bits.push(`${info.sets||'-'} séries` + (info.sameReps ? ` × ${info.reps||'-'}` : ''));
+  if(info.sameSets) bits.push(parseScheme(info.reps) && info.sameReps ? schemeText(parseScheme(info.reps)) : `${info.sets||'-'} séries` + (info.sameReps ? ` × ${info.reps||'-'}` : ''));
   if(restLabel(info.rest)) bits.push(`repos ${restLabel(info.rest)} après chaque tour`);
   return `Superset ${String(tag||'A').charAt(0)}` + (bits.length ? ' · ' + bits.join(' · ') : '');
 }
@@ -936,11 +954,11 @@ async function renderProgramDetail(programId){
     let meta;
     if(tag && info){
       // dans un superset : le détail est dans l'en-tête du bloc ; on ne précise ici que ce qui diffère
-      if(!info.sameSets) meta = `${it.sets||'-'} séries × ${it.reps||'-'}`;
+      if(!info.sameSets || parseScheme(it.reps)) meta = setsRepsText(it.sets, it.reps);
       else if(!info.sameReps) meta = /[a-z]/i.test(it.reps||'') ? String(it.reps) : `${it.reps||'-'} reps`;
       else meta = '';
     } else {
-      meta = `${it.sets||'-'} séries × ${it.reps||'-'}` + ((withRest && restLabel(it.rest_seconds)) ? ` · repos ${restLabel(it.rest_seconds)}` : '');
+      meta = setsRepsText(it.sets, it.reps) + ((withRest && restLabel(it.rest_seconds)) ? ` · repos ${restLabel(it.rest_seconds)}` : '');
     }
     const vex = it.variant_exercise_id ? exercisesById[it.variant_exercise_id] : null;
     return `<div class="ex-row ${tag?'in-ss':''}" style="cursor:pointer" onclick="openExFiche('${ex.id}')">
@@ -1041,7 +1059,7 @@ async function printProgram(){
           body: g.items.map((it,i) => {
             const ex = exercisesById[it.exercise_id]; if(!ex) return null;
             const vex = it.variant_exercise_id ? exercisesById[it.variant_exercise_id] : null;
-            return [it.custom_name || ex.name, String(it.sets ?? ''), String(it.reps ?? ''), showRestAt(g.items, i) ? String(it.rest_seconds ?? '') : '-', [ts[i] ? 'Superset ' + ts[i] + (showRestAt(g.items, i) ? ' (repos après le tour)' : '') : '', vex ? 'Variante : ' + vex.name : ''].filter(Boolean).join(' - ')];
+            return [it.custom_name || ex.name, String(it.sets ?? ''), (parseScheme(it.reps) ? schemeText(parseScheme(it.reps)) : String(it.reps ?? '')), showRestAt(g.items, i) ? String(it.rest_seconds ?? '') : '-', [ts[i] ? 'Superset ' + ts[i] + (showRestAt(g.items, i) ? ' (repos après le tour)' : '') : '', vex ? 'Variante : ' + vex.name : ''].filter(Boolean).join(' - ')];
           }).filter(Boolean), align:[null,'right','right','right',null], widths:[170] });
       });
       const ok = await HSExport.pdf({ title: name, subtitle: "HS Coaching - Programme d'entraînement", filename: HSExport.fileName('programme', name), blocks });
@@ -1057,8 +1075,8 @@ async function printProgram(){
       const g = it.superset_group, info = g != null ? ssBlockInfo(list, i) : null;
       const head = (g != null && (i === 0 || list[i-1].superset_group !== g)) ? `<div class="pex"><b>${escHtml(ssHeadText(info, tags[i]))}</b></div>` : '';
       let meta;
-      if(g != null){ meta = !info.sameSets ? `${it.sets||'-'} séries × ${it.reps||'-'}` : (!info.sameReps ? String(it.reps||'-') : ''); }
-      else meta = `${it.sets||'-'} séries × ${it.reps||'-'}${restLabel(it.rest_seconds) ? ' · repos ' + restLabel(it.rest_seconds) : ''}`;
+      if(g != null){ meta = (!info.sameSets || parseScheme(it.reps)) ? setsRepsText(it.sets, it.reps) : (!info.sameReps ? String(it.reps||'-') : ''); }
+      else meta = `${setsRepsText(it.sets, it.reps)}${restLabel(it.rest_seconds) ? ' · repos ' + restLabel(it.rest_seconds) : ''}`;
       return head + `<div class="pex"><b>${tags[i]?`[${tags[i]}] `:''}${escHtml(it.custom_name || ex.name)}${vex?` (variante : ${escHtml(vex.name)})`:''}</b><span>${escHtml(meta)}</span></div>`;
     }).join('');
   };
@@ -1144,9 +1162,9 @@ async function renderSession(programId, dayIdx, manual){
     if(!ex) return;
     const k = units.length;
     const already = setCounterByEx[ex.id] || 0;
-    const nSets = (it.sets || 3) + (sessExtraSets[units.length] || 0);
+    const nSets = (parseScheme(it.reps) ? parseScheme(it.reps).sets.length : (it.sets || 3)) + (sessExtraSets[units.length] || 0);
     setCounterByEx[ex.id] = already + nSets;
-    slotState[k] = { orig: ex.id, variant: it.variant_exercise_id && exercisesById[it.variant_exercise_id] ? it.variant_exercise_id : null, cur: ex.id, tag: tagsAll[i], reps: it.reps || '', label: it.custom_name || '' };
+    slotState[k] = { orig: ex.id, variant: it.variant_exercise_id && exercisesById[it.variant_exercise_id] ? it.variant_exercise_id : null, cur: ex.id, tag: tagsAll[i], reps: parseScheme(it.reps) ? '' : (it.reps || ''), label: it.custom_name || '' };
     units.push({ k, it, ex, already, nSets, group: it.superset_group });
   });
   const blocks = [];
@@ -1158,7 +1176,7 @@ async function renderSession(programId, dayIdx, manual){
   blocks.forEach(b=>{ const lastU = b.units[b.units.length-1]; b.units.forEach(u=>{ slotState[u.k].restLast = (u === lastU); slotState[u.k].rest = lastU.it.rest_seconds || 0; }); });
   const varBtn = k => slotState[k].variant ? `<button type="button" class="var-btn" data-slotbtn="${k}" onclick="event.stopPropagation(); swapVariant(${k})">↔ ${escHtml(exercisesById[slotState[k].variant].name)}</button>` : '';
   const TIME_RE = /\d\s*(min|sec|s\b|m\b|'|")/i;
-  const isTimed = u => (u.ex.category || '').toLowerCase() === 'cardio' || TIME_RE.test(u.it.reps || '');
+  const isTimed = u => !parseScheme(u.it.reps) && ((u.ex.category || '').toLowerCase() === 'cardio' || TIME_RE.test(u.it.reps || ''));
   const lineHtml = (u, s) => {
     const prev = lastByKey[`${u.ex.id}_${s}`];
     if(isTimed(u)){
@@ -1176,9 +1194,11 @@ async function renderSession(programId, dayIdx, manual){
         ${(isLoggedIn() && (u.ex.category || '').toLowerCase() === 'cardio') ? '<div class="dist-wrap"><input type="number" inputmode="decimal" step="0.01" min="0" placeholder="km" class="dist-input" oninput="updPace(this)"><span class="unit">km (facultatif)</span><span class="pace"></span></div>' : ''}
       </div>`;
     }
-    const ph = prev ? `${prev.reps||''}` : (u.it.reps||'');
+    const sch = parseScheme(u.it.reps), tg = sch ? sch.sets[s - u.already - 1] : null;
+    const ph = prev ? `${prev.reps||''}` : (sch ? (tg ? String(tg.reps) : '') : (u.it.reps||''));
     const phc = prev ? `${prev.charge||''}` : '';
-    return `<div class="set-line" data-slot="${u.k}" data-ex="${u.ex.id}" data-set="${s}">
+    const hint = tg ? `<div class="set-target">Objectif : ${tg.reps} rep${tg.reps>1?'s':''}${tg.hold ? ' · tenir ' + tg.hold + ' s' : ''}${sch.note ? ' · ' + escHtml(sch.note) : ''}</div>` : '';
+    return `${hint}<div class="set-line" data-slot="${u.k}" data-ex="${u.ex.id}" data-set="${s}">
         <div class="setnum">S${s}</div>
         <input type="number" inputmode="numeric" placeholder="${ph}" class="reps-input">
         <span class="unit">reps</span>
@@ -1820,9 +1840,19 @@ function programFormHtml({ backHash, eyebrow, title, name, desc, saveLabel }){
         <div style="display:flex; gap:6px;">
           <button type="button" class="btn btn-ghost btn-sm reps-mode-btn active" data-mode="reps" onclick="setRepsMode('reps')">Répétitions</button>
           <button type="button" class="btn btn-ghost btn-sm reps-mode-btn" data-mode="time" onclick="setRepsMode('time')">Temps</button>
+          <button type="button" class="btn btn-ghost btn-sm reps-mode-btn" data-mode="scheme" onclick="setRepsMode('scheme')">Séries variables</button>
         </div>
         <span id="pRepsBox" style="display:inline-flex; align-items:center; gap:6px;"><input id="pReps" type="number" min="0" inputmode="numeric" placeholder="Reps" style="width:70px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"><span style="color:var(--ink-muted);font-size:12px;">à</span><input id="pRepsMax" type="number" min="0" inputmode="numeric" placeholder="Max (option)" style="width:84px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"></span>
         <span id="pTimeBox" style="display:none; align-items:center; gap:6px;"><input id="pMin" type="number" min="0" inputmode="numeric" placeholder="Min" style="width:64px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"><input id="pSec" type="number" min="0" max="59" inputmode="numeric" placeholder="Sec" style="width:64px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"><span style="color:var(--ink-muted);font-size:12px;">à</span><input id="pMin2" type="number" min="0" inputmode="numeric" placeholder="Min max" style="width:72px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"><input id="pSec2" type="number" min="0" max="59" inputmode="numeric" placeholder="Sec max" style="width:72px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;"></span>
+        <div id="pSchemeBox" style="display:none; width:100%;">
+          <p class="subtitle" style="margin:0 0 6px;font-size:12px;">Une ligne par série : répétitions, et durée de tenue en secondes si besoin (ex : 5 reps tenues 5 s).</p>
+          <div id="schemeRows"></div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:6px;">
+            <button type="button" class="btn btn-ghost btn-sm" onclick="schemeAddRow()">＋ Série</button>
+            <button type="button" class="btn btn-ghost btn-sm" onclick="schemePyramid()">Pyramide 5→1 (tenue = reps)</button>
+          </div>
+          <input id="pSchemeNote" type="text" maxlength="40" placeholder="Note (ex : 45°, tempo 3-1-1)" aria-label="Note pour toutes les séries" style="width:100%;margin-top:8px;background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
+        </div>
         <input id="pRest" type="text" inputmode="text" placeholder="Repos : 1:30" aria-label="Temps de repos (par défaut 1 min 30)" style="width:120px; background:var(--surface); border:1px solid var(--line); border-radius:10px; color:var(--ink); padding:10px; font-family:inherit;">
         <button class="btn btn-ghost btn-sm" onclick="addDraftExercise()">Ajouter à cette séance</button>
       </div>
@@ -1861,13 +1891,25 @@ function filterPickEx(){
   renderPickExGrid(matches);
 }
 let pickRepsMode = 'reps';
+let pickScheme = [{ reps:'', hold:'' }];
+function renderScheme(){
+  const box = document.getElementById('schemeRows'); if(!box) return;
+  const st = 'width:90px;background:var(--surface);border:1px solid var(--line);border-radius:10px;color:var(--ink);padding:10px;font-family:inherit;';
+  box.innerHTML = pickScheme.map((r,i)=>`<div style="display:flex;align-items:center;gap:6px;margin-bottom:6px;"><span style="width:28px;font-weight:700;color:var(--ink-muted);">S${i+1}</span><input type="number" min="1" inputmode="numeric" placeholder="Reps" value="${r.reps}" style="${st}" aria-label="Répétitions série ${i+1}" oninput="pickScheme[${i}].reps=this.value"><span style="font-size:12px;color:var(--ink-muted);">reps</span><input type="number" min="0" inputmode="numeric" placeholder="Tenue" value="${r.hold}" style="${st}" aria-label="Tenue en secondes série ${i+1}" oninput="pickScheme[${i}].hold=this.value"><span style="font-size:12px;color:var(--ink-muted);">s</span>${pickScheme.length>1?`<button type="button" class="rm" onclick="schemeRemoveRow(${i})" aria-label="Retirer la série ${i+1}">✕</button>`:''}</div>`).join('');
+}
+function schemeAddRow(){ const l = pickScheme[pickScheme.length-1] || {}; pickScheme.push({ reps: l.reps || '', hold: l.hold || '' }); renderScheme(); }
+function schemeRemoveRow(i){ pickScheme.splice(i,1); if(!pickScheme.length) pickScheme = [{ reps:'', hold:'' }]; renderScheme(); }
+function schemePyramid(){ pickScheme = [5,4,3,2,1].map(n=>({ reps:String(n), hold:String(n) })); pickScheme[4].hold = ''; renderScheme(); }
 function setRepsMode(mode){
   pickRepsMode = mode;
+  const sb = document.getElementById('pSchemeBox'); if(sb) sb.style.display = mode==='scheme' ? 'block' : 'none';
+  const ps = document.getElementById('pSets'); if(ps) ps.style.display = mode==='scheme' ? 'none' : '';
+  if(mode==='scheme'){ renderScheme(); }
   [...document.querySelectorAll('.reps-mode-btn')].forEach(b=> b.classList.toggle('active', b.dataset.mode===mode));
   const repsInput = document.getElementById('pReps');
   const tb = document.getElementById('pTimeBox');
   repsInput.value = ''; document.getElementById('pRepsMax').value = '';
-  document.getElementById('pRepsBox').style.display = mode==='time' ? 'none' : 'inline-flex';
+  document.getElementById('pRepsBox').style.display = (mode==='time' || mode==='scheme') ? 'none' : 'inline-flex';
   tb.style.display = mode==='time' ? 'inline-flex' : 'none';
   ['pMin','pSec','pMin2','pSec2'].forEach(i => document.getElementById(i).value = '');
 }
@@ -1904,9 +1946,14 @@ function parseRestInput(str){
 function addDraftExercise(){
   const exId = selectedPickExId;
   if(!exId){ toast('Choisis un exercice dans la liste'); return; }
-  const sets = document.getElementById('pSets').value || 3;
+  let sets = document.getElementById('pSets').value || 3;
   const v = i => document.getElementById(i).value;
-  const reps = pickRepsMode==='time' ? fmtTimeReps(v('pMin'), v('pSec'), v('pMin2'), v('pSec2')) : fmtRepsRange(v('pReps'), v('pRepsMax'));
+  let reps;
+  if(pickRepsMode==='scheme'){
+    const rows = pickScheme.map(r=>({ reps: parseInt(r.reps), hold: Math.min(600, Math.max(0, parseInt(r.hold) || 0)) })).filter(r=>r.reps > 0);
+    if(!rows.length){ toast('Indique les répétitions d\'au moins une série'); return; }
+    reps = encodeScheme(rows, document.getElementById('pSchemeNote').value); sets = rows.length;
+  } else reps = pickRepsMode==='time' ? fmtTimeReps(v('pMin'), v('pSec'), v('pMin2'), v('pSec2')) : fmtRepsRange(v('pReps'), v('pRepsMax'));
   const rest = parseRestInput(document.getElementById('pRest').value);
   if(rest == null){ toast('Repos illisible : essaie 1:30, 90 ou 45s'); return; }
   const ex = exercisesById[exId];
@@ -1970,7 +2017,7 @@ function renderDraftList(){
     const canLink = idx > 0;
     return `<div class="draft-row ${tags[idx]?'in-ss':''}">
       <div class="draft-main">
-        ${tags[idx]?`<span class="ss-chip">SUPERSET ${tags[idx]}</span> `:''}${escHtml(d.custom_name || d.name)} — ${d.sets}×${escHtml(d.reps)}${d.custom_name?` <span style="opacity:.6;font-size:12px;">· fiche : ${escHtml(d.name)}</span>`:''}
+        ${tags[idx]?`<span class="ss-chip">SUPERSET ${tags[idx]}</span> `:''}${escHtml(d.custom_name || d.name)} — ${parseScheme(d.reps) ? escHtml(schemeText(parseScheme(d.reps))) : d.sets + '×' + escHtml(d.reps)}${d.custom_name?` <span style="opacity:.6;font-size:12px;">· fiche : ${escHtml(d.name)}</span>`:''}
         <div style="opacity:.75;font-size:12px;">⏱ Repos ${restLabel(d.rest || 90)}</div>
         <div style="display:flex;gap:14px;flex-wrap:wrap;"><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="editDraftSets(${i})" aria-label="Changer les séries et les répétitions">🔢 Séries / reps</button><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="renameDraft(${i})" aria-label="Renommer dans ce programme">✏️ Renommer</button><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="editDraftRest(${i})" aria-label="Changer le temps de repos">⏱ Changer le repos</button></div>
         ${vex?`<div class="draft-var">↔ Variante : ${escHtml(vex.name)} <button type="button" class="rm-var" title="Retirer la variante" onclick="clearVariant(${i})" aria-label="Retirer la variante">✕</button></div>`:''}
@@ -1996,6 +2043,16 @@ function editDraftRest(i){
 }
 function editDraftSets(i){
   const d = draftExercises[i]; if(!d) return;
+  const sch = parseScheme(d.reps);
+  if(sch){
+    const cur = sch.sets.map(x=> x.hold ? x.reps + '/' + x.hold : String(x.reps)).join(', ') + (sch.note ? ' | ' + sch.note : '');
+    const val = prompt('Une série par groupe : reps/tenue en secondes, séparés par des virgules (ex : 5/5, 4/4, 3/3, 2/2, 1). Note facultative après | (ex : | 45°)', cur);
+    if(val === null) return;
+    const [a, note] = val.split('|');
+    const rows = a.split(',').map(t=>{ const [x,y] = t.trim().split('/'); const reps = parseInt(x); return reps > 0 ? { reps, hold: Math.min(600, Math.max(0, parseInt(y) || 0)) } : null; }).filter(Boolean);
+    if(!rows.length){ toast('Séries illisibles : essaie 5/5, 4/4, 3/3'); return; }
+    d.reps = encodeScheme(rows, note); d.sets = rows.length; renderDraftList(); return;
+  }
   const s1 = prompt('Nombre de séries :', d.sets || 3);
   if(s1 === null) return;
   const n = parseInt(s1);

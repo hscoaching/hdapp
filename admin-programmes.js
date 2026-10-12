@@ -375,7 +375,7 @@ function fmtRepsRange(a, b){
   return y > x ? `${x}-${y}` : String(x);
 }
 // Renvoie le texte normalisé (« 10 », « 8-12 », « 45s », « 1 min 30s »…) ou null si illisible
-function parseRepsInput(str){
+function parseRepsInput(str){ if(typeof str === 'string' && str.trim().charAt(0) === '~') return str.trim();
   let t = String(str == null ? '' : str).trim().toLowerCase().replace(',', '.').replace(/\s*(reps?|répétitions?|rép\.?|x)\s*$/, '');
   if(!t) return fmtRepsRange('', '');
   const isTime = /[sm]|:/.test(t.replace(/à/g, '-'));
