@@ -336,9 +336,60 @@ let activeMuscle = null;
 let favorites = new Set();
 try{ favorites = new Set(JSON.parse(localStorage.getItem('hs_favorites')||'[]')); }catch(e){}
 function isFavorite(exId){ return favorites.has(exId); }
+// Favoris : gardés sur l'appareil ET dans le compte (table exercise_favorites) pour les retrouver partout
+const FAV_Q = 'hs_fav_queue';
+function favQ(){ try{ const q = JSON.parse(localStorage.getItem(FAV_Q) || '{}'); return { add: q.add || [], del: q.del || [] }; }catch(e){ return { add: [], del: [] }; } }
+function favSaveLocal(){ try{ localStorage.setItem('hs_favorites', JSON.stringify([...favorites])); }catch(e){} }
+async function favSession(){
+  let s = null; try{ s = JSON.parse(localStorage.getItem('hs_session') || 'null'); }catch(e){}
+  if(!s || !s.user || !s.user.id || !s.access_token) return null;
+  const exp = (s.expires_at || 0) * 1000;
+  if(s.refresh_token && exp && Date.now() > exp - 60000){
+    try{
+      const r = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`, { method:'POST', headers:{ apikey: SUPABASE_ANON_KEY, 'Content-Type':'application/json' }, body: JSON.stringify({ refresh_token: s.refresh_token }) });
+      const d = await r.json();
+      if(r.ok && d.access_token){ localStorage.setItem('hs_session', JSON.stringify(d)); s = d; } else return null;
+    }catch(e){ return null; }
+  }
+  return s;
+}
+let favSyncing = false, favAgain = false;
+async function favSync(){
+  if(favSyncing){ favAgain = true; return; }
+  favSyncing = true;
+  try{
+    const s = await favSession(); if(!s) return;
+    const H = { apikey: SUPABASE_ANON_KEY, Authorization: 'Bearer ' + s.access_token, 'Content-Type': 'application/json' };
+    const u = s.user.id, flag = 'hs_fav_migrated_' + u;
+    const q = favQ();
+    if(q.del.length){
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/exercise_favorites?exercise_id=in.(${q.del.join(',')})`, { method:'DELETE', headers: H });
+      if(!r.ok) return;
+    }
+    const r0 = await fetch(`${SUPABASE_URL}/rest/v1/exercise_favorites?select=exercise_id&limit=5000`, { headers: H, cache:'no-store' });
+    if(!r0.ok) return;
+    const remote = new Set((await r0.json()).map(x => x.exercise_id));
+    const migrated = localStorage.getItem(flag) === '1';
+    const toPush = migrated ? q.add.filter(id => !remote.has(id)) : [...new Set([...favorites, ...q.add])].filter(id => !remote.has(id) && !q.del.includes(id));
+    if(toPush.length){
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/exercise_favorites`, { method:'POST', headers: { ...H, Prefer: 'resolution=ignore-duplicates,return=minimal' }, body: JSON.stringify(toPush.map(id => ({ exercise_id: id }))) });
+      if(!r.ok) return;
+      toPush.forEach(id => remote.add(id));
+    }
+    try{ localStorage.setItem(flag, '1'); localStorage.setItem(FAV_Q, JSON.stringify({ add: [], del: [] })); }catch(e){}
+    favorites = new Set([...remote].filter(id => !q.del.includes(id)));
+    favSaveLocal();
+    if(typeof renderChips === 'function'){ renderChips(); renderGrid(); }
+  }catch(e){ console.warn('favoris : synchronisation reportée', e); }
+  finally{ favSyncing = false; if(favAgain){ favAgain = false; favSync(); } }
+}
 function toggleFavorite(exId){
-  if(favorites.has(exId)) favorites.delete(exId); else favorites.add(exId);
-  try{ localStorage.setItem('hs_favorites', JSON.stringify([...favorites])); }catch(e){}
+  const q = favQ();
+  if(favorites.has(exId)){ favorites.delete(exId); q.add = q.add.filter(x => x !== exId); if(!q.del.includes(exId)) q.del.push(exId); }
+  else { favorites.add(exId); q.del = q.del.filter(x => x !== exId); if(!q.add.includes(exId)) q.add.push(exId); }
+  try{ localStorage.setItem(FAV_Q, JSON.stringify(q)); }catch(e){}
+  favSaveLocal();
+  favSync();
   renderChips();
   renderGrid();
   const sheetBtn = document.getElementById('favSheetBtn');
@@ -686,6 +737,7 @@ async function loadExercises(){
   renderChips();
   renderSubChips();
   renderGrid();
+  favSync();
   const hashSlug = location.hash.replace('#','');
   if(hashSlug) openSheet(hashSlug, false);
 }

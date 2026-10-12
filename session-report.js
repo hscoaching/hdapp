@@ -129,11 +129,11 @@
     ].join('')}</div>`;
 
     // 1) Volume par exercice (barre claire = dernière séance)
-    const lifts = ex.filter(e => e.vol > 0);
+    const lifts = ex.filter(e => e.vol > 0 || (e.best > 0 && !e.secs));
     const maxV = Math.max(1, ...lifts.map(e => e.vol), ...lifts.map(e => (prevMap.get(e.id) || { vol: 0 }).vol));
     const volHtml = lifts.length ? lifts.map(e => {
       const p = prevMap.get(e.id), pv = p ? p.vol : 0;
-      return `<div class="hsr-row"><div class="hsr-lab"><b>${e.tag ? `<span class="hsr-chip">${esc(e.tag)}</span>` : ''}${esc(e.name)}</b><span>${nf(e.vol)} kg${pv ? deltaHtml(e.vol, pv, 'pct') : ''}</span></div><div class="hsr-track">${pv ? `<div class="hsr-prev" style="width:${(pv / maxV * 100).toFixed(1)}%"></div>` : ''}<div class="hsr-fill" style="width:${(e.vol / maxV * 100).toFixed(1)}%"></div></div></div>`;
+      return `<div class="hsr-row"><div class="hsr-lab"><b>${e.tag ? `<span class="hsr-chip">${esc(e.tag)}</span>` : ''}${esc(e.name)}</b><span>${e.vol > 0 ? nf(e.vol) + ' kg' + (pv ? deltaHtml(e.vol, pv, 'pct') : '') : 'reps non notées · ' + e.best + ' kg max'}</span></div><div class="hsr-track">${pv ? `<div class="hsr-prev" style="width:${(pv / maxV * 100).toFixed(1)}%"></div>` : ''}<div class="hsr-fill" style="width:${(e.vol / maxV * 100).toFixed(1)}%"></div></div></div>`;
     }).join('') : '';
 
     // 2) Détail des séries : une colonne par série (hauteur = charge, ou durée pour les exercices au temps)
