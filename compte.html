@@ -809,7 +809,7 @@ async function addLogPyramid(btn){
   if(!todo.length){ HSHistory.toast('Toutes les séries de la pyramide existent déjà : corrige-les ci-dessus'); return; }
   btn.disabled = true;
   try{
-    await histReq('/rest/v1/session_logs', { method:'POST', headers:{ Prefer:'return=minimal' }, body: JSON.stringify(todo.map(x => ({ session_id: sid, exercise_id: ex, set_number: x.n, reps: x.t.reps, charge: kg, duration_seconds: null, ...(x.t.hold ? { hold_seconds: x.t.hold } : {}) }))) });
+    await histReq('/rest/v1/session_logs', { method:'POST', headers:{ Prefer:'return=minimal' }, body: JSON.stringify(todo.map(x => ({ session_id: sid, exercise_id: ex, set_number: x.n, reps: x.t.reps, charge: kg, duration_seconds: null, hold_seconds: x.t.hold || null }))) });
     HSHistory.toast(todo.length + ' série' + (todo.length > 1 ? 's' : '') + ' ajoutée' + (todo.length > 1 ? 's' : '') + ' : règle le poids de chacune');
     reloadSessionLogs(btn, sid);
   }catch(e){ console.error(e); HSHistory.toast('Ajout impossible. Réessaie.'); btn.disabled = false; }
