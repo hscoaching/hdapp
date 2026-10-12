@@ -797,6 +797,23 @@ async function addLogExercise(btn, sid){
     reloadSessionLogs(btn, sid);
   }catch(e){ console.error(e); HSHistory.toast('Ajout impossible. Réessaie.'); btn.disabled = false; }
 }
+async function addLogPyramid(btn){
+  const ex = btn.dataset.ex, sid = btn.dataset.sid;
+  const rows = [...btn.parentElement.querySelectorAll('.edit-row')].filter(r => r.dataset.ex === ex);
+  let sch = null; try{ sch = JSON.parse(btn.dataset.scheme || 'null'); }catch(e){}
+  if(!sch || !sch.length) sch = [5,4,3,2,1].map(n => ({ reps: n, hold: n }));
+  const have = new Set(rows.map(r => +r.dataset.set));
+  const last = rows.reduce((m, r) => (+r.dataset.set > +m.dataset.set ? r : m), rows[0]);
+  const cv = last && last.querySelector('.e-charge'); const kg = cv && cv.value !== '' ? Number(cv.value) : null;
+  const todo = sch.map((t, i) => ({ n: i + 1, t })).filter(x => !have.has(x.n));
+  if(!todo.length){ HSHistory.toast('Toutes les séries de la pyramide existent déjà : corrige-les ci-dessus'); return; }
+  btn.disabled = true;
+  try{
+    await histReq('/rest/v1/session_logs', { method:'POST', headers:{ Prefer:'return=minimal' }, body: JSON.stringify(todo.map(x => ({ session_id: sid, exercise_id: ex, set_number: x.n, reps: x.t.reps, charge: kg, duration_seconds: null, ...(x.t.hold ? { hold_seconds: x.t.hold } : {}) }))) });
+    HSHistory.toast(todo.length + ' série' + (todo.length > 1 ? 's' : '') + ' ajoutée' + (todo.length > 1 ? 's' : '') + ' : règle le poids de chacune');
+    reloadSessionLogs(btn, sid);
+  }catch(e){ console.error(e); HSHistory.toast('Ajout impossible. Réessaie.'); btn.disabled = false; }
+}
 async function addLogSet(btn){
   const ex = btn.dataset.ex, sid = btn.dataset.sid;
   const rows = [...btn.parentElement.querySelectorAll('.edit-row')].filter(r => r.dataset.ex === ex);
@@ -867,7 +884,7 @@ async function toggleSessionLogs(card, sessionId){
     if(editing){
       body = `<div class="set-rows">${sets.map(x =>
         `<div class="set-row edit-row" style="flex-wrap:wrap;gap:6px;" data-id="${x.id}" data-ex="${x.exercise_id}" data-set="${x.set_number}" data-sid="${x.session_id}" data-reps="${x.reps ?? ''}" data-charge="${x.charge ?? ''}" data-dur="${x.duration_seconds ?? ''}"><span class="set-row-num">Série ${x.set_number}${x.tgt ? `<br><small style="font-weight:500;opacity:.65;">objectif ${x.tgt.reps} rep${x.tgt.reps>1?'s':''}${x.tgt.hold ? ' · tenir ' + x.tgt.hold + ' s' : ''}</small>` : ''}</span><span class="set-row-val">${(x.duration_seconds || x.timed) ? `<input class="e-min" type="number" inputmode="numeric" min="0" value="${x.duration_seconds ? Math.floor(x.duration_seconds/60) : ''}" placeholder="min" style="width:56px;" onchange="saveLogEdit(this)"> min <input class="e-sec" type="number" inputmode="numeric" min="0" max="59" value="${x.duration_seconds ? x.duration_seconds%60 : ''}" placeholder="s" style="width:56px;" onchange="saveLogEdit(this)"> s` : `<input class="e-reps" type="number" inputmode="numeric" value="${x.reps ?? ''}" placeholder="${x.tgt ? x.tgt.reps : 'reps'}" style="width:64px;" onchange="saveLogEdit(this)">`} × <input class="e-charge" type="number" inputmode="decimal" step="0.5" value="${x.charge ?? ''}" placeholder="kg" style="width:72px;" onchange="saveLogEdit(this)"> kg ${(!(x.duration_seconds || x.timed)) ? `<input class="e-hold" type="number" inputmode="numeric" min="0" value="${x.hold_seconds ?? ''}" placeholder="${x.tgt && x.tgt.hold ? x.tgt.hold : 's'}" aria-label="Tenue en secondes" style="width:56px;" onchange="saveLogEdit(this)"> s tenue` : ''}<button type="button" class="btn btn-ghost btn-sm" aria-label="Retirer cette série" style="margin-left:6px;" onclick="removeLogSet(this)">🗑</button></span></div>`
-      ).join('')}</div><button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" data-ex="${sets[0].exercise_id}" data-sid="${sets[0].session_id}" data-scheme='${sets[0].tgt_all ? JSON.stringify(sets[0].tgt_all) : ''}' onclick="addLogSet(this)">+ Ajouter une série</button>`;
+      ).join('')}</div><button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" data-ex="${sets[0].exercise_id}" data-sid="${sets[0].session_id}" data-scheme='${sets[0].tgt_all ? JSON.stringify(sets[0].tgt_all) : ''}' onclick="addLogSet(this)">+ Ajouter une série</button> <button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px;" data-ex="${sets[0].exercise_id}" data-sid="${sets[0].session_id}" data-scheme='${sets[0].tgt_all ? JSON.stringify(sets[0].tgt_all) : ''}' onclick="addLogPyramid(this)">▲ Séries variables (pyramide)</button>`;
     } else {
       const filled = sets.filter(x => x.reps!=null || x.charge!=null || x.duration_seconds);
       body = !filled.length ? `<div class="set-rows-empty">Rien noté pour cet exercice.</div>` :
