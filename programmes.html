@@ -971,12 +971,57 @@ async function renderProgramDetail(programId){
     <h1 class="page">${escHtml(progName)}</h1>
     <div id="progExList">${listHtml}</div>
     <div class="actions-row">
-      ${isOfficial ? '' : `<button class="btn btn-ghost" onclick="location.hash='#programme/${programId}/modifier'">✏️ Modifier mon programme</button>`}
+      ${isOfficial ? '' : `<button class="btn btn-ghost" onclick="location.hash='#programme/${programId}/modifier'">✏️ Modifier mon programme</button><button class="btn btn-ghost" id="dupBtn" onclick="duplicateProgram('${programId}')">📄 Dupliquer</button><button class="btn btn-ghost" id="delBtn" onclick="deleteProgram('${programId}')">🗑 Supprimer</button>`}
       <button class="btn btn-ghost" onclick="printProgram()">🖨️ Exporter en PDF</button>
       ${(!multi && items.length) ? `<button class="btn btn-ghost" onclick="location.hash='#programme/${programId}/saisie'">📝 Saisir une séance passée</button>` : ''}
     </div>
     ${(!multi && items.length) ? `<div class="session-bar"><button class="btn btn-accent" style="width:100%;justify-content:center;" onclick="location.hash='#programme/${programId}/seance'">Démarrer la séance</button></div>` : ''}
   `;
+}
+async function duplicateProgram(programId){
+  const cur = currentProgramDetail;
+  if(!cur || cur.id !== programId || cur.isOfficial) return;
+  const btn = document.getElementById('dupBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Copie en cours…'; }
+  try{
+    const name = (cur.name + ' (copie)').slice(0, 80);
+    const newId = await createProgramFor(name, cur.description || null);
+    const items = cur.items.slice().sort((a,b)=>(a.order_index||0)-(b.order_index||0));
+    for(let i=0;i<items.length;i++){
+      const it = items[i];
+      await addProgramExerciseFor(newId, it.exercise_id, i+1, it.sets, it.reps, it.rest_seconds || 90, it.notes || null, it.day_label, it.superset_group, it.variant_exercise_id, it.custom_name);
+    }
+    toast('Programme dupliqué !');
+    location.hash = '#programme/' + newId;
+  }catch(e){
+    console.error(e);
+    if(btn){ btn.disabled = false; btn.textContent = '📄 Dupliquer'; }
+    toast('Erreur, impossible de dupliquer. Réessaie.');
+  }
+}
+async function deleteProgram(programId){
+  const cur = currentProgramDetail;
+  if(!cur || cur.id !== programId || cur.isOfficial) return;
+  if(!confirm('Supprimer « ' + cur.name + ' » ?\n\nLes exercices du programme seront effacés. Ton historique de séances reste dans ton compte. Cette action est définitive.')) return;
+  const btn = document.getElementById('delBtn');
+  if(btn){ btn.disabled = true; btn.textContent = 'Suppression…'; }
+  try{
+    if(isLoggedIn()){
+      const res = await authedFetch(`/rest/v1/programs?id=eq.${programId}`, { method:'DELETE' });
+      if(!res.ok){ console.error(await res.text()); throw new Error('delete_program_failed'); }
+    } else {
+      await rpc('guest_delete_program', { p_token: TOKEN, p_program_id: programId });
+    }
+    try{ const v = folderPrefs(); if(v.map && v.map[programId]){ delete v.map[programId]; saveFolderPrefs(v); } }catch(e){}
+    try{ localStorage.removeItem(progCacheKey(programId)); }catch(e){}
+    currentProgramDetail = null;
+    toast('Programme supprimé');
+    location.hash = '#';
+  }catch(e){
+    console.error(e);
+    if(btn){ btn.disabled = false; btn.textContent = '🗑 Supprimer'; }
+    toast('Erreur, impossible de supprimer. Réessaie.');
+  }
 }
 async function printProgram(){
   if(!currentProgramDetail) return;
@@ -1825,7 +1870,7 @@ function renderDraftList(){
       <div class="draft-main">
         ${tags[idx]?`<span class="ss-chip">SUPERSET ${tags[idx]}</span> `:''}${escHtml(d.custom_name || d.name)} — ${d.sets}×${escHtml(d.reps)}${d.custom_name?` <span style="opacity:.6;font-size:12px;">· fiche : ${escHtml(d.name)}</span>`:''}
         <div style="opacity:.75;font-size:12px;">⏱ Repos ${restLabel(d.rest || 90)}</div>
-        <div style="display:flex;gap:14px;flex-wrap:wrap;"><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="renameDraft(${i})" aria-label="Renommer dans ce programme">✏️ Renommer</button><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="editDraftRest(${i})" aria-label="Changer le temps de repos">⏱ Changer le repos</button></div>
+        <div style="display:flex;gap:14px;flex-wrap:wrap;"><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="editDraftSets(${i})" aria-label="Changer les séries et les répétitions">🔢 Séries / reps</button><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="renameDraft(${i})" aria-label="Renommer dans ce programme">✏️ Renommer</button><button type="button" class="rm-var" style="opacity:.8;font-size:12px;padding:2px 0;" onclick="editDraftRest(${i})" aria-label="Changer le temps de repos">⏱ Changer le repos</button></div>
         ${vex?`<div class="draft-var">↔ Variante : ${escHtml(vex.name)} <button type="button" class="rm-var" title="Retirer la variante" onclick="clearVariant(${i})" aria-label="Retirer la variante">✕</button></div>`:''}
       </div>
       <div class="draft-actions">
@@ -1846,6 +1891,18 @@ function editDraftRest(i){
   const r = parseRestInput(val);
   if(r == null){ toast('Repos illisible : essaie 1:30, 90 ou 45s'); return; }
   d.rest = r; renderDraftList();
+}
+function editDraftSets(i){
+  const d = draftExercises[i]; if(!d) return;
+  const s1 = prompt('Nombre de séries :', d.sets || 3);
+  if(s1 === null) return;
+  const n = parseInt(s1);
+  if(!(n > 0 && n <= 20)){ toast('Nombre de séries illisible (1 à 20)'); return; }
+  const r1 = prompt('Répétitions ou durée (ex : 10, 8-10, 45s, 1 min 30s) :', d.reps || '10-12');
+  if(r1 === null) return;
+  const r = r1.replace(/[<>]/g, '').trim().slice(0, 24);
+  d.sets = n; d.reps = r || d.reps || '10-12';
+  renderDraftList();
 }
 function renameDraft(i){
   const d = draftExercises[i]; if(!d) return;
@@ -1963,7 +2020,7 @@ async function saveProgramExercises(programId, draft){
   const n = Math.min(existing.length, draft.length);
   for(let i=0;i<n;i++){
     const d = draft[i];
-    await rpc('guest_update_program_exercise_ext', { p_token: TOKEN, p_id: existing[i].id, p_exercise_id: d.exercise_id, p_order_index: i+1, p_sets: d.sets, p_reps: d.reps, p_rest_seconds: existing[i].rest_seconds||90, p_day_label: d.day_label||null, p_superset_group: d.superset_group||null, p_variant_id: d.variant_id||null });
+    await rpc('guest_update_program_exercise_ext', { p_token: TOKEN, p_id: existing[i].id, p_exercise_id: d.exercise_id, p_order_index: i+1, p_sets: d.sets, p_reps: d.reps, p_rest_seconds: d.rest||90, p_day_label: d.day_label||null, p_superset_group: d.superset_group||null, p_variant_id: d.variant_id||null });
   }
   if(draft.length > existing.length){
     for(let i=existing.length;i<draft.length;i++){
