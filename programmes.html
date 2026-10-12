@@ -127,6 +127,7 @@
   .session-bar{position:sticky; bottom:0; padding:14px 0; padding-bottom:calc(14px + env(safe-area-inset-bottom,0px));
     background:linear-gradient(0deg, var(--bg) 60%, transparent); margin-top:10px;}
   body.has-install-banner .session-bar{margin-bottom:70px;}
+  body.typing .session-bar{display:none;}
   .day-block{margin-top:22px; padding-top:6px; border-top:1px solid var(--line);}
   .day-head{display:flex; align-items:baseline; justify-content:space-between; gap:10px; margin-bottom:4px;}
   .day-head h2{font-size:26px;}
@@ -1100,7 +1101,7 @@ async function renderSession(programId, dayIdx, manual){
     // Reprise d'une séance interrompue (téléphone éteint, onglet fermé…)
     const saved = loadActive();
     if(saved && saved.programId === programId && saved.dayIdx === dKey
-       && (Object.keys(saved.done||{}).length > 0 || Date.now() - saved.start < 30*60*1000)){
+       && (Object.keys(saved.done||{}).length > 0 || saved.touched || Date.now() - saved.start < 30*60*1000)){
       resumed = saved;
       lastLogs = await lastLogsFor(programId, dayLabel);
       sessionId = saved.sessionId;
@@ -1115,13 +1116,17 @@ async function renderSession(programId, dayIdx, manual){
     return;
   }
   sessDone = {}; restEnd = 0;
+  sessExtraSets = (resumed && resumed.extraSets) ? resumed.extraSets : {};
+  const extraEx = (!manual && resumed && Array.isArray(resumed.extraEx)) ? resumed.extraEx : [];
+  extraEx.forEach(x=>{ if(exercisesById[x.exercise_id]) items = items.concat([{ exercise_id: x.exercise_id, sets: x.sets || 3, reps: '', rest_seconds: 90, custom_name: null, superset_group: null, variant_exercise_id: null, day_label: dayLabel, added: true }]); });
+  sessProgramId = programId; sessDayArg = dayIdx;
   sessStart = resumed ? resumed.start : Date.now();
   if(!manual){
     if(resumed){ activeMeta = resumed; }
     else {
       let pname = (currentProgramDetail && currentProgramDetail.id === programId) ? currentProgramDetail.name : '';
       if(!pname){ try{ const all = await listPrograms(); pname = (all.find(x=>x.id===programId)||{}).name || ''; }catch(e){} }
-      activeMeta = { who: whoAmI(), sessionId, programId, dayIdx: dKey, dayLabel, programName: pname, start: sessStart, done: {}, cur: {} };
+      activeMeta = { who: whoAmI(), sessionId, programId, dayIdx: dKey, dayLabel, programName: pname, start: sessStart, done: {}, cur: {}, extraSets: {}, extraEx: [] };
       saveActive();
     }
   }
@@ -1139,7 +1144,7 @@ async function renderSession(programId, dayIdx, manual){
     if(!ex) return;
     const k = units.length;
     const already = setCounterByEx[ex.id] || 0;
-    const nSets = it.sets || 3;
+    const nSets = (it.sets || 3) + (sessExtraSets[units.length] || 0);
     setCounterByEx[ex.id] = already + nSets;
     slotState[k] = { orig: ex.id, variant: it.variant_exercise_id && exercisesById[it.variant_exercise_id] ? it.variant_exercise_id : null, cur: ex.id, tag: tagsAll[i], reps: it.reps || '', label: it.custom_name || '' };
     units.push({ k, it, ex, already, nSets, group: it.superset_group });
@@ -1194,6 +1199,7 @@ async function renderSession(programId, dayIdx, manual){
         ${varBtn(u.k)}
       </div>
       <div class="set-grid">${sets}</div>
+      ${manual ? '' : addSetBtns([u.k])}
     </div>`;
     }
     // Superset : on alterne les exercices, tour par tour
@@ -1209,8 +1215,10 @@ async function renderSession(programId, dayIdx, manual){
     return `<div class="ex-row ss-block">
       <div class="ss-tag"><span class="ss-chip">SUPERSET</span> Enchaîne les exercices sans repos, repose-toi à la fin de chaque tour.</div>
       <div class="set-grid">${rounds}</div>
+      ${manual ? '' : addSetBtns(b.units.map(u=>u.k), true)}
     </div>`;
   }).join('');
+  const addExBtn = manual ? '' : '<button type="button" class="btn btn-ghost" style="width:100%;justify-content:center;margin:6px 0 14px;" onclick="openAddExercise()">➕ Ajouter un exercice</button>';
 
   const todayStr = (()=>{ const t = new Date(); return `${t.getFullYear()}-${String(t.getMonth()+1).padStart(2,'0')}-${String(t.getDate()).padStart(2,'0')}`; })();
   const manualHead = `
@@ -1231,6 +1239,7 @@ async function renderSession(programId, dayIdx, manual){
     <div class="eyebrow">SÉANCE EN COURS${activeDayLabel ? ' · ' + escHtml(activeDayLabel).toUpperCase() : ''}${resumed ? ' · REPRISE' : ''}</div>
     <h1 class="page" style="font-size:32px;">${resumed ? 'On reprend 💪' : 'C\'est parti 💪'}</h1>
     ${rows}
+    ${addExBtn}
     <div class="session-bar">
       <div class="sess-timer" id="sessTimer">
         <div class="sess-elapsed" id="sessElapsed">⏱ 00:00</div>
@@ -1267,12 +1276,105 @@ async function renderSession(programId, dayIdx, manual){
       line.querySelector('.valid').classList.add('done');
       sessDone[`${line.dataset.ex}_${setNum}`] = (!v.sec && v.reps && v.charge) ? v.reps*v.charge : 0;
     });
+    // valeurs saisies mais pas encore validées
+    Object.entries(resumed.draft||{}).forEach(([key,v])=>{
+      const [k,setNum] = key.split('|');
+      const line = document.querySelector(`.set-line[data-slot="${k}"][data-set="${setNum}"]`);
+      if(!line || line.querySelector('.valid').classList.contains('done')) return;
+      ['reps','charge','min','sec','dist'].forEach(c=>{ const inp = line.querySelector('.'+c+'-input'); if(inp && v[c] !== '' && v[c] != null) inp.value = v[c]; });
+    });
+    // filet de sécurité : séries déjà enregistrées côté serveur mais absentes de la copie locale
+    if(isLoggedIn()){
+      try{
+        const r = await authedFetch(`/rest/v1/session_logs?select=exercise_id,set_number,reps,charge,duration_seconds,distance_km&session_id=eq.${sessionId}`);
+        const logs = r.ok ? await r.json() : [];
+        (Array.isArray(logs) ? logs : []).forEach(l=>{
+          const line = document.querySelector(`.set-line[data-ex="${l.exercise_id}"][data-set="${l.set_number}"]`);
+          if(!line || line.querySelector('.valid').classList.contains('done')) return;
+          if(l.reps!=null) line.querySelector('.reps-input').value = l.reps;
+          if(l.charge!=null) line.querySelector('.charge-input').value = l.charge;
+          if(l.duration_seconds && line.querySelector('.min-input')){ line.querySelector('.min-input').value = Math.floor(l.duration_seconds/60); line.querySelector('.sec-input').value = l.duration_seconds%60; }
+          if(l.distance_km && line.querySelector('.dist-input')){ line.querySelector('.dist-input').value = l.distance_km; }
+          line.querySelector('.valid').classList.add('done');
+          sessDone[`${l.exercise_id}_${l.set_number}`] = (l.reps && l.charge) ? l.reps*l.charge : 0;
+          if(activeMeta){ activeMeta.done = activeMeta.done || {}; activeMeta.done[`${line.dataset.slot}|${l.set_number}`] = { reps:l.reps, charge:l.charge, sec:l.duration_seconds||null, dist:l.distance_km||null }; }
+        });
+        saveActive();
+      }catch(e){ console.error(e); }
+    }
     restoreSetChrono();
   }
+  // sauvegarde au fil de la saisie (téléphone verrouillé, changement de page, appli rechargée)
+  document.getElementById('sessBody').oninput = ev=>{
+    const line = ev.target.closest && ev.target.closest('.set-line');
+    if(!line || !activeMeta) return;
+    const g = c => { const i = line.querySelector('.'+c+'-input'); return i ? i.value : ''; };
+    activeMeta.draft = activeMeta.draft || {};
+    activeMeta.draft[`${line.dataset.slot}|${line.dataset.set}`] = { reps:g('reps'), charge:g('charge'), min:g('min'), sec:g('sec'), dist:g('dist') };
+    saveActive();
+  };
   sessTick = setInterval(sessTickFn, 250);
   sessTickFn();
 }
-let sessLastByKey = {};
+let sessLastByKey = {}, sessExtraSets = {}, sessProgramId = null, sessDayArg;
+function addSetBtns(ks, round){
+  const extra = ks.some(k => (sessExtraSets[k] || 0) > 0);
+  const js = JSON.stringify(ks);
+  return `<div style="display:flex;gap:8px;margin-top:8px;"><button type="button" class="btn btn-ghost btn-sm" onclick='addSetTo(${js}, 1)'>＋ ${round ? 'Tour' : 'Série'}</button>${extra ? `<button type="button" class="btn btn-ghost btn-sm" onclick='addSetTo(${js}, -1)' aria-label="Retirer la dernière ${round ? 'ronde' : 'série'} ajoutée">− ${round ? 'Tour' : 'Série'}</button>` : ''}</div>`;
+}
+async function reloadSession(){
+  const y = window.scrollY, keep = restEnd;
+  await renderSession(sessProgramId, sessDayArg, false);
+  restEnd = keep; window.scrollTo(0, y);
+}
+async function addSetTo(ks, delta){
+  if(!activeMeta) return;
+  if(delta < 0){
+    // on ne retire qu'une série ajoutée et pas encore validée
+    for(const k of ks){
+      const lines = [...document.querySelectorAll(`.set-line[data-slot="${k}"]`)];
+      const last = lines[lines.length-1];
+      if(!(sessExtraSets[k] > 0) || (last && last.querySelector('.valid.done'))){ toast('Cette série est déjà validée'); return; }
+    }
+    ks.forEach(k=>{ sessExtraSets[k] = Math.max(0, (sessExtraSets[k]||0) - 1); });
+  } else {
+    ks.forEach(k=>{ sessExtraSets[k] = (sessExtraSets[k]||0) + 1; });
+  }
+  activeMeta.extraSets = Object.assign({}, sessExtraSets); activeMeta.touched = true; saveActive();
+  await reloadSession();
+}
+function openAddExercise(){
+  if(!activeMeta) return;
+  const old = document.getElementById('addExModal'); if(old) old.remove();
+  const m = document.createElement('div');
+  m.id = 'addExModal';
+  m.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.75);display:flex;align-items:flex-end;justify-content:center;';
+  m.innerHTML = `<div style="background:var(--bg,#0b0b0d);border:1px solid var(--line);width:100%;max-width:560px;max-height:85vh;display:flex;flex-direction:column;padding:16px;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;"><h2 style="font-size:20px;margin:0;">Ajouter un exercice</h2><button type="button" class="btn btn-ghost btn-sm" onclick="document.getElementById('addExModal').remove()" aria-label="Fermer">✕</button></div>
+    <input id="addExSearch" type="text" placeholder="Chercher : nom, muscle…" style="width:100%;background:var(--surface);border:1px solid var(--line);color:var(--ink);padding:12px;font-family:inherit;margin-bottom:8px;">
+    <div id="addExList" style="overflow:auto;flex:1;"></div></div>`;
+  document.body.appendChild(m);
+  const norm = t => String(t||'').toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g,'');
+  const draw = ()=>{
+    const q = norm(document.getElementById('addExSearch').value);
+    const list = exercises.filter(e=> !q || norm(e.name + ' ' + (e.category||'') + ' ' + (e.primary_muscles||[]).join(' ')).includes(q)).slice(0, 40);
+    document.getElementById('addExList').innerHTML = list.length ? list.map(e=>`<button type="button" class="btn btn-ghost" style="width:100%;justify-content:flex-start;text-align:left;margin-bottom:6px;" onclick="addExerciseToSession('${e.id}')">${escHtml(e.name)}<span style="opacity:.6;font-size:12px;margin-left:8px;">${escHtml(e.category||'')}</span></button>`).join('') : '<div class="empty">Aucun exercice trouvé.</div>';
+  };
+  document.getElementById('addExSearch').oninput = draw; draw();
+}
+async function addExerciseToSession(exId){
+  if(!activeMeta || !exercisesById[exId]) return;
+  const r = prompt('Combien de séries ?', '3');
+  if(r === null) return;
+  const n = parseInt(r);
+  if(!(n > 0 && n <= 20)){ toast('Nombre de séries illisible (1 à 20)'); return; }
+  activeMeta.extraEx = (activeMeta.extraEx || []).concat([{ exercise_id: exId, sets: n }]);
+  activeMeta.touched = true; saveActive();
+  const m = document.getElementById('addExModal'); if(m) m.remove();
+  await reloadSession();
+  setTimeout(()=>window.scrollTo(0, document.body.scrollHeight), 100);
+  toast('Exercice ajouté à la séance');
+}
 let slotState = {};
 function slotLabel(k){
   const st = slotState[k]; const ex = exercisesById[st.cur];
@@ -2034,6 +2136,13 @@ async function saveProgramExercises(programId, draft){
   }
 }
 
+// Pendant la saisie d'une série, la barre du bas (chrono + Terminer) est masquée : elle remontait au-dessus du clavier et cachait le champ
+(function(){
+  let t = null;
+  const isField = el => el && el.matches && el.matches('.set-line input');
+  document.addEventListener('focusin', e=>{ if(isField(e.target)){ clearTimeout(t); document.body.classList.add('typing'); setTimeout(()=>{ try{ e.target.scrollIntoView({block:'center'}); }catch(_){} }, 250); } });
+  document.addEventListener('focusout', e=>{ if(isField(e.target)){ clearTimeout(t); t = setTimeout(()=>document.body.classList.remove('typing'), 150); } });
+})();
 document.getElementById('exOverlay').addEventListener('click', e=>{ if(e.target.id==='exOverlay') e.target.classList.remove('open'); });
 document.getElementById('modalOverlay').addEventListener('click', e=>{ if(e.target.id==='modalOverlay') e.target.classList.remove('open'); });
 
