@@ -543,12 +543,26 @@ function histBadgeNote(s){
 }
 let HGROUPS = [];
 let HFILT = { who: null, q: '' };
-function histWho(s){ return s.for_name ? String(s.for_name).trim() : ''; }
+// Dossiers clientes (sans appli) : chaque dossier a un numéro interne ; histWho renvoie ce numéro (ou, pour une ancienne séance sans dossier, le nom)
+let FILES = [], FILE_BY_ID = {}, FILE_BY_NAME = {};
+async function loadFiles(){
+  try{ FILES = (await histReq('/rest/v1/client_files?select=id,name&order=name')) || []; }catch(e){ FILES = []; }
+  FILE_BY_ID = {}; FILE_BY_NAME = {};
+  FILES.forEach(f => { FILE_BY_ID[f.id] = f; const n = String(f.name).trim(); if(!FILE_BY_NAME[n]) FILE_BY_NAME[n] = f.id; });
+}
+function histWho(s){
+  if(s.client_file_id && FILE_BY_ID[s.client_file_id]) return s.client_file_id;
+  const n = s.for_name ? String(s.for_name).trim() : '';
+  return n ? (FILE_BY_NAME[n] || n) : '';
+}
+function histName(key){ return FILE_BY_ID[key] ? FILE_BY_ID[key].name : String(key || ''); }
 async function loadHistorique(){
   const uid = getSession().user.id;
   const sel = 'id,started_at,completed_at,day_label,declared_seconds,badge_eligible,source,edit_unlocked,imported,date_unknown,program_id,programs(name)';
   const base = `/rest/v1/sessions?select=${sel}&user_id=eq.${uid}&order=started_at.desc`;
-  let res = await apiFetch(base.replace(sel, sel + ',for_name'));
+  await loadFiles();
+  let res = await apiFetch(base.replace(sel, sel + ',for_name,client_file_id'));
+  if(!res.ok) res = await apiFetch(base.replace(sel, sel + ',for_name'));
   if(!res.ok) res = await apiFetch(base);
   const sessions = await res.json();
   HIST = Array.isArray(sessions) ? sessions : [];
@@ -564,25 +578,26 @@ function histVisible(){
   return HIST.filter(s => {
     if(HFILT.who === 'me' ? histWho(s) : (HFILT.who !== 'all' && histWho(s) !== HFILT.who)) return false;
     if(!q) return true;
-    const t = ((s.programs && s.programs.name) || 'séance libre') + ' ' + (s.day_label || '') + ' ' + histWho(s) + ' ' + new Date(s.started_at).toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'});
+    const t = ((s.programs && s.programs.name) || 'séance libre') + ' ' + (s.day_label || '') + ' ' + histName(histWho(s)) + ' ' + new Date(s.started_at).toLocaleDateString('fr-FR', {day:'numeric',month:'long',year:'numeric'});
     return t.toLowerCase().includes(q);
   });
 }
 function histSetWho(w){ HFILT.who = w; renderHistorique(); }
 function histSetQ(v){ HFILT.q = v; renderHistList(); }
 function renderHistorique(){
-  const names = [...new Set(HIST.map(histWho).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'fr'));
+  const names = [...new Set(HIST.map(histWho).filter(Boolean))].sort((a, b) => histName(a).localeCompare(histName(b), 'fr'));
   if(HFILT.who == null || (HFILT.who !== 'me' && HFILT.who !== 'all' && !names.includes(HFILT.who))) HFILT.who = 'me';
   const importBtn = `<div style="margin-bottom:10px;"><button type="button" class="btn btn-ghost btn-block" style="margin-top:0;" onclick="openImport()">📥 Importer d'anciennes séances</button></div>`;
   if(!HIST.length){ document.getElementById('tabBody').innerHTML = importBtn + '<div class="empty">Aucune séance enregistrée pour l\'instant.</div>'; return; }
-  const exportBar = `<div style="margin-bottom:14px;"><button type="button" class="btn btn-ghost btn-block" style="margin-top:0;" onclick="exportAllHistory()">📄 Exporter ${HFILT.who === 'me' || HFILT.who === 'all' ? 'tout mon historique' : 'l\'historique de ' + escapeHtml(HFILT.who)} (PDF)</button></div>`;
+  const manageBtn = (window.__isCoach || window.__isAdmin) ? `<div style="margin-bottom:10px;"><button type="button" class="btn btn-ghost btn-block" style="margin-top:0;" onclick="openFilesManager()">👥 Mes dossiers (clientes sans appli)</button></div>` : '';
+  const exportBar = `<div style="margin-bottom:14px;"><button type="button" class="btn btn-ghost btn-block" style="margin-top:0;" onclick="exportAllHistory()">📄 Exporter ${HFILT.who === 'me' || HFILT.who === 'all' ? 'tout mon historique' : 'l\'historique de ' + escapeHtml(histName(HFILT.who))} (PDF)</button></div>`;
   const chip = (v, label, n) => `<button type="button" class="fchip${HFILT.who === v ? ' active' : ''}" onclick="histSetWho(${v === 'me' || v === 'all' ? `'${v}'` : `'${escapeHtml(v).replace(/'/g, '&#39;')}'`})">${label} <span style="opacity:.6">${n}</span></button>`;
   const mine = HIST.filter(s => !histWho(s)).length;
-  const chips = names.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${chip('me', 'Moi', mine)}${names.map(n => chip(n, '👤 ' + escapeHtml(n), HIST.filter(s => histWho(s) === n).length)).join('')}${chip('all', 'Tous', HIST.length)}</div>` : '';
+  const chips = names.length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">${chip('me', 'Moi', mine)}${names.map(n => chip(n, '👤 ' + escapeHtml(histName(n)), HIST.filter(s => histWho(s) === n).length)).join('')}${chip('all', 'Tous', HIST.length)}</div>` : '';
   const search = HIST.length > 6 ? `<input type="text" value="${escapeHtml(HFILT.q)}" placeholder="🔍 Rechercher (programme, jour, mois…)" oninput="histSetQ(this.value)" style="width:100%;box-sizing:border-box;margin-bottom:14px;background:var(--surface-2);border:1px solid var(--line);border-radius:10px;color:inherit;padding:11px;font:inherit;font-size:16px">` : '';
   const person = (HFILT.who && HFILT.who !== 'me' && HFILT.who !== 'all') ? HFILT.who : '';
-  const transferBar = (person && (window.__isCoach || window.__isAdmin)) ? `<div style="margin-bottom:14px;"><button type="button" class="btn btn-ghost btn-block" style="margin-top:0;" onclick="openTransfer(HFILT.who)">➡️ Transférer / copier ${escapeHtml(person)} vers un compte</button></div>` : '';
-  document.getElementById('tabBody').innerHTML = importBtn + exportBar + transferBar + chips + search + '<div id="histList"></div>';
+  const transferBar = (person && (window.__isCoach || window.__isAdmin)) ? `<div style="margin-bottom:14px;"><button type="button" class="btn btn-ghost btn-block" style="margin-top:0;" onclick="openTransfer(HFILT.who)">➡️ Transférer / copier ${escapeHtml(histName(person))} vers un compte</button></div>` : '';
+  document.getElementById('tabBody').innerHTML = importBtn + manageBtn + exportBar + transferBar + chips + search + '<div id="histList"></div>';
   renderHistList();
 }
 function histDurShort(s){
@@ -609,7 +624,7 @@ function renderHistList(){
       const title = s.day_label || (HFILT.who === 'all' ? prog : 'Séance');
       const dt = s.date_unknown ? 'Date ?' : new Date(s.started_at).toLocaleDateString('fr-FR', {day:'numeric', month:'short', year:'numeric'});
       return `<div class="card hrow" onclick="this.classList.toggle('open');toggleSessionLogs(this,'${s.id}')">
-        <div class="hrow-h"><span class="hrow-d">${escapeHtml(dt)}</span><span class="hrow-t">${escapeHtml(title)}${HFILT.who === 'all' && who && who.toLowerCase() !== prog.toLowerCase() ? ` <i class="hrow-w">👤 ${escapeHtml(who)}</i>` : ''}${s.imported ? ' <i class="hrow-w">📥</i>' : ''}</span><span class="hrow-r">${escapeHtml(histDurShort(s))}</span><span class="hrow-c">›</span></div>
+        <div class="hrow-h"><span class="hrow-d">${escapeHtml(dt)}</span><span class="hrow-t">${escapeHtml(title)}${HFILT.who === 'all' && who && histName(who).toLowerCase() !== prog.toLowerCase() ? ` <i class="hrow-w">👤 ${escapeHtml(histName(who))}</i>` : ''}${s.imported ? ' <i class="hrow-w">📥</i>' : ''}</span><span class="hrow-r">${escapeHtml(histDurShort(s))}</span><span class="hrow-c">›</span></div>
         <div class="hrow-x">${histBadgeNote(s)}<button type="button" class="hrow-del" onclick="event.stopPropagation(); askDeleteSession('${s.id}')">🗑 Supprimer cette séance</button></div>
         <div class="logs" style="display:none; margin-top:12px;" onclick="event.stopPropagation()"></div>
       </div>`;
@@ -633,7 +648,7 @@ function exportAllHistory(){
   const who = (HFILT.who && HFILT.who !== 'me' && HFILT.who !== 'all') ? HFILT.who : '';
   const list = HIST.filter(s => HFILT.who === 'all' || (who ? histWho(s) === who : !histWho(s)));
   const me = (()=>{ try{ const u = getSession().user; return (u.user_metadata && (u.user_metadata.full_name || u.user_metadata.name)) || ''; }catch(e){ return ''; } })();
-  HSHistory.exportPdf({ req: histReq, userId: getSession().user.id, sessions: list, who: who || getSession().user.email, name: who || me, progress: true });
+  HSHistory.exportPdf({ req: histReq, userId: getSession().user.id, sessions: list, who: histName(who) || getSession().user.email, name: histName(who) || me, progress: true });
 }
 // ---------- Transfert d'une personne « sans appli » vers son vrai compte ----------
 let TRF = null;
@@ -642,7 +657,7 @@ async function openTransfer(name){
   if(!sessions.length) return;
   const groups = [], idx = {};
   sessions.forEach(s => { const k = s.program_id || '_none'; if(idx[k] == null){ idx[k] = groups.length; groups.push({ k, pid: s.program_id || null, name: (s.programs && s.programs.name) || 'Séance libre', items: [] }); } groups[idx[k]].items.push(s); });
-  TRF = { name, groups, clients: [] };
+  TRF = { key: name, name: histName(name), groups, clients: [] };
   const ov = document.createElement('div'); ov.id = 'trfOv';
   ov.style.cssText = 'position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.72);display:flex;align-items:center;justify-content:center;padding:16px;';
   ov.onclick = e => { if(e.target === ov) closeTransfer(); };
@@ -663,7 +678,7 @@ async function openTransfer(name){
       <details style="margin-top:8px;"><summary style="font-size:12.5px;color:var(--ink-muted);cursor:pointer;">Choisir les séances une par une</summary>
         ${g.items.map(s => `<label style="display:flex;gap:10px;align-items:center;padding:6px 0;font-size:13.5px;cursor:pointer;"><input type="checkbox" class="trfS" data-g="${gi}" value="${s.id}" checked onchange="trfCount()" style="width:18px;height:18px;">${escapeHtml(dt(s))} · ${escapeHtml(s.day_label || 'Séance')}</label>`).join('')}
       </details></div>`).join('');
-  ov.firstElementChild.innerHTML = `<h2 style="margin:0 0 6px;font-size:19px;">Transférer ${escapeHtml(name)}</h2>
+  ov.firstElementChild.innerHTML = `<h2 style="margin:0 0 6px;font-size:19px;">Transférer ${escapeHtml(histName(name))}</h2>
     <p id="trfHelp" style="margin:0 0 12px;font-size:13px;color:var(--ink-muted);line-height:1.45;"></p>
     ${TRF.clients.length ? `<label style="font-size:12px;color:var(--ink-muted);">Compte qui reçoit</label><select id="trfTo" onchange="trfHelp()" style="width:100%;margin:4px 0 14px;padding:11px;background:var(--surface-2);border:1px solid var(--line);color:var(--ink);font-size:14px;">${opts}</select>` : '<div class="empty" style="margin-bottom:14px;">Aucun compte client à toi pour le moment. Elle doit d\'abord créer son compte et être rattachée à toi.</div>'}
     <div style="display:flex;gap:8px;margin-bottom:12px;"><label style="flex:1;display:flex;gap:8px;align-items:center;padding:10px;border:1px solid var(--line);cursor:pointer;font-size:13.5px;"><input type="radio" name="trfMode" value="move" checked onchange="trfHelp()"> Déplacer</label><label style="flex:1;display:flex;gap:8px;align-items:center;padding:10px;border:1px solid var(--line);cursor:pointer;font-size:13.5px;"><input type="radio" name="trfMode" value="copy" onchange="trfHelp()"> Copier</label></div>
@@ -714,7 +729,7 @@ function exportProgram(gi){
   const who = g.items[0] && histWho(g.items[0]);
   const person = (HFILT.who && HFILT.who !== 'me' && HFILT.who !== 'all') ? HFILT.who : (HFILT.who === 'all' ? who : '');
   const list = HIST.filter(s => ((s.programs && s.programs.name) || 'Séance libre') === g.m && (HFILT.who === 'all' || (person ? histWho(s) === person : !histWho(s))));
-  const nm = (person || me || getSession().user.email);
+  const nm = (histName(person) || me || getSession().user.email);
   HSHistory.exportPdf({ req: histReq, userId: getSession().user.id, sessions: list, who: nm + ' - ' + g.m, name: nm + ' - ' + g.m, progress: true, filePrefix: 'programme' });
 }
 function askEditSession(id){
@@ -908,17 +923,72 @@ async function toggleSessionLogs(card, sessionId){
   box.innerHTML = reportBtn + (window.__isCoach ? forBlockHtml(s) : '') + (editing && window.__isAdmin ? adminMetaHtml(s) : '') + rows + addExBtn + volumeLine + editBlock;
 }
 function forBlockHtml(s){
-  const names = [...new Set(HIST.map(histWho).filter(Boolean))];
-  const st = 'background:var(--surface-2);border:1px solid var(--line);border-radius:10px;color:inherit;padding:8px;font:inherit;font-size:15px;min-width:0;flex:1 1 140px';
-  return `<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px"><div style="font-size:12px;color:var(--ink-muted);margin-bottom:6px">Séance d'une cliente sans appli ? Elle sort de tes stats et de tes badges.</div><div style="display:flex;gap:8px;flex-wrap:wrap"><input id="forName" list="forNames" value="${escapeHtml(histWho(s))}" placeholder="Prénom (vide = ma séance)" style="${st}"><datalist id="forNames">${names.map(n => `<option value="${escapeHtml(n)}">`).join('')}</datalist><button type="button" class="btn btn-ghost btn-sm" onclick="saveForName('${s.id}')">OK</button></div></div>`;
+  const cur = histWho(s);
+  const st = 'background:var(--surface-2);border:1px solid var(--line);border-radius:10px;color:inherit;padding:10px;font:inherit;font-size:15px;min-width:0;flex:1 1 160px';
+  const legacy = cur && !FILE_BY_ID[cur] ? `<option value="${escapeHtml(cur)}" selected>${escapeHtml(cur)} (ancien nom)</option>` : '';
+  return `<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px"><div style="font-size:12px;color:var(--ink-muted);margin-bottom:6px">Séance d'une cliente sans appli ? Elle sort de tes stats et de tes badges.</div><div style="display:flex;gap:8px;flex-wrap:wrap"><select id="forFile" style="${st}"><option value="">Moi (mes stats)</option>${legacy}${FILES.map(f => `<option value="${f.id}"${cur === f.id ? ' selected' : ''}>${escapeHtml(f.name)}</option>`).join('')}<option value="__new">＋ Nouveau dossier…</option></select><button type="button" class="btn btn-ghost btn-sm" onclick="saveForFile('${s.id}')">OK</button></div><div id="forNewBox" style="display:none;margin-top:8px"><input id="forNewName" maxlength="40" placeholder="Prénom (ex : Juliette B.)" style="${st};width:100%;box-sizing:border-box"></div><button type="button" class="btn btn-ghost btn-sm" style="margin-top:8px" onclick="openFilesManager()">👥 Gérer mes dossiers</button></div>`;
 }
-async function saveForName(id){
-  const v = (document.getElementById('forName').value || '').trim().slice(0, 40);
+document.addEventListener('change', e => { if(e.target && e.target.id === 'forFile'){ const b = document.getElementById('forNewBox'); if(b) b.style.display = e.target.value === '__new' ? 'block' : 'none'; } });
+async function createFile(name){
+  const v = String(name || '').trim().slice(0, 40); if(!v) return null;
+  if(FILES.some(f => f.name.trim().toLowerCase() === v.toLowerCase()) && !confirm('Un dossier « ' + v + ' » existe déjà. En créer un deuxième du même nom ?')) return null;
+  const r = await histReq('/rest/v1/client_files?select=id,name', { method:'POST', headers:{ Prefer:'return=representation' }, body: JSON.stringify({ name: v }) });
+  return r && r[0] ? r[0] : null;
+}
+async function saveForFile(id){
+  let v = document.getElementById('forFile').value;
   try{
-    await histReq(`/rest/v1/sessions?id=eq.${id}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ for_name: v || null }) });
-    HSHistory.toast(v ? 'Séance attribuée à ' + v : 'Séance remise dans tes stats');
+    let patch;
+    if(v === '__new'){
+      const f = await createFile(document.getElementById('forNewName').value); if(!f){ HSHistory.toast('Indique un prénom'); return; }
+      patch = { client_file_id: f.id, for_name: f.name };
+    } else if(!v){ patch = { client_file_id: null, for_name: null }; }
+    else if(FILE_BY_ID[v]){ patch = { client_file_id: v, for_name: FILE_BY_ID[v].name }; }
+    else { patch = { for_name: v }; }   // ancien nom sans dossier
+    await histReq(`/rest/v1/sessions?id=eq.${id}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify(patch) });
+    HSHistory.toast(patch.for_name ? 'Séance attribuée à ' + patch.for_name : 'Séance remise dans tes stats');
     await loadHistorique();
-  }catch(e){ console.error(e); HSHistory.toast("Impossible : lance d'abord le SQL add-for-name."); }
+  }catch(e){ console.error(e); HSHistory.toast("Impossible : lance d'abord le SQL add-dossiers.sql."); }
+}
+// ---- Gérer mes dossiers : renommer, fusionner, supprimer, transférer ----
+function openFilesManager(){
+  const old = document.getElementById('filesOv'); if(old) old.remove();
+  const ov = document.createElement('div'); ov.id = 'filesOv';
+  ov.style.cssText = 'position:fixed;inset:0;z-index:260;background:rgba(0,0,0,.82);overflow-y:auto;padding:16px;display:flex;justify-content:center;align-items:flex-start';
+  ov.onclick = e => { if(e.target === ov) ov.remove(); };
+  const card = document.createElement('div'); card.style.cssText = 'width:100%;max-width:560px;background:var(--surface);border:1px solid var(--line);padding:18px;margin:auto 0';
+  ov.appendChild(card); document.body.appendChild(ov); renderFilesManager();
+}
+function renderFilesManager(){
+  const card = document.querySelector('#filesOv > div'); if(!card) return;
+  const st = 'background:var(--surface-2);border:1px solid var(--line);border-radius:10px;color:inherit;padding:9px;font:inherit;font-size:15px;min-width:0';
+  const cnt = id => HIST.filter(s => histWho(s) === id).length;
+  card.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><h2 style="margin:0;font-size:19px">Mes clientes sans appli</h2><button type="button" class="btn btn-ghost btn-sm" style="margin:0" onclick="document.getElementById('filesOv').remove()">✕</button></div>` +
+    (FILES.length ? FILES.map(f => `<div style="border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:8px"><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input value="${escapeHtml(f.name)}" maxlength="40" style="${st};flex:1 1 150px" id="fn_${f.id}"><button type="button" class="btn btn-ghost btn-sm" style="margin:0" onclick="renameFile('${f.id}')">Renommer</button></div><div style="font-size:12.5px;color:var(--ink-muted);margin:6px 0">${cnt(f.id)} séance${cnt(f.id) > 1 ? 's' : ''}</div><div style="display:flex;gap:8px;flex-wrap:wrap"><select id="fm_${f.id}" style="${st};flex:1 1 140px"><option value="">Fusionner dans…</option>${FILES.filter(g => g.id !== f.id).map(g => `<option value="${g.id}">${escapeHtml(g.name)}</option>`).join('')}</select><button type="button" class="btn btn-ghost btn-sm" style="margin:0" onclick="mergeFile('${f.id}')">Fusionner</button>${cnt(f.id) ? `<button type="button" class="btn btn-ghost btn-sm" style="margin:0" onclick="document.getElementById('filesOv').remove();openTransfer('${f.id}')">Rattacher à un compte</button>` : `<button type="button" class="btn btn-ghost btn-sm" style="margin:0" onclick="deleteFile('${f.id}')">Supprimer</button>`}</div></div>`).join('') : '<div class="empty">Aucun dossier pour l\'instant.</div>') +
+    `<div style="display:flex;gap:8px;margin-top:10px"><input id="fn_new" maxlength="40" placeholder="Nouveau dossier (prénom)" style="${st};flex:1"><button type="button" class="btn btn-accent btn-sm" style="margin:0" onclick="addFileFromManager()">Créer</button></div>`;
+}
+async function addFileFromManager(){
+  try{ const f = await createFile(document.getElementById('fn_new').value); if(!f) return; await loadFiles(); renderFilesManager(); renderHistorique(); HSHistory.toast('Dossier créé'); }
+  catch(e){ console.error(e); HSHistory.toast("Impossible : lance d'abord le SQL add-dossiers.sql."); }
+}
+async function renameFile(id){
+  const v = (document.getElementById('fn_' + id).value || '').trim().slice(0, 40); if(!v) return;
+  try{ await histReq(`/rest/v1/client_files?id=eq.${id}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ name: v }) }); await loadHistorique(); renderFilesManager(); HSHistory.toast('Dossier renommé'); }
+  catch(e){ console.error(e); HSHistory.toast('Modification refusée. Réessaie.'); }
+}
+async function mergeFile(id){
+  const to = document.getElementById('fm_' + id).value; if(!to){ HSHistory.toast('Choisis le dossier qui reçoit'); return; }
+  if(!confirm('Fusionner « ' + histName(id) + ' » dans « ' + histName(to) + ' » ? Les séances passent dans ce dossier.')) return;
+  try{
+    await histReq(`/rest/v1/sessions?client_file_id=eq.${id}`, { method:'PATCH', headers:{ Prefer:'return=minimal' }, body: JSON.stringify({ client_file_id: to, for_name: histName(to) }) });
+    await histReq(`/rest/v1/client_files?id=eq.${id}`, { method:'DELETE', headers:{ Prefer:'return=minimal' } });
+    HFILT.who = to; await loadHistorique(); renderFilesManager(); HSHistory.toast('Dossiers fusionnés');
+  }catch(e){ console.error(e); HSHistory.toast('Fusion impossible. Réessaie.'); }
+}
+async function deleteFile(id){
+  if(!confirm('Supprimer le dossier vide « ' + histName(id) + ' » ?')) return;
+  try{ await histReq(`/rest/v1/client_files?id=eq.${id}`, { method:'DELETE', headers:{ Prefer:'return=minimal' } }); await loadHistorique(); renderFilesManager(); }
+  catch(e){ console.error(e); HSHistory.toast('Suppression impossible.'); }
 }
 function adminMetaHtml(s){
   const d = new Date(s.started_at), pad = n => String(n).padStart(2,'0');
